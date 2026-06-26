@@ -1,6 +1,6 @@
 /**
  * 냉장GO 기본 레시피 DB (자취생 요리 중심)
- * 총 219개 — generate-recipes.py 로 생성
+ * 총 220개 — generate-recipes.py 로 생성
  */
 window.BUILTIN_RECIPE_RAW = 
 [
@@ -3938,6 +3938,30 @@ window.BUILTIN_RECIPE_RAW =
     ],
     "steps": [
       "고구마죽을 끓여 완성합니다."
+    ]
+  },
+  {
+    "name": "에그인헬",
+    "category": "western",
+    "dishType": "stew",
+    "cookTime": 20,
+    "difficulty": "쉬움",
+    "calories": 290,
+    "ingredients": [
+      "계란",
+      "토마토",
+      "양파",
+      "마늘",
+      "올리브오일",
+      "소금",
+      "후추",
+      "파슬리 (선택)"
+    ],
+    "steps": [
+      "양파와 마늘을 다져 올리브오일에 볶습니다.",
+      "토마토를 넣고 으깨며 끓입니다. 소금, 후추로 간합니다.",
+      "중앙에 계란을 넣고 뚜껑을 덮어 반숙 상태로 익힙니다.",
+      "파슬리를 뿌려 완성합니다."
     ]
   }
 ]

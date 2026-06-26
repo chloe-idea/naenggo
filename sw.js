@@ -2,16 +2,17 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v14';
+const CACHE_NAME = 'naengjanggo-v21';
 
 const ASSETS = [
   'index.html',
-  'style.css?v=14',
-  'script.js?v=14',
-  'nav-icons.js?v=14',
-  'recipe-placeholders.js?v=14',
-  'recipe-images.js?v=14',
-  'recipes-builtin.js?v=14',
+  'app-config.js?v=21',
+  'style.css?v=21',
+  'script.js?v=21',
+  'nav-icons.js?v=21',
+  'recipe-placeholders.js?v=21',
+  'recipe-images.js?v=21',
+  'recipes-builtin.js?v=21',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
