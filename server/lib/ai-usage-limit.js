@@ -3,7 +3,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '../data');
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'naengjanggo-ai-usage')
+  : path.join(__dirname, '../data');
 const DATA_FILE = path.join(DATA_DIR, 'ai-usage.json');
 const TIMEZONE = process.env.AI_USAGE_TIMEZONE || 'Asia/Seoul';
 

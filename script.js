@@ -441,6 +441,13 @@ const VideoRecipeAnalysisService = {
     const apiUrl = cfg.youtubeRecipeApiUrl;
     if (!apiUrl) return null;
 
+    if (/localhost|127\.0\.0\.1/i.test(apiUrl) && typeof location !== 'undefined') {
+      const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+      if (!isLocal) {
+        throw new Error('배포 환경에서는 localhost API를 사용할 수 없습니다.');
+      }
+    }
+
     let res;
     try {
       res = await fetch(apiUrl, {
@@ -448,14 +455,22 @@ const VideoRecipeAnalysisService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, userId: ClientUserService.getUserId() }),
       });
-    } catch {
-      throw new Error('레시피 추출 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해 주세요.');
+    } catch (networkErr) {
+      console.error('[냉장GO API] POST failed:', apiUrl, networkErr);
+      const isLocalDev = APP_CONFIG?.runtime?.isLocalDev;
+      const hint = isLocalDev
+        ? '로컬에서는 ./serve.sh 로 서버를 실행해 주세요.'
+        : 'Vercel에 /api/extract-youtube-recipe 함수가 배포되어 있는지 확인해 주세요.';
+      throw new Error(`레시피 추출 서버에 연결할 수 없습니다. ${hint}`);
     }
 
     let data;
     try {
       data = await res.json();
     } catch {
+      if (res.status === 404) {
+        throw new Error('레시피 추출 API(/api/extract-youtube-recipe)를 찾을 수 없습니다. 배포 설정을 확인해 주세요.');
+      }
       throw new Error('서버 응답을 처리할 수 없습니다.');
     }
 
@@ -720,7 +735,8 @@ const AiUsageService = {
       if (!res.ok) return null;
       const data = await res.json();
       return data.aiUsage || null;
-    } catch {
+    } catch (err) {
+      console.warn('[냉장GO API] GET ai-usage failed:', apiUrl, err);
       return null;
     }
   },
@@ -3166,7 +3182,7 @@ async function registerServiceWorker() {
   });
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=21').then((reg) => {
+    navigator.serviceWorker.register('./sw.js?v=22').then((reg) => {
       reg.update();
       if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     }).catch(() => undefined);
