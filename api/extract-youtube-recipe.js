@@ -16,6 +16,10 @@ export default async function handler(req, res) {
   const result = await handleExtractYoutubeRecipe({
     url: req.body?.url,
     userId: req.body?.userId || req.headers['x-user-id'],
+    userText: req.body?.userText,
+    caption: req.body?.caption,
+    description: req.body?.description,
+    pastedText: req.body?.pastedText,
   });
 
   return res.status(result.status).json(result.body);

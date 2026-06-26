@@ -1,10 +1,37 @@
-import { extractYouTubeVideoId, fetchYouTubeContent } from '../youtube.js';
+import {
+  extractYouTubeVideoId,
+  fetchYouTubeContent,
+  buildAnalysisContext,
+  VIDEO_AUTO_EXTRACT_FAILED_WARNING,
+} from '../youtube.js';
 import { analyzeYouTubeTextToRecipe } from '../openai-recipe.js';
 import { assertCanUseAi, recordAiUsage } from '../ai-usage-limit.js';
 
-export async function handleExtractYoutubeRecipe({ url, userId }) {
+function createPartialYoutubeContent(videoId, url) {
+  return {
+    videoId,
+    title: '',
+    thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+    sourceUrl: url,
+    extractedDescription: '',
+    extractedTranscript: '',
+    text: '',
+    textSource: '',
+    autoExtractFailed: true,
+  };
+}
+
+export async function handleExtractYoutubeRecipe({
+  url,
+  userId,
+  userText,
+  caption,
+  description,
+  pastedText,
+}) {
   const trimmedUrl = String(url || '').trim();
   const trimmedUserId = String(userId || '').trim();
+  const userInputs = { userText, caption, description, pastedText };
 
   if (!trimmedUserId) {
     return {
@@ -29,7 +56,19 @@ export async function handleExtractYoutubeRecipe({ url, userId }) {
   }
 
   try {
-    const youtubeContent = await fetchYouTubeContent(trimmedUrl);
+    let youtubeContent;
+    try {
+      youtubeContent = await fetchYouTubeContent(trimmedUrl);
+    } catch (fetchErr) {
+      console.warn('[extract-youtube-recipe] fetchYouTubeContent failed:', fetchErr?.message || fetchErr);
+      youtubeContent = createPartialYoutubeContent(videoId, trimmedUrl);
+    }
+
+    const context = buildAnalysisContext({
+      youtubeContent,
+      url: trimmedUrl,
+      userInputs,
+    });
 
     try {
       assertCanUseAi(trimmedUserId);
@@ -48,12 +87,36 @@ export async function handleExtractYoutubeRecipe({ url, userId }) {
       throw limitErr;
     }
 
-    const recipe = await analyzeYouTubeTextToRecipe(youtubeContent);
+    let recipe;
+    try {
+      recipe = await analyzeYouTubeTextToRecipe(context);
+    } catch (aiErr) {
+      if (aiErr.fallback) {
+        return {
+          status: 422,
+          body: {
+            success: false,
+            error: aiErr.code || 'EXTRACTION_FAILED',
+            message: aiErr.message,
+            fallback: true,
+            warning: context.autoExtractFailed ? VIDEO_AUTO_EXTRACT_FAILED_WARNING : null,
+          },
+        };
+      }
+      throw aiErr;
+    }
+
     const aiUsage = recordAiUsage(trimmedUserId);
+    const warning = context.autoExtractFailed ? VIDEO_AUTO_EXTRACT_FAILED_WARNING : null;
 
     return {
       status: 200,
-      body: { success: true, ...recipe, aiUsage },
+      body: {
+        success: true,
+        ...recipe,
+        aiUsage,
+        warning,
+      },
     };
   } catch (err) {
     console.error('[extract-youtube-recipe]', err.code || err.message, err.details || '');
@@ -70,22 +133,6 @@ export async function handleExtractYoutubeRecipe({ url, userId }) {
       };
     }
 
-    if (err.fallback) {
-      return {
-        status: 422,
-        body: {
-          success: false,
-          error: err.code || 'EXTRACTION_FAILED',
-          message: err.message,
-          fallback: true,
-        },
-      };
-    }
-
-    if (err.code === 'INVALID_VIDEO_ID' || err.code === 'INVALID_URL') {
-      return { status: 400, body: { success: false, error: err.code, message: err.message } };
-    }
-
     if (err.code === 'MISSING_OPENAI_KEY') {
       return {
         status: 503,
@@ -93,25 +140,6 @@ export async function handleExtractYoutubeRecipe({ url, userId }) {
           success: false,
           error: err.code,
           message: '서버 AI 설정이 완료되지 않았습니다. 관리자에게 문의해 주세요.',
-        },
-      };
-    }
-
-    if (err.code === 'NO_TEXT') {
-      return {
-        status: 422,
-        body: { success: false, error: err.code, message: err.message, fallback: true },
-      };
-    }
-
-    if (err.code === 'VIDEO_UNAVAILABLE') {
-      return {
-        status: 404,
-        body: {
-          success: false,
-          error: err.code,
-          message: 'YouTube 영상을 찾을 수 없거나 접근할 수 없습니다.',
-          fallback: true,
         },
       };
     }

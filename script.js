@@ -228,6 +228,8 @@ const AffiliateService = {
 // ===== 영상 레시피 추출 =====
 const VIDEO_EXTRACT_FALLBACK_MSG = '이 영상은 자동 추출이 어려워요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.';
 const VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG = '아직 이 영상의 자막/설명을 자동으로 가져오지 못했어요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.';
+const VIDEO_EXTRACT_PARTIAL_WARNING = '영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다';
+const VIDEO_AUTO_EXTRACT_FAILED_WARNING = '영상 정보를 자동으로 읽지 못해 입력된 텍스트 기준으로 분석했습니다';
 
 class VideoExtractFallbackError extends Error {
   constructor(message = VIDEO_EXTRACT_FALLBACK_MSG) {
@@ -436,7 +438,18 @@ const VideoRecipeAnalysisService = {
     };
   },
 
-  async extractYouTubeViaApi(url) {
+  collectVideoTextPayload() {
+    const userText = dom.videoUserText?.value?.trim() || '';
+    const pastedText = dom.videoPasteText?.value?.trim() || '';
+    return {
+      userText,
+      caption: userText,
+      description: userText,
+      pastedText: pastedText || userText,
+    };
+  },
+
+  async extractYouTubeViaApi(url, textPayload = {}) {
     const cfg = this.getVideoExtractConfig();
     const apiUrl = cfg.youtubeRecipeApiUrl;
     if (!apiUrl) return null;
@@ -448,12 +461,21 @@ const VideoRecipeAnalysisService = {
       }
     }
 
+    const payload = {
+      url,
+      userId: ClientUserService.getUserId(),
+      userText: textPayload.userText || '',
+      caption: textPayload.caption || '',
+      description: textPayload.description || '',
+      pastedText: textPayload.pastedText || '',
+    };
+
     let res;
     try {
       res = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, userId: ClientUserService.getUserId() }),
+        body: JSON.stringify(payload),
       });
     } catch (networkErr) {
       console.error('[냉장GO API] POST failed:', apiUrl, networkErr);
@@ -482,15 +504,23 @@ const VideoRecipeAnalysisService = {
         throw err;
       }
       if (data.fallback) {
-        throw new VideoExtractFallbackError(data.message || VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG);
+        const err = new VideoExtractFallbackError(data.message || VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG);
+        err.warning = data.warning || null;
+        throw err;
       }
       throw new Error(data.message || data.error || '추출에 실패했습니다.');
     }
 
     if (data.aiUsage) AiUsageService.updateDisplay(data.aiUsage);
 
-    const { aiUsage, success, ...recipeData } = data;
-    return this.normalizeApiRecipe(recipeData, url);
+    const { aiUsage, success, warning, videoExtractPartial, videoExtractWarning, ...recipeData } = data;
+    const result = this.normalizeApiRecipe(recipeData, url);
+    const resolvedWarning = warning || videoExtractWarning || null;
+    if (resolvedWarning) {
+      result._warning = resolvedWarning;
+      result._videoExtractPartial = true;
+    }
+    return result;
   },
 
   getOpenAIConfig() {
@@ -523,7 +553,7 @@ const VideoRecipeAnalysisService = {
     if (urlCheck.platform === 'youtube') {
       const cfg = this.getVideoExtractConfig();
       if (cfg.youtubeRecipeApiUrl) {
-        return this.extractYouTubeViaApi(urlCheck.url);
+        return this.extractYouTubeViaApi(urlCheck.url, VideoRecipeAnalysisService.collectVideoTextPayload());
       }
     }
 
@@ -1680,12 +1710,15 @@ const dom = {
   videoFallbackSection: $('#video-fallback-section'),
   videoFallbackMessage: $('#video-fallback-message'),
   videoFallbackAnalyzeBtn: $('#video-fallback-analyze-btn'),
+  videoUserText: $('#video-user-text'),
   videoPasteText: $('#video-paste-text'),
   videoFormError: $('#video-form-error'),
   videoAnalyzeBtn: $('#video-analyze-btn'),
   videoAiUsage: $('#video-ai-usage'),
+  videoExtractWarning: $('#video-extract-warning'),
   videoReviewPreview: $('#video-review-preview'),
   videoReviewMockNotice: $('#video-review-mock-notice'),
+  videoReviewPartialNotice: $('#video-review-partial-notice'),
   videoReviewThumb: $('#video-review-thumb'),
   videoReviewPlatform: $('#video-review-platform'),
   videoReviewTitleHint: $('#video-review-title-hint'),
@@ -2737,12 +2770,15 @@ function resetVideoRecipeForm() {
   state.videoLinkMeta = null;
   state.videoExtractNeedsFallback = false;
   if (dom.videoSourceUrl) dom.videoSourceUrl.value = '';
+  if (dom.videoUserText) dom.videoUserText.value = '';
   if (dom.videoPasteText) dom.videoPasteText.value = '';
   if (dom.videoFormError) dom.videoFormError.hidden = true;
   if (dom.videoReviewError) dom.videoReviewError.hidden = true;
   if (dom.videoVisibilityPrivate) dom.videoVisibilityPrivate.checked = true;
   if (dom.videoReviewMockNotice) dom.videoReviewMockNotice.hidden = true;
+  if (dom.videoReviewPartialNotice) dom.videoReviewPartialNotice.hidden = true;
   hideVideoLinkPreview();
+  hideVideoExtractWarning();
   setVideoExtractLoading(false);
   hideVideoFallback();
 }
@@ -2755,10 +2791,32 @@ function hideVideoFallback() {
   if (dom.videoFallbackSection) dom.videoFallbackSection.hidden = true;
 }
 
-function showVideoFallback(message = VIDEO_EXTRACT_FALLBACK_MSG) {
+function hideVideoExtractWarning() {
+  if (dom.videoExtractWarning) dom.videoExtractWarning.hidden = true;
+}
+
+function showVideoExtractWarning(message = VIDEO_EXTRACT_PARTIAL_WARNING) {
+  if (!dom.videoExtractWarning) return;
+  dom.videoExtractWarning.textContent = message;
+  dom.videoExtractWarning.hidden = false;
+}
+
+function showRecipeWarning(message) {
+  if (!message) return;
+  showVideoExtractWarning(message);
+  if (dom.videoReviewPartialNotice) {
+    dom.videoReviewPartialNotice.textContent = message;
+    dom.videoReviewPartialNotice.hidden = false;
+  }
+}
+
+function showVideoFallback(message = VIDEO_EXTRACT_FALLBACK_MSG, options = {}) {
   state.videoExtractNeedsFallback = true;
   if (dom.videoFallbackSection) dom.videoFallbackSection.hidden = false;
   if (dom.videoFallbackMessage) dom.videoFallbackMessage.textContent = message;
+  if (options.showPartialWarning) {
+    showVideoExtractWarning(options.partialWarning || VIDEO_EXTRACT_PARTIAL_WARNING);
+  }
 }
 
 function showAiDailyLimitAlert() {
@@ -2872,22 +2930,38 @@ function fillVideoReviewForm(draft) {
   if (dom.videoReviewMockNotice) {
     dom.videoReviewMockNotice.hidden = !draft._isMockData;
   }
+  if (dom.videoReviewPartialNotice) {
+    const warning = draft._warning || draft._videoExtractWarning;
+    dom.videoReviewPartialNotice.hidden = !warning;
+    if (warning) dom.videoReviewPartialNotice.textContent = warning;
+  }
 }
 
 async function handleVideoExtract() {
   dom.videoFormError.hidden = true;
   hideVideoFallback();
+  hideVideoExtractWarning();
   const sourceUrl = dom.videoSourceUrl.value.trim();
   if (!sourceUrl) return showVideoFormError('영상 링크를 입력해 주세요.');
 
   setVideoExtractLoading(true);
 
   try {
-    const result = await VideoRecipeAnalysisService.extractFromUrl(sourceUrl);
+    const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
+    const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload();
+    let result;
+    if (check.ok && check.platform === 'youtube') {
+      result = await VideoRecipeAnalysisService.extractYouTubeViaApi(sourceUrl, textPayload);
+    } else {
+      result = await VideoRecipeAnalysisService.extractFromUrl(sourceUrl);
+    }
     fillVideoReviewForm(result);
+    if (result._warning) showRecipeWarning(result._warning);
     setRecipeFormTab('review');
     if (result._isMockData) {
       showToast('현재는 테스트 데이터입니다. 내용을 확인해 주세요.');
+    } else if (result._warning) {
+      showToast('레시피를 정리했어요. 안내 문구를 확인해 주세요.');
     } else {
       showToast('레시피 추출이 완료됐어요. 내용을 확인해 주세요.');
     }
@@ -2898,6 +2972,7 @@ async function handleVideoExtract() {
       return;
     }
     if (err.code === 'FALLBACK') {
+      if (err.warning) showVideoExtractWarning(err.warning);
       showVideoFallback(err.message);
     } else {
       showVideoFormError(err.message || '추출에 실패했습니다.');
@@ -2910,18 +2985,35 @@ async function handleVideoExtract() {
 async function handleVideoFallbackAnalyze() {
   dom.videoFormError.hidden = true;
   const sourceUrl = dom.videoSourceUrl.value.trim();
-  const pastedText = dom.videoPasteText.value;
+  const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload();
+
+  if (!textPayload.pastedText) return showVideoFormError('텍스트를 붙여넣어 주세요.');
 
   setVideoExtractLoading(true);
 
   try {
-    const result = await VideoRecipeAnalysisService.analyzeFromPaste(sourceUrl, pastedText);
+    const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
+    let result;
+    if (check.ok && check.platform === 'youtube') {
+      result = await VideoRecipeAnalysisService.extractYouTubeViaApi(sourceUrl, textPayload);
+    } else {
+      result = await VideoRecipeAnalysisService.analyzeFromPaste(sourceUrl, textPayload.pastedText);
+    }
     fillVideoReviewForm(result);
     hideVideoFallback();
+    hideVideoExtractWarning();
+    if (result._warning) showRecipeWarning(result._warning);
     dom.videoPasteText.value = '';
     setRecipeFormTab('review');
-    showToast('레시피 정리가 완료됐어요. 내용을 확인해 주세요.');
+    showToast(result._warning
+      ? '레시피를 정리했어요. 안내 문구를 확인해 주세요.'
+      : '레시피 정리가 완료됐어요. 내용을 확인해 주세요.');
   } catch (err) {
+    if (err.code === 'DAILY_LIMIT_EXCEEDED') {
+      showAiDailyLimitAlert();
+      AiUsageService.updateDisplay(err.aiUsage || { remaining: 0, limit: AiUsageService.getDailyLimit() });
+      return;
+    }
     showVideoFormError(err.message || '분석에 실패했습니다.');
   } finally {
     setVideoExtractLoading(false);
@@ -3182,7 +3274,7 @@ async function registerServiceWorker() {
   });
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=22').then((reg) => {
+    navigator.serviceWorker.register('./sw.js?v=24').then((reg) => {
       reg.update();
       if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     }).catch(() => undefined);

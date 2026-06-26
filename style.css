@@ -1780,6 +1780,21 @@ textarea {
   color: var(--color-warning, #b45309);
 }
 
+.video-user-text-field {
+  margin-bottom: 0.75rem;
+}
+
+.video-extract-warning {
+  font-size: 0.8125rem;
+  color: var(--color-warning, #b45309);
+  background: rgba(180, 83, 9, 0.08);
+  border: 1px solid rgba(180, 83, 9, 0.2);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.625rem 0.75rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.45;
+}
+
 .video-link-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -1914,6 +1929,17 @@ textarea {
 }
 
 .video-review__mock-notice {
+  font-size: 0.8125rem;
+  color: var(--color-warning, #b45309);
+  background: rgba(180, 83, 9, 0.08);
+  border: 1px solid rgba(180, 83, 9, 0.2);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.625rem 0.75rem;
+  margin-bottom: 0.875rem;
+  line-height: 1.45;
+}
+
+.video-review__partial-notice {
   font-size: 0.8125rem;
   color: var(--color-warning, #b45309);
   background: rgba(180, 83, 9, 0.08);

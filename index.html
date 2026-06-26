@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=22">
+  <link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
   <div class="app">
@@ -459,6 +459,7 @@
             <p class="form-field__hint video-form__notice">영상을 다운로드하지 않습니다. 링크에서 확인 가능한 정보만 추출하고, 요약 레시피와 원본 링크만 저장합니다.</p>
 
             <p id="video-ai-usage" class="video-ai-usage" hidden>남은 무료 분석 5회</p>
+            <p id="video-extract-warning" class="video-extract-warning" hidden></p>
 
             <div class="video-link-card">
               <div class="form-field video-link-card__field">
@@ -484,6 +485,12 @@
               </div>
             </div>
 
+            <div class="form-field video-user-text-field">
+              <label for="video-user-text" class="form-field__label">영상 설명글 / 캡션 (선택)</label>
+              <textarea id="video-user-text" class="form-field__textarea" rows="4" placeholder="영상 설명, 자막, 고정 댓글을 붙여넣어 주세요."></textarea>
+              <p class="form-field__hint">영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다</p>
+            </div>
+
             <div id="video-fallback-section" class="video-fallback-section" hidden>
               <p id="video-fallback-message" class="video-fallback-section__message"></p>
               <div class="form-field">
@@ -504,6 +511,7 @@
           <div id="recipe-form-panel-review" class="recipe-form-panel" data-recipe-panel="review" hidden>
             <p class="video-review__lead">분석 결과를 확인하고 수정한 뒤 저장하세요. 영상 원문은 저장되지 않습니다.</p>
             <p id="video-review-mock-notice" class="video-review__mock-notice" hidden>현재는 테스트 데이터입니다</p>
+            <p id="video-review-partial-notice" class="video-review__partial-notice" hidden></p>
             <div id="video-review-preview" class="video-link-preview video-link-preview--review" hidden>
               <div class="video-link-preview__thumb-wrap">
                 <img id="video-review-thumb" class="video-link-preview__thumb" alt="">
@@ -591,11 +599,11 @@
     </div>
   </div>
 
-  <script src="app-config.js?v=22"></script>
-  <script src="nav-icons.js?v=22"></script>
-  <script src="recipe-placeholders.js?v=22"></script>
-  <script src="recipe-images.js?v=22"></script>
-  <script src="recipes-builtin.js?v=22"></script>
-  <script src="script.js?v=22"></script>
+  <script src="app-config.js?v=24"></script>
+  <script src="nav-icons.js?v=24"></script>
+  <script src="recipe-placeholders.js?v=24"></script>
+  <script src="recipe-images.js?v=24"></script>
+  <script src="recipes-builtin.js?v=24"></script>
+  <script src="script.js?v=24"></script>
 </body>
 </html>

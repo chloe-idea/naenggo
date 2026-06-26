@@ -3,11 +3,21 @@ import { Innertube } from 'youtubei.js';
 const YOUTUBE_HOSTS = new Set(['youtu.be', 'youtube.com', 'm.youtube.com', 'music.youtube.com']);
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
+export const VIDEO_AUTO_EXTRACT_FAILED_WARNING =
+  '영상 정보를 자동으로 읽지 못해 입력된 텍스트 기준으로 분석했습니다';
+
+export const VIDEO_EXTRACT_HINT =
+  '영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다';
+
 let innertubeClient = null;
 
 async function getInnertube() {
   if (!innertubeClient) {
-    innertubeClient = await Innertube.create({ retrieve_player: false });
+    innertubeClient = await Innertube.create({
+      retrieve_player: false,
+      lang: 'ko',
+      location: 'KR',
+    });
   }
   return innertubeClient;
 }
@@ -43,6 +53,30 @@ export function getYouTubeThumbnail(videoId) {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
+function normalizeYouTubeUrl(videoId, originalUrl) {
+  try {
+    return new URL(originalUrl).href;
+  } catch {
+    return `https://www.youtube.com/watch?v=${videoId}`;
+  }
+}
+
+async function fetchYouTubeOEmbed(url) {
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      title: data.title || '',
+      thumbnailUrl: data.thumbnail_url || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function transcriptToText(transcriptInfo) {
   const segments = transcriptInfo?.transcript?.content?.body?.initial_segments;
   if (!segments?.length) return '';
@@ -64,7 +98,7 @@ async function fetchTranscriptText(info) {
         transcriptInfo = await transcriptInfo.selectLanguage(lang);
         break;
       } catch {
-        /* try next language label */
+        /* try next language */
       }
     }
 
@@ -76,15 +110,30 @@ async function fetchTranscriptText(info) {
         language: transcriptInfo.selectedLanguage || 'auto',
       };
     }
-  } catch {
-    /* no transcript available */
+  } catch (err) {
+    console.warn('[youtube] transcript unavailable:', err?.message || err);
   }
 
   return null;
 }
 
+function createBaseContent(videoId, url) {
+  return {
+    videoId,
+    title: '',
+    thumbnailUrl: getYouTubeThumbnail(videoId),
+    sourceUrl: normalizeYouTubeUrl(videoId, url),
+    extractedDescription: '',
+    extractedTranscript: '',
+    text: '',
+    textSource: '',
+    autoExtractFailed: false,
+  };
+}
+
 /**
- * 영상 메타데이터 + 자막/설명 텍스트 수집 (영상 파일 다운로드 없음)
+ * 영상 메타데이터 + 자막/설명 수집 (영상 파일 다운로드 없음)
+ * youtubei.js 실패 시에도 throw 없이 최소 정보 반환
  */
 export async function fetchYouTubeContent(url) {
   const videoId = extractYouTubeVideoId(url);
@@ -94,56 +143,87 @@ export async function fetchYouTubeContent(url) {
     throw err;
   }
 
-  const yt = await getInnertube();
-  let info;
+  const result = createBaseContent(videoId, url);
+  let innertubeFailed = false;
+
   try {
-    info = await yt.getInfo(videoId);
-  } catch (cause) {
-    const err = new Error('YouTube 영상 정보를 가져오지 못했습니다.');
-    err.code = 'VIDEO_UNAVAILABLE';
-    err.cause = cause;
-    throw err;
+    const yt = await getInnertube();
+    const info = await yt.getInfo(videoId);
+
+    result.title = info.basic_info?.title || result.title;
+    const description = String(info.basic_info?.short_description || '').trim();
+    if (description) result.extractedDescription = description;
+
+    const transcriptResult = await fetchTranscriptText(info);
+    if (transcriptResult) {
+      result.extractedTranscript = transcriptResult.text;
+      result.text = transcriptResult.text;
+      result.textSource = `transcript:${transcriptResult.language}`;
+    } else if (description.length >= 20) {
+      result.text = description;
+      result.textSource = 'description';
+    }
+  } catch (err) {
+    innertubeFailed = true;
+    console.warn('[youtube] innertube getInfo failed:', err?.message || err);
   }
 
-  const title = info.basic_info?.title || '';
-  const description = String(info.basic_info?.short_description || '').trim();
-  const thumbnailUrl = getYouTubeThumbnail(videoId);
-
-  const transcriptResult = await fetchTranscriptText(info);
-  let text = '';
-  let textSource = '';
-
-  if (transcriptResult) {
-    text = transcriptResult.text;
-    textSource = `transcript:${transcriptResult.language}`;
-  } else if (description.length >= 20) {
-    text = description;
-    textSource = 'description';
+  if (!result.title || innertubeFailed) {
+    try {
+      const oembed = await fetchYouTubeOEmbed(result.sourceUrl);
+      if (oembed?.title) result.title = oembed.title;
+      if (oembed?.thumbnailUrl) result.thumbnailUrl = oembed.thumbnailUrl;
+    } catch (err) {
+      console.warn('[youtube] oembed fallback failed:', err?.message || err);
+    }
   }
 
-  if (text.length < 20) {
-    const err = new Error(
-      '아직 이 영상의 자막/설명을 자동으로 가져오지 못했어요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.'
-    );
-    err.code = 'NO_TEXT';
-    err.fallback = true;
-    throw err;
+  if (!result.text || innertubeFailed) {
+    result.autoExtractFailed = true;
   }
 
-  return {
-    videoId,
-    title,
-    thumbnailUrl,
-    sourceUrl: normalizeYouTubeUrl(videoId, url),
-    text,
-    textSource,
-  };
+  return result;
 }
 
-function normalizeYouTubeUrl(videoId, originalUrl) {
-  try {
-    return new URL(originalUrl).href;
-  } catch {
-    return `https://www.youtube.com/watch?v=${videoId}`;
+/** API body의 여러 텍스트 필드를 하나로 병합 */
+export function mergeUserTextInput({ userText, caption, description, pastedText } = {}) {
+  const chunks = [userText, caption, description, pastedText]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  const seen = new Set();
+  const unique = [];
+  for (const chunk of chunks) {
+    if (seen.has(chunk)) continue;
+    seen.add(chunk);
+    unique.push(chunk);
   }
+  return unique.join('\n\n');
+}
+
+/** OpenAI 프롬프트용 구조화 컨텍스트 */
+export function buildAnalysisContext({ youtubeContent, url, userInputs = {} }) {
+  const mergedUserText = mergeUserTextInput(userInputs);
+  const extractedDescription = String(youtubeContent?.extractedDescription || '').trim()
+    || (youtubeContent?.textSource === 'description' ? String(youtubeContent?.text || '').trim() : '');
+  const extractedTranscript = String(youtubeContent?.extractedTranscript || '').trim()
+    || (String(youtubeContent?.textSource || '').startsWith('transcript')
+      ? String(youtubeContent?.text || '').trim()
+      : '');
+
+  const autoExtractFailed = Boolean(
+    youtubeContent?.autoExtractFailed
+    || (!extractedTranscript && !extractedDescription)
+  );
+
+  return {
+    sourceUrl: youtubeContent?.sourceUrl || url,
+    thumbnailUrl: youtubeContent?.thumbnailUrl || null,
+    title: youtubeContent?.title || '',
+    extractedDescription,
+    extractedTranscript,
+    userText: mergedUserText,
+    autoExtractFailed,
+    hasUserText: mergedUserText.length >= 10,
+  };
 }

@@ -3,7 +3,7 @@ const VALID_CATEGORIES = new Set([
 ]);
 const VALID_DIFFICULTIES = new Set(['쉬움', '보통', '어려움']);
 
-const SYSTEM_PROMPT = `당신은 요리 레시피 추출 전문가입니다. YouTube 영상의 자막 또는 설명 텍스트에서 레시피만 추출하세요.
+const SYSTEM_PROMPT = `당신은 요리 레시피 추출 전문가입니다. YouTube 영상 URL, 제목, 설명글, 자막/캡션, 사용자 입력 텍스트에서 레시피만 추출하세요.
 반드시 JSON 객체 하나만 반환하세요. 키:
 - title (문자열, 레시피 이름)
 - ingredients (문자열 배열, 필수 재료)
@@ -15,7 +15,7 @@ const SYSTEM_PROMPT = `당신은 요리 레시피 추출 전문가입니다. You
 - category ("korean"|"western"|"japanese"|"chinese"|"diet"|"high-protein")
 
 원문 전체를 저장하지 말고 요약된 레시피 정보만 추출하세요.
-텍스트에 레시피 정보가 없으면 error 필드에 "NOT_A_RECIPE"를 넣으세요.`;
+레시피 정보가 전혀 없으면 error 필드에 "NOT_A_RECIPE"를 넣으세요.`;
 
 function cleanStringArray(value) {
   if (!Array.isArray(value)) return [];
@@ -41,8 +41,30 @@ function normalizeRecipe(raw, meta) {
   };
 }
 
-export async function analyzeYouTubeTextToRecipe(youtubeContent) {
-  const { text, sourceUrl, title, thumbnailUrl, textSource } = youtubeContent;
+function buildPromptContent(context) {
+  const {
+    sourceUrl,
+    title,
+    extractedDescription,
+    extractedTranscript,
+    userText,
+  } = context;
+
+  return [
+    `YouTube URL: ${sourceUrl}`,
+    title ? `추출된 영상 제목: ${title}` : '',
+    extractedDescription ? `추출된 설명글:\n${extractedDescription.slice(0, 6000)}` : '',
+    extractedTranscript ? `추출된 자막/캡션:\n${extractedTranscript.slice(0, 8000)}` : '',
+    userText ? `사용자 입력 설명글/캡션:\n${userText.slice(0, 8000)}` : '',
+  ].filter(Boolean).join('\n\n');
+}
+
+export async function analyzeYouTubeTextToRecipe(context) {
+  const {
+    sourceUrl,
+    title,
+    thumbnailUrl,
+  } = context;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -53,15 +75,7 @@ export async function analyzeYouTubeTextToRecipe(youtubeContent) {
 
   const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
   const endpoint = process.env.OPENAI_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
-
-  const userContent = [
-    `영상 URL: ${sourceUrl}`,
-    title ? `영상 제목: ${title}` : '',
-    textSource ? `텍스트 출처: ${textSource}` : '',
-    '',
-    '텍스트:',
-    text.slice(0, 14000),
-  ].filter(Boolean).join('\n');
+  const userContent = buildPromptContent(context);
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -107,7 +121,7 @@ export async function analyzeYouTubeTextToRecipe(youtubeContent) {
 
   if (parsed.error === 'NOT_A_RECIPE') {
     const err = new Error(
-      '이 영상에서 레시피 정보를 찾지 못했어요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.'
+      '레시피 정보를 찾지 못했어요. 영상 설명글이나 캡션을 붙여넣으면 더 정확하게 정리해드릴게요.'
     );
     err.code = 'NOT_A_RECIPE';
     err.fallback = true;
@@ -118,7 +132,7 @@ export async function analyzeYouTubeTextToRecipe(youtubeContent) {
 
   if (!recipe.ingredients.length || !recipe.steps.length) {
     const err = new Error(
-      '레시피 재료나 조리 순서를 추출하지 못했어요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.'
+      '레시피 재료나 조리 순서를 추출하지 못했어요. 영상 설명글이나 캡션을 붙여넣어 주세요.'
     );
     err.code = 'INCOMPLETE_RECIPE';
     err.fallback = true;
