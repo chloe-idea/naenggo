@@ -1,4 +1,4 @@
-import { handleExtractYoutubeRecipe } from '../server/lib/handlers/extract-youtube-recipe.js';
+import { handleExtractInstagramRecipe } from '../server/lib/handlers/extract-instagram-recipe.js';
 import { resolveIdTokenFromHeaders } from '../server/lib/analysis-quota.js';
 
 export default async function handler(req, res) {
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'METHOD_NOT_ALLOWED', message: 'POST만 지원합니다.' });
   }
 
-  const result = await handleExtractYoutubeRecipe({
+  const result = await handleExtractInstagramRecipe({
     url: req.body?.url,
     userId: req.body?.userId || req.headers['x-user-id'],
     idToken: resolveIdTokenFromHeaders(req.headers),

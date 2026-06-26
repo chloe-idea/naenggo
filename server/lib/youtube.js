@@ -217,6 +217,7 @@ export function buildAnalysisContext({ youtubeContent, url, userInputs = {} }) {
   );
 
   return {
+    platform: 'youtube',
     sourceUrl: youtubeContent?.sourceUrl || url,
     thumbnailUrl: youtubeContent?.thumbnailUrl || null,
     title: youtubeContent?.title || '',

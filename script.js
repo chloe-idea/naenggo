@@ -229,6 +229,7 @@ const AffiliateService = {
 const VIDEO_EXTRACT_FALLBACK_MSG = '이 영상은 자동 추출이 어려워요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.';
 const VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG = '아직 이 영상의 자막/설명을 자동으로 가져오지 못했어요. 영상 설명이나 자막을 붙여넣으면 레시피로 정리해드릴게요.';
 const VIDEO_EXTRACT_PARTIAL_WARNING = '영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다';
+const INSTAGRAM_REELS_EXTRACT_HINT = '릴스 자동 분석이 제한될 수 있어 캡션을 함께 붙여넣으면 정확합니다';
 const VIDEO_AUTO_EXTRACT_FAILED_WARNING = '영상 정보를 자동으로 읽지 못해 입력된 텍스트 기준으로 분석했습니다';
 
 class VideoExtractFallbackError extends Error {
@@ -317,7 +318,53 @@ const VideoRecipeAnalysisService = {
   },
 
   getFallbackMessage(platform) {
-    return platform === 'youtube' ? VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG : VIDEO_EXTRACT_FALLBACK_MSG;
+    if (platform === 'youtube') return VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG;
+    if (platform === 'instagram') return INSTAGRAM_REELS_EXTRACT_HINT;
+    return VIDEO_EXTRACT_FALLBACK_MSG;
+  },
+
+  getPlatformExtractHint(platform) {
+    if (platform === 'instagram') return INSTAGRAM_REELS_EXTRACT_HINT;
+    return VIDEO_EXTRACT_PARTIAL_WARNING;
+  },
+
+  getRecipeApiUrl(platform) {
+    const cfg = this.getVideoExtractConfig();
+    if (platform === 'instagram') return cfg.instagramRecipeApiUrl || null;
+    if (platform === 'youtube') return cfg.youtubeRecipeApiUrl || null;
+    return null;
+  },
+
+  extractInstagramShortcode(url) {
+    try {
+      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+      if (!/instagram\.com/i.test(u.hostname)) return null;
+      const segments = u.pathname.split('/').filter(Boolean);
+      const typeIdx = segments.findIndex((seg) => ['reel', 'reels', 'p', 'tv'].includes(seg.toLowerCase()));
+      if (typeIdx >= 0 && segments[typeIdx + 1]) {
+        const code = segments[typeIdx + 1].split(/[?#&]/)[0];
+        return /^[A-Za-z0-9_-]{5,20}$/.test(code) ? code : null;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  },
+
+  async fetchInstagramOEmbed(url) {
+    try {
+      const res = await fetch(
+        `https://api.instagram.com/oembed?url=${encodeURIComponent(url)}&omitscript=true`
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      return {
+        title: data.title || data.author_name || '',
+        thumbnailUrl: data.thumbnail_url || null,
+      };
+    } catch {
+      return null;
+    }
   },
 
   validateUrl(rawUrl) {
@@ -400,6 +447,29 @@ const VideoRecipeAnalysisService = {
         };
       }
     }
+    if (platform === 'instagram') {
+      const shortcode = this.extractInstagramShortcode(url);
+      try {
+        const oembed = await this.fetchInstagramOEmbed(url);
+        if (oembed) {
+          return {
+            ...base,
+            ...oembed,
+            shortcode,
+            title: oembed.title || (shortcode ? `Instagram 릴스 (${shortcode})` : 'Instagram 릴스'),
+            platform,
+          };
+        }
+      } catch {
+        /* ignore */
+      }
+      return {
+        ...base,
+        shortcode,
+        title: shortcode ? `Instagram 릴스 (${shortcode})` : 'Instagram 릴스',
+        platform,
+      };
+    }
     return {
       ...base,
       title: platform === 'instagram' ? 'Instagram 영상' : 'TikTok 영상',
@@ -449,9 +519,7 @@ const VideoRecipeAnalysisService = {
     };
   },
 
-  async extractYouTubeViaApi(url, textPayload = {}) {
-    const cfg = this.getVideoExtractConfig();
-    const apiUrl = cfg.youtubeRecipeApiUrl;
+  async callVideoRecipeApi(apiUrl, url, textPayload = {}) {
     if (!apiUrl) return null;
 
     if (/localhost|127\.0\.0\.1/i.test(apiUrl) && typeof location !== 'undefined') {
@@ -470,11 +538,15 @@ const VideoRecipeAnalysisService = {
       pastedText: textPayload.pastedText || '',
     };
 
+    const headers = { 'Content-Type': 'application/json' };
+    const idToken = await window.FirebaseServices?.AnalysisQuotaService?.getIdTokenForApi?.();
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
     let res;
     try {
       res = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
     } catch (networkErr) {
@@ -482,7 +554,7 @@ const VideoRecipeAnalysisService = {
       const isLocalDev = APP_CONFIG?.runtime?.isLocalDev;
       const hint = isLocalDev
         ? '로컬에서는 ./serve.sh 로 서버를 실행해 주세요.'
-        : 'Vercel에 /api/extract-youtube-recipe 함수가 배포되어 있는지 확인해 주세요.';
+        : 'Vercel에 API 함수가 배포되어 있는지 확인해 주세요.';
       throw new Error(`레시피 추출 서버에 연결할 수 없습니다. ${hint}`);
     }
 
@@ -491,36 +563,57 @@ const VideoRecipeAnalysisService = {
       data = await res.json();
     } catch {
       if (res.status === 404) {
-        throw new Error('레시피 추출 API(/api/extract-youtube-recipe)를 찾을 수 없습니다. 배포 설정을 확인해 주세요.');
+        throw new Error(`레시피 추출 API(${apiUrl})를 찾을 수 없습니다. 배포 설정을 확인해 주세요.`);
       }
       throw new Error('서버 응답을 처리할 수 없습니다.');
     }
 
     if (!res.ok) {
-      if (data.error === 'DAILY_LIMIT_EXCEEDED') {
-        const err = new Error(data.message || '오늘 무료 AI 분석 5회를 모두 사용했습니다.');
-        err.code = 'DAILY_LIMIT_EXCEEDED';
+      if (data.error === 'DAILY_LIMIT_EXCEEDED' || data.error === 'ANALYSIS_LIMIT_EXCEEDED') {
+        const err = new Error(data.message || '무료 AI 분석 횟수를 모두 사용했습니다.');
+        err.code = data.error;
         err.aiUsage = data.aiUsage;
         throw err;
       }
       if (data.fallback) {
-        const err = new VideoExtractFallbackError(data.message || VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG);
+        const err = new VideoExtractFallbackError(data.message || VIDEO_EXTRACT_FALLBACK_MSG);
         err.warning = data.warning || null;
+        err.infoHint = data.infoHint || null;
         throw err;
       }
       throw new Error(data.message || data.error || '추출에 실패했습니다.');
     }
 
-    if (data.aiUsage) AiUsageService.updateDisplay(data.aiUsage);
+    if (data.aiUsage) await AiUsageService.onAnalysisSuccess(data.aiUsage);
 
-    const { aiUsage, success, warning, videoExtractPartial, videoExtractWarning, ...recipeData } = data;
+    const {
+      aiUsage,
+      success,
+      warning,
+      infoHint,
+      videoExtractPartial,
+      videoExtractWarning,
+      pipelineSteps,
+      ...recipeData
+    } = data;
     const result = this.normalizeApiRecipe(recipeData, url);
     const resolvedWarning = warning || videoExtractWarning || null;
     if (resolvedWarning) {
       result._warning = resolvedWarning;
       result._videoExtractPartial = true;
     }
+    if (infoHint) result._infoHint = infoHint;
     return result;
+  },
+
+  async extractYouTubeViaApi(url, textPayload = {}) {
+    const apiUrl = this.getRecipeApiUrl('youtube');
+    return this.callVideoRecipeApi(apiUrl, url, textPayload);
+  },
+
+  async extractInstagramViaApi(url, textPayload = {}) {
+    const apiUrl = this.getRecipeApiUrl('instagram');
+    return this.callVideoRecipeApi(apiUrl, url, textPayload);
   },
 
   getOpenAIConfig() {
@@ -550,10 +643,14 @@ const VideoRecipeAnalysisService = {
     const urlCheck = this.validateUrl(sourceUrl);
     if (!urlCheck.ok) throw new Error(urlCheck.error);
 
-    if (urlCheck.platform === 'youtube') {
-      const cfg = this.getVideoExtractConfig();
-      if (cfg.youtubeRecipeApiUrl) {
-        return this.extractYouTubeViaApi(urlCheck.url, VideoRecipeAnalysisService.collectVideoTextPayload());
+    const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload();
+    const apiUrl = this.getRecipeApiUrl(urlCheck.platform);
+    if (apiUrl) {
+      if (urlCheck.platform === 'youtube') {
+        return this.extractYouTubeViaApi(urlCheck.url, textPayload);
+      }
+      if (urlCheck.platform === 'instagram') {
+        return this.extractInstagramViaApi(urlCheck.url, textPayload);
       }
     }
 
@@ -735,12 +832,19 @@ const VideoRecipeAnalysisService = {
   },
 };
 
-// ===== 클라이언트 사용자 ID (서버 AI 사용량 추적) =====
+// ===== 클라이언트 사용자 ID (게스트) / Firebase UID (로그인) =====
 const ClientUserService = {
+  isLoggedIn() {
+    return Boolean(window.FirebaseServices?.AuthService?.isLoggedIn?.());
+  },
+
   getUserId() {
+    const firebaseUid = window.FirebaseServices?.AuthService?.getUid?.();
+    if (firebaseUid) return firebaseUid;
+
     let id = StorageAdapter.get(CONFIG.STORAGE.CLIENT_USER_ID, null);
     if (!id) {
-      id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      id = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       StorageAdapter.set(CONFIG.STORAGE.CLIENT_USER_ID, id);
     }
     return id;
@@ -752,11 +856,18 @@ const AiUsageService = {
     return (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.videoExtract) ? APP_CONFIG.videoExtract : {};
   },
 
+  getQuotaService() {
+    return window.FirebaseServices?.AnalysisQuotaService || null;
+  },
+
   getDailyLimit() {
     return Number(this.getConfig().dailyLimit) || 5;
   },
 
   async fetchUsage() {
+    const quota = this.getQuotaService();
+    if (quota) return quota.fetchUsage();
+
     const cfg = this.getConfig();
     const apiUrl = cfg.aiUsageApiUrl || '/api/ai-usage';
     const userId = ClientUserService.getUserId();
@@ -776,13 +887,18 @@ const AiUsageService = {
     const limit = usage?.limit ?? this.getDailyLimit();
     const remaining = usage?.remaining ?? limit;
     state.aiUsageRemaining = remaining;
+    const isAccount = this.getQuotaService()?.isLoggedIn?.() || usage?.source === 'firestore';
 
     dom.videoAiUsage.hidden = false;
     if (remaining > 0) {
-      dom.videoAiUsage.textContent = `남은 무료 분석 ${remaining}회`;
+      dom.videoAiUsage.textContent = isAccount
+        ? `남은 무료 분석 ${remaining}회 (계정)`
+        : `남은 무료 분석 ${remaining}회`;
       dom.videoAiUsage.classList.remove('video-ai-usage--exhausted');
     } else {
-      dom.videoAiUsage.textContent = '오늘 무료 분석을 모두 사용했어요';
+      dom.videoAiUsage.textContent = isAccount
+        ? '무료 분석 횟수를 모두 사용했어요'
+        : '오늘 무료 분석을 모두 사용했어요';
       dom.videoAiUsage.classList.add('video-ai-usage--exhausted');
     }
 
@@ -795,6 +911,19 @@ const AiUsageService = {
     const usage = await this.fetchUsage();
     if (usage) this.updateDisplay(usage);
     else this.updateDisplay({ remaining: this.getDailyLimit(), limit: this.getDailyLimit() });
+  },
+
+  async onAnalysisSuccess(aiUsage) {
+    const quota = this.getQuotaService();
+    if (quota?.isLoggedIn()) {
+      const usage = await quota.fetchLoggedInUsage();
+      if (usage) this.updateDisplay(usage);
+      window.FirebaseServices?.refreshHeaderQuota?.();
+      return;
+    }
+    quota?.syncGuestAfterSuccess?.(aiUsage);
+    if (aiUsage) this.updateDisplay(aiUsage);
+    else await this.refreshDisplay();
   },
 };
 
@@ -1711,6 +1840,7 @@ const dom = {
   videoFallbackMessage: $('#video-fallback-message'),
   videoFallbackAnalyzeBtn: $('#video-fallback-analyze-btn'),
   videoUserText: $('#video-user-text'),
+  videoUserTextHint: $('#video-user-text-hint'),
   videoPasteText: $('#video-paste-text'),
   videoFormError: $('#video-form-error'),
   videoAnalyzeBtn: $('#video-analyze-btn'),
@@ -2819,8 +2949,8 @@ function showVideoFallback(message = VIDEO_EXTRACT_FALLBACK_MSG, options = {}) {
   }
 }
 
-function showAiDailyLimitAlert() {
-  alert('오늘 무료 분석 5회를 모두 사용했어요.');
+function showAiDailyLimitAlert(message) {
+  alert(message || '무료 AI 분석 횟수를 모두 사용했어요.');
 }
 
 function setVideoExtractLoading(loading) {
@@ -2867,7 +2997,16 @@ async function updateVideoLinkPreview() {
   const check = VideoRecipeAnalysisService.validateUrl(raw);
   if (!check.ok) {
     hideVideoLinkPreview();
+    hideVideoExtractWarning();
     return;
+  }
+  if (check.platform !== 'instagram') {
+    hideVideoExtractWarning();
+    if (dom.videoUserTextHint) {
+      dom.videoUserTextHint.textContent = VIDEO_EXTRACT_PARTIAL_WARNING;
+    }
+  } else if (dom.videoUserTextHint) {
+    dom.videoUserTextHint.textContent = INSTAGRAM_REELS_EXTRACT_HINT;
   }
   if (check.platform === 'youtube') {
     const videoId = VideoRecipeAnalysisService.extractYouTubeVideoId(check.url);
@@ -2883,10 +3022,25 @@ async function updateVideoLinkPreview() {
     } catch {
       /* keep basic preview */
     }
+  } else if (check.platform === 'instagram') {
+    const shortcode = VideoRecipeAnalysisService.extractInstagramShortcode(check.url);
+    renderVideoLinkPreview({
+      platform: check.platform,
+      title: shortcode ? `Instagram 릴스 (${shortcode})` : 'Instagram 릴스',
+      thumbnailUrl: null,
+      url: check.url,
+    });
+    showVideoExtractWarning(INSTAGRAM_REELS_EXTRACT_HINT);
+    try {
+      const meta = await VideoRecipeAnalysisService.fetchVideoMetadata(check.url, check.platform);
+      renderVideoLinkPreview({ ...meta, url: check.url });
+    } catch {
+      /* keep basic preview */
+    }
   } else {
     renderVideoLinkPreview({
       platform: check.platform,
-      title: check.platform === 'instagram' ? 'Instagram 영상' : 'TikTok 영상',
+      title: 'TikTok 영상',
       thumbnailUrl: null,
       url: check.url,
     });
@@ -2931,7 +3085,7 @@ function fillVideoReviewForm(draft) {
     dom.videoReviewMockNotice.hidden = !draft._isMockData;
   }
   if (dom.videoReviewPartialNotice) {
-    const warning = draft._warning || draft._videoExtractWarning;
+    const warning = draft._warning || draft._videoExtractWarning || draft._infoHint;
     dom.videoReviewPartialNotice.hidden = !warning;
     if (warning) dom.videoReviewPartialNotice.textContent = warning;
   }
@@ -2952,6 +3106,8 @@ async function handleVideoExtract() {
     let result;
     if (check.ok && check.platform === 'youtube') {
       result = await VideoRecipeAnalysisService.extractYouTubeViaApi(sourceUrl, textPayload);
+    } else if (check.ok && check.platform === 'instagram') {
+      result = await VideoRecipeAnalysisService.extractInstagramViaApi(sourceUrl, textPayload);
     } else {
       result = await VideoRecipeAnalysisService.extractFromUrl(sourceUrl);
     }
@@ -2966,13 +3122,14 @@ async function handleVideoExtract() {
       showToast('레시피 추출이 완료됐어요. 내용을 확인해 주세요.');
     }
   } catch (err) {
-    if (err.code === 'DAILY_LIMIT_EXCEEDED') {
-      showAiDailyLimitAlert();
+    if (err.code === 'DAILY_LIMIT_EXCEEDED' || err.code === 'ANALYSIS_LIMIT_EXCEEDED') {
+      showAiDailyLimitAlert(err.message);
       AiUsageService.updateDisplay(err.aiUsage || { remaining: 0, limit: AiUsageService.getDailyLimit() });
       return;
     }
     if (err.code === 'FALLBACK') {
       if (err.warning) showVideoExtractWarning(err.warning);
+      else if (err.infoHint) showVideoExtractWarning(err.infoHint);
       showVideoFallback(err.message);
     } else {
       showVideoFormError(err.message || '추출에 실패했습니다.');
@@ -2996,6 +3153,8 @@ async function handleVideoFallbackAnalyze() {
     let result;
     if (check.ok && check.platform === 'youtube') {
       result = await VideoRecipeAnalysisService.extractYouTubeViaApi(sourceUrl, textPayload);
+    } else if (check.ok && check.platform === 'instagram') {
+      result = await VideoRecipeAnalysisService.extractInstagramViaApi(sourceUrl, textPayload);
     } else {
       result = await VideoRecipeAnalysisService.analyzeFromPaste(sourceUrl, textPayload.pastedText);
     }
@@ -3009,8 +3168,8 @@ async function handleVideoFallbackAnalyze() {
       ? '레시피를 정리했어요. 안내 문구를 확인해 주세요.'
       : '레시피 정리가 완료됐어요. 내용을 확인해 주세요.');
   } catch (err) {
-    if (err.code === 'DAILY_LIMIT_EXCEEDED') {
-      showAiDailyLimitAlert();
+    if (err.code === 'DAILY_LIMIT_EXCEEDED' || err.code === 'ANALYSIS_LIMIT_EXCEEDED') {
+      showAiDailyLimitAlert(err.message);
       AiUsageService.updateDisplay(err.aiUsage || { remaining: 0, limit: AiUsageService.getDailyLimit() });
       return;
     }
@@ -3381,7 +3540,18 @@ function init() {
   }
 }
 
-init();
-registerServiceWorker();
+function startApp() {
+  init();
+  registerServiceWorker();
+  window.addEventListener('auth-state-changed', () => {
+    AiUsageService.refreshDisplay();
+  });
+}
+
+if (window.__firebaseBootstrapPromise) {
+  window.__firebaseBootstrapPromise.finally(startApp);
+} else {
+  startApp();
+}
 
 window.AppServices = { PantryRepository, RecipeRepository, SavedRecipeRepository, RecipeSaveCountRepository, MealLogRepository, ShoppingRecordRepository, RecommendationService, MatchService, IngredientGroupService, FreshFoodService, AffiliateService, PantryIngredientService, RecipePickerService, VideoRecipeAnalysisService, ClientUserService, AiUsageService, mockExtractRecipeFromVideoUrl };

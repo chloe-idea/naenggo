@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── 헬퍼 ──
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isRecipeAuthor() {
+      return isSignedIn()
+        && resource.data.authorId == request.auth.uid;
+    }
+
+    function isCreatingOwnRecipe() {
+      return isSignedIn()
+        && request.resource.data.authorId == request.auth.uid;
+    }
+
+    // 서버(Admin) 전용 필드 — 클라이언트 변경 금지
+    function quotaUnchanged() {
+      return !('freeAnalysisRemaining' in request.resource.data)
+        || request.resource.data.freeAnalysisRemaining == resource.data.freeAnalysisRemaining;
+    }
+
+    // ── users/{uid} ──
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && request.resource.data.freeAnalysisRemaining == 5
+        && request.resource.data.keys().hasAll(['freeAnalysisRemaining', 'createdAt', 'displayName', 'email']);
+      allow update: if isOwner(uid) && quotaUnchanged();
+      allow delete: if false;
+
+      // ── fridges/{fridgeId} ──
+      match /fridges/{fridgeId} {
+        allow read, write: if isOwner(uid);
+
+        match /items/{itemId} {
+          allow read, write: if isOwner(uid)
+            && request.resource.data.ownerId == uid;
+        }
+      }
+
+      // ── mealLogs/{logId} ──
+      match /mealLogs/{logId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.ownerId == uid;
+        allow update: if isOwner(uid)
+          && resource.data.ownerId == uid
+          && request.resource.data.ownerId == uid;
+        allow delete: if isOwner(uid);
+      }
+
+      // ── shoppingLists/{listId} ──
+      match /shoppingLists/{listId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.ownerId == uid;
+        allow update: if isOwner(uid)
+          && resource.data.ownerId == uid
+          && request.resource.data.ownerId == uid;
+        allow delete: if isOwner(uid);
+
+        match /items/{itemId} {
+          allow read, write: if isOwner(uid);
+        }
+      }
+
+      // ── favorites/{recipeId} ──
+      match /favorites/{recipeId} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ── recipes/{recipeId} (커뮤니티 + 내 레시피) ──
+    match /recipes/{recipeId} {
+      allow read: if resource.data.visibility == 'public'
+        || (isSignedIn() && resource.data.authorId == request.auth.uid);
+
+      allow create: if isCreatingOwnRecipe()
+        && request.resource.data.visibility in ['private', 'public'];
+
+      allow update: if isRecipeAuthor()
+        && request.resource.data.authorId == resource.data.authorId;
+
+      allow delete: if isRecipeAuthor();
+    }
+  }
+}

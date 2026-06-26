@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { handleExtractYoutubeRecipe } from '../lib/handlers/extract-youtube-recipe.js';
+import { handleExtractInstagramRecipe } from '../lib/handlers/extract-instagram-recipe.js';
 import { resolveIdTokenFromRequest } from '../lib/analysis-quota.js';
 
 const router = Router();
@@ -8,8 +8,8 @@ function resolveUserId(req) {
   return String(req.body?.userId || req.headers['x-user-id'] || '').trim();
 }
 
-router.post('/extract-youtube-recipe', async (req, res) => {
-  const result = await handleExtractYoutubeRecipe({
+router.post('/extract-instagram-recipe', async (req, res) => {
+  const result = await handleExtractInstagramRecipe({
     url: req.body?.url,
     userId: resolveUserId(req),
     idToken: resolveIdTokenFromRequest(req),

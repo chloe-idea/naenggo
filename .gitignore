@@ -1,4 +1,12 @@
 node_modules/
 .env
+.env.local
+.env.*.local
 .DS_Store
 server/data/
+
+# Firebase 서비스 계정 (절대 커밋 금지 — 환경 변수만 사용)
+*firebase*adminsdk*.json
+*serviceAccount*.json
+*service-account*.json
+firebase-service-account.json

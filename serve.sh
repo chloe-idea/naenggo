@@ -16,8 +16,8 @@ fi
 
 if [ ! -f ".env" ] && [ -f ".env.example" ]; then
   echo ""
-  echo "⚠️  .env 파일이 없습니다. YouTube 레시피 추출을 위해 .env.example 을 복사한 뒤"
-  echo "    OPENAI_API_KEY 를 설정해 주세요."
+  echo "⚠️  .env 파일이 없습니다. cp .env.example .env 후"
+  echo "    OPENAI_API_KEY, FIREBASE_SERVICE_ACCOUNT_* 를 설정해 주세요."
   echo ""
 fi
 

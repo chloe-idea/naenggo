@@ -16,18 +16,33 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
   <div class="app">
     <header class="header">
-      <div class="header__brand">
-        <span class="header__icon" aria-hidden="true"></span>
-        <div>
-          <h1 class="header__title">냉장GO</h1>
-          <p id="header-subtitle" class="header__subtitle">집에 있는 재료로 만들 수 있는 요리를 찾아보세요</p>
+      <div class="header__top">
+        <div class="header__brand">
+          <span class="header__icon" aria-hidden="true"></span>
+          <div>
+            <h1 class="header__title">냉장GO</h1>
+            <p id="header-subtitle" class="header__subtitle">집에 있는 재료로 만들 수 있는 요리를 찾아보세요</p>
+          </div>
+        </div>
+        <div id="auth-guest" class="auth-bar auth-bar--guest">
+          <button type="button" id="auth-google-btn" class="btn btn--outline btn--sm auth-bar__google-btn">
+            Google 로그인
+          </button>
+        </div>
+        <div id="auth-user" class="auth-bar auth-bar--user" hidden>
+          <div class="auth-bar__info">
+            <span id="auth-user-name" class="auth-bar__name"></span>
+            <span id="auth-header-remaining" class="auth-bar__remaining"></span>
+          </div>
+          <button type="button" id="auth-logout-btn" class="btn btn--ghost btn--sm">로그아웃</button>
         </div>
       </div>
+      <p id="auth-guest-hint" class="auth-bar__hint">로그인하지 않아도 체험할 수 있어요. 로그인하면 무료 분석 횟수가 계정에 저장됩니다.</p>
     </header>
 
     <main class="main">
@@ -487,8 +502,8 @@
 
             <div class="form-field video-user-text-field">
               <label for="video-user-text" class="form-field__label">영상 설명글 / 캡션 (선택)</label>
-              <textarea id="video-user-text" class="form-field__textarea" rows="4" placeholder="영상 설명, 자막, 고정 댓글을 붙여넣어 주세요."></textarea>
-              <p class="form-field__hint">영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다</p>
+              <textarea id="video-user-text" class="form-field__textarea" rows="4" placeholder="릴스·영상 캡션, 설명, 고정 댓글을 붙여넣어 주세요."></textarea>
+              <p id="video-user-text-hint" class="form-field__hint">영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다</p>
             </div>
 
             <div id="video-fallback-section" class="video-fallback-section" hidden>
@@ -599,11 +614,12 @@
     </div>
   </div>
 
-  <script src="app-config.js?v=24"></script>
-  <script src="nav-icons.js?v=24"></script>
-  <script src="recipe-placeholders.js?v=24"></script>
-  <script src="recipe-images.js?v=24"></script>
-  <script src="recipes-builtin.js?v=24"></script>
-  <script src="script.js?v=24"></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=26"></script>
+  <script src="app-config.js?v=26"></script>
+  <script src="nav-icons.js?v=26"></script>
+  <script src="recipe-placeholders.js?v=26"></script>
+  <script src="recipe-images.js?v=26"></script>
+  <script src="recipes-builtin.js?v=26"></script>
+  <script src="script.js?v=26" defer></script>
 </body>
 </html>
