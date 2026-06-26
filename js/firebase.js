@@ -1,10 +1,10 @@
 /**
- * Firebase 앱 초기화 (Auth + Firestore)
+ * Firebase 앱 초기화 (Auth + Firestore) — 싱글톤, 중복 initializeApp 방지
  */
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
+import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
-import { firebaseConfig } from '../firebase-config.js';
+import { firebaseConfig } from './firebase-config.js';
 
 export const FREE_ANALYSIS_LIMIT = 5;
 
@@ -23,8 +23,18 @@ function isConfigReady() {
 }
 
 export function getFirebaseApp() {
-  if (!isConfigReady()) return null;
-  if (!app) app = initializeApp(firebaseConfig);
+  if (!isConfigReady()) {
+    console.warn('[firebase] config not ready — firebase-config.js 확인');
+    return null;
+  }
+  if (app) return app;
+  if (getApps().length > 0) {
+    app = getApp();
+    console.log('[firebase] reusing existing app instance');
+    return app;
+  }
+  app = initializeApp(firebaseConfig);
+  console.log('[firebase] initializeApp OK, project:', firebaseConfig.projectId);
   return app;
 }
 

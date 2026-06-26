@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=28">
 </head>
 <body>
   <div class="app">
@@ -37,12 +37,14 @@
         <div id="auth-user" class="auth-bar auth-bar--user" hidden>
           <div class="auth-bar__info">
             <span id="auth-user-name" class="auth-bar__name"></span>
+            <span id="auth-user-email" class="auth-bar__email" hidden></span>
             <span id="auth-header-remaining" class="auth-bar__remaining"></span>
           </div>
           <button type="button" id="auth-logout-btn" class="btn btn--ghost btn--sm">로그아웃</button>
         </div>
       </div>
       <p id="auth-guest-hint" class="auth-bar__hint">로그인하지 않아도 체험할 수 있어요. 로그인하면 무료 분석 횟수가 계정에 저장됩니다.</p>
+      <p id="auth-error" class="auth-error" hidden role="alert"></p>
     </header>
 
     <main class="main">
@@ -614,12 +616,25 @@
     </div>
   </div>
 
-  <script type="module" src="js/firebase-bootstrap.js?v=26"></script>
-  <script src="app-config.js?v=26"></script>
-  <script src="nav-icons.js?v=26"></script>
-  <script src="recipe-placeholders.js?v=26"></script>
-  <script src="recipe-images.js?v=26"></script>
-  <script src="recipes-builtin.js?v=26"></script>
-  <script src="script.js?v=26" defer></script>
+  <script>
+    window.addEventListener('error', function (e) {
+      if (e.filename && /firebase|auth-ui|gstatic/.test(e.filename)) {
+        console.error('[auth] load error:', e.message, e.filename);
+        var el = document.getElementById('auth-error');
+        if (el) {
+          el.hidden = false;
+          el.textContent = 'Firebase 로드 오류: ' + e.message + ' (F12 콘솔 확인)';
+        }
+      }
+    });
+  </script>
+  <script src="js/auth-ui-bridge.js?v=28"></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=28"></script>
+  <script src="app-config.js?v=28"></script>
+  <script src="nav-icons.js?v=28"></script>
+  <script src="recipe-placeholders.js?v=28"></script>
+  <script src="recipe-images.js?v=28"></script>
+  <script src="recipes-builtin.js?v=28"></script>
+  <script src="script.js?v=28" defer></script>
 </body>
 </html>

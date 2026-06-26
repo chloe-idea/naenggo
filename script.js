@@ -3433,7 +3433,7 @@ async function registerServiceWorker() {
   });
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=24').then((reg) => {
+    navigator.serviceWorker.register('./sw.js?v=28').then((reg) => {
       reg.update();
       if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     }).catch(() => undefined);

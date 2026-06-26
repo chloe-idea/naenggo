@@ -129,6 +129,15 @@ textarea {
   max-width: 100%;
 }
 
+.auth-bar__email {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
 .auth-bar__remaining {
   font-size: 0.6875rem;
   color: var(--color-primary);
@@ -148,6 +157,24 @@ textarea {
   font-size: 0.6875rem;
   line-height: 1.4;
   color: var(--color-text-muted);
+}
+
+.auth-error {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: var(--radius-md, 8px);
+  white-space: pre-wrap;
+}
+
+.auth-error--domain {
+  color: #7a2e0e;
+  background: #fff4ef;
+  border-color: #ffbb96;
 }
 
 .header__brand {
