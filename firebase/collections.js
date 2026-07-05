@@ -11,6 +11,7 @@ export const Collection = {
   RECIPES: 'recipes',
   FRIDGES: 'fridges',
   FRIDGE_ITEMS: 'items',
+  INGREDIENTS: 'ingredients',
   MEAL_LOGS: 'mealLogs',
   SHOPPING_LISTS: 'shoppingLists',
   SHOPPING_ITEMS: 'items',
@@ -149,6 +150,10 @@ export function userFridgeItemsPath(uid, fridgeId = DEFAULT_FRIDGE_ID) {
 
 export function userFridgeItemPath(uid, itemId, fridgeId = DEFAULT_FRIDGE_ID) {
   return `${userFridgeItemsPath(uid, fridgeId)}/${itemId}`;
+}
+
+export function userIngredientsPath(uid) {
+  return `${userPath(uid)}/${Collection.INGREDIENTS}`;
 }
 
 export function userMealLogsPath(uid) {

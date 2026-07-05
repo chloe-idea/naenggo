@@ -24,8 +24,9 @@ app.use('/api', aiUsageRouter);
 app.use(express.static(ROOT, {
   index: 'index.html',
   setHeaders(res, filePath) {
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache');
+    if (/\.(html?|js|css|json)$/.test(filePath) || filePath.endsWith('sw.js')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
     }
   },
 }));

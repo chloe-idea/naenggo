@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // users/{uid} 및 하위 컬렉션 (ingredients, mealLogs 등)
+    match /users/{userId}/{document=**} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // users/{uid} 프로필 문서 — freeAnalysisRemaining 서버 전용 필드 보호
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid)
+        && (!('freeAnalysisRemaining' in request.resource.data)
+          || !('freeAnalysisRemaining' in resource.data)
+          || request.resource.data.freeAnalysisRemaining == resource.data.freeAnalysisRemaining);
+      allow delete: if false;
+    }
+  }
+}

@@ -12,13 +12,32 @@
  *   createdAt, updatedAt
  */
 
+(function blockPantryLocalStorageEarly() {
+  const KEYS = new Set(['naengjanggo_v2_pantry', 'naengjanggo_pantry_ingredients']);
+  const origGet = localStorage.getItem.bind(localStorage);
+  const origSet = localStorage.setItem.bind(localStorage);
+  localStorage.getItem = function (key) {
+    if (KEYS.has(key)) {
+      console.warn('[pantry] blocked localStorage.getItem:', key);
+      return null;
+    }
+    return origGet(key);
+  };
+  localStorage.setItem = function (key, value) {
+    if (KEYS.has(key)) {
+      console.error('[pantry] blocked localStorage.setItem:', key);
+      return;
+    }
+    return origSet(key, value);
+  };
+})();
+
 // ===== 설정 =====
 const CONFIG = {
   LOCAL_USER_ID: 'local-user',
   LOCAL_USER_NAME: '나',
   EXPIRY_SOON_DAYS: 3,
   STORAGE: {
-    PANTRY: 'naengjanggo_v2_pantry',
     RECIPES: 'naengjanggo_v2_recipes',
     SAVED: 'naengjanggo_v2_saved',
     SAVE_COUNTS: 'naengjanggo_v2_save_counts',
@@ -29,11 +48,15 @@ const CONFIG = {
     MEAL_PLAN: 'naengjanggo_v2_meal_plan',
     GROCERY: 'naengjanggo_v2_grocery',
     CLIENT_USER_ID: 'naengjanggo_v2_client_user_id',
-    // v1 마이그레이션
-    LEGACY_PANTRY: 'naengjanggo_pantry_ingredients',
     LEGACY_RECIPES: 'naengjanggo_user_recipes',
   },
 };
+
+/** @deprecated Firestore 전용 — localStorage pantry 키 (읽기/쓰기 차단용) */
+const BLOCKED_PANTRY_STORAGE_KEYS = new Set([
+  'naengjanggo_v2_pantry',
+  'naengjanggo_pantry_ingredients',
+]);
 
 const CURRENCY_OPTIONS = {
   KRW: { symbol: '₩', fractionDigits: 0 },
@@ -984,6 +1007,10 @@ const FreshFoodService = {
 // ===== Storage Adapter (→ Supabase/Firebase 교체) =====
 const StorageAdapter = {
   get(key, fallback = null) {
+    if (BLOCKED_PANTRY_STORAGE_KEYS.has(key)) {
+      console.warn('[StorageAdapter] blocked pantry localStorage read:', key);
+      return fallback;
+    }
     try {
       const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : fallback;
@@ -992,6 +1019,10 @@ const StorageAdapter = {
     }
   },
   set(key, value) {
+    if (BLOCKED_PANTRY_STORAGE_KEYS.has(key)) {
+      console.warn('[StorageAdapter] blocked pantry localStorage write:', key);
+      return;
+    }
     localStorage.setItem(key, JSON.stringify(value));
   },
   createId(prefix) {
@@ -1085,46 +1116,50 @@ const BUILTIN_RECIPES = (typeof BUILTIN_RECIPE_RAW !== 'undefined' ? BUILTIN_REC
 // ===== Repositories =====
 const PantryRepository = {
   _items: [],
+  /** @deprecated Firestore 전용 — localStorage 사용 안 함 */
   load() {
-    this._items = StorageAdapter.get(CONFIG.STORAGE.PANTRY, []);
-    if (this._items.length === 0) this._migrateLegacy();
+    this.clear();
     return this._items;
   },
-  save() { StorageAdapter.set(CONFIG.STORAGE.PANTRY, this._items); },
+  clear() {
+    this._items = [];
+    console.log('INGREDIENTS_FROM_FIRESTORE', 0);
+  },
   getAll() { return this._items; },
-  add(item) { this._items.push(item); this.save(); },
-  update(id, data) {
-    const i = this._items.findIndex((x) => x.id === id);
-    if (i === -1) return null;
-    this._items[i] = { ...this._items[i], ...data, updatedAt: new Date().toISOString() };
-    this.save();
-    return this._items[i];
-  },
-  remove(id) {
-    this._items = this._items.filter((x) => x.id !== id);
-    this.save();
-  },
-  _migrateLegacy() {
-    const legacy = StorageAdapter.get(CONFIG.STORAGE.LEGACY_PANTRY, []);
-    if (!legacy.length) return;
-    this._items = legacy.map((raw) => this._normalize(raw));
-    this.save();
+  findById(id) { return this._items.find((x) => x.id === id); },
+  replaceAll(items) {
+    this._items = (items || []).map((raw) => this._normalize(raw));
+    console.log('INGREDIENTS_FROM_FIRESTORE', this._items.length);
   },
   _normalize(raw) {
     if (typeof raw === 'string') {
-      return { id: StorageAdapter.createId('pantry'), name: raw, quantity: '', unit: '', expiryDate: '',
-        recipeId: null, recipeName: '',
-        userId: CONFIG.LOCAL_USER_ID, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      return {
+        id: StorageAdapter.createId('pantry'),
+        name: raw,
+        quantity: '',
+        unit: '',
+        expiryDate: '',
+        recipeId: null,
+        recipeName: '',
+        firestoreId: null,
+        userId: CONFIG.LOCAL_USER_ID,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
     }
-    return { id: raw.id || StorageAdapter.createId('pantry'), name: raw.name || '', quantity: raw.quantity || '',
-      unit: raw.unit || '', expiryDate: raw.expiryDate || '', recipeId: raw.recipeId || null, recipeName: raw.recipeName || '',
-      userId: CONFIG.LOCAL_USER_ID,
-      createdAt: raw.createdAt || new Date().toISOString(), updatedAt: raw.updatedAt || new Date().toISOString() };
-  },
-  create(data) {
-    const item = { ...this._normalize(data), id: StorageAdapter.createId('pantry') };
-    this.add(item);
-    return item;
+    return {
+      id: raw.id || raw.firestoreId || StorageAdapter.createId('pantry'),
+      name: raw.name || '',
+      quantity: raw.quantity || '',
+      unit: raw.unit || '',
+      expiryDate: raw.expiryDate || '',
+      recipeId: raw.recipeId || null,
+      recipeName: raw.recipeName || '',
+      firestoreId: raw.firestoreId || raw.id || null,
+      userId: raw.userId || CONFIG.LOCAL_USER_ID,
+      createdAt: raw.createdAt || new Date().toISOString(),
+      updatedAt: raw.updatedAt || new Date().toISOString(),
+    };
   },
 };
 
@@ -1588,24 +1623,134 @@ const GroceryListService = {
 };
 
 const PantryIngredientService = {
-  addFromNames(names, options = {}) {
+  async addFromNames(names, options = {}) {
+    if (!isFirestorePantryEnabled()) {
+      console.error('NO_AUTH_USER');
+      const err = new Error('로그인 후 재료를 추가할 수 있습니다.');
+      err.code = 'auth/not-logged-in';
+      throw err;
+    }
     const { recipeId = null, recipeName = null, skipDuplicates = true } = options;
     let added = 0;
     const addedNames = [];
-    for (const raw of names) {
-      const name = String(raw || '').trim();
-      if (!name) continue;
-      const dup = skipDuplicates && PantryRepository.getAll().some(
-        (i) => MatchService.normalize(i.name) === MatchService.normalize(name)
-      );
-      if (dup) continue;
-      PantryRepository.create({ name, quantity: '', unit: '', expiryDate: '', recipeId, recipeName });
-      added += 1;
-      addedNames.push(name);
+    try {
+      for (const raw of names) {
+        const name = String(raw || '').trim();
+        if (!name) continue;
+        const dup = skipDuplicates && getPantryItemsForUi().some(
+          (i) => MatchService.normalize(i.name) === MatchService.normalize(name),
+        );
+        if (dup) continue;
+        await createPantryItem({ name, quantity: '', unit: '', expiryDate: '', recipeId, recipeName });
+        added += 1;
+        addedNames.push(name);
+      }
+    } catch (err) {
+      handlePantryFirestoreError(err);
+      throw err;
     }
     return { added, addedNames };
   },
 };
+
+function isFirestorePantryEnabled() {
+  const authRef = window.FirebaseServices?.auth;
+  const dbRef = window.FirebaseServices?.db;
+  return Boolean(authRef?.currentUser?.uid && dbRef);
+}
+
+/** UI 표시용 — 로그아웃/비로그인 시 항상 빈 배열 (localStorage 잔여 데이터 무시) */
+function getPantryItemsForUi() {
+  if (!isFirestorePantryEnabled()) return [];
+  return PantryRepository.getAll();
+}
+
+function clearPantryState() {
+  PantryRepository.clear();
+  console.log('INGREDIENTS_FROM_FIRESTORE', 0);
+}
+
+function getFirestoreIngredientService() {
+  return window.FirebaseServices?.FirestoreIngredientService || null;
+}
+
+async function createPantryItem(data) {
+  const authRef = window.FirebaseServices?.auth || null;
+  const dbRef = window.FirebaseServices?.db || null;
+  const ingredientName = String(data?.name || '').trim();
+  const uid = authRef?.currentUser?.uid || null;
+
+  console.log('ADD_INGREDIENT_CLICKED');
+  console.log('currentUser:', authRef?.currentUser ?? null);
+  if (uid) console.log('SAVE_TARGET: Firestore users/' + uid + '/ingredients');
+  console.log('ingredientName:', ingredientName);
+
+  if (!uid) {
+    console.error('NO_AUTH_USER');
+    const err = new Error('로그인 후 재료를 추가할 수 있습니다.');
+    err.code = 'auth/not-logged-in';
+    throw err;
+  }
+  if (!dbRef) {
+    console.error('NO_FIRESTORE_DB');
+    const err = new Error('Firestore가 초기화되지 않았습니다.');
+    err.code = 'firestore/not-initialized';
+    throw err;
+  }
+
+  const svc = getFirestoreIngredientService();
+  if (!svc) {
+    console.error('NO_FIRESTORE_DB');
+    const err = new Error('FirestoreIngredientService를 불러올 수 없습니다.');
+    err.code = 'firebase/not-ready';
+    throw err;
+  }
+  await svc.addIngredient({
+    name: ingredientName,
+    quantity: String(data?.quantity ?? ''),
+    expiryDate: String(data?.expiryDate ?? ''),
+  });
+  return null;
+}
+
+async function updatePantryItem(id, data) {
+  if (!isFirestorePantryEnabled()) {
+    console.error('NO_AUTH_USER');
+    throw new Error('로그인 후 재료를 수정할 수 있습니다.');
+  }
+  const svc = getFirestoreIngredientService();
+  const item = PantryRepository.findById(id);
+  const docId = item?.firestoreId || item?.id || id;
+  if (!svc) {
+    console.error('NO_FIRESTORE_DB');
+    throw new Error('Firebase 서비스를 불러오는 중입니다.');
+  }
+  await svc.updateIngredient(docId, data);
+  return null;
+}
+
+async function removePantryItem(id) {
+  if (!isFirestorePantryEnabled()) {
+    console.error('NO_AUTH_USER');
+    throw new Error('로그인 후 재료를 삭제할 수 있습니다.');
+  }
+  const svc = getFirestoreIngredientService();
+  const item = PantryRepository.findById(id);
+  const docId = item?.firestoreId || item?.id || id;
+  if (!svc) {
+    console.error('NO_FIRESTORE_DB');
+    throw new Error('Firebase 서비스를 불러오는 중입니다.');
+  }
+  await svc.deleteIngredient(docId);
+}
+
+function handlePantryFirestoreError(error) {
+  console.error('INGREDIENT_FIRESTORE_SAVE_FAILED', error);
+  const msg = error?.code === 'auth/not-logged-in'
+    ? '로그인 후 재료를 추가할 수 있습니다.'
+    : '재료 저장에 실패했습니다. 콘솔을 확인해 주세요.';
+  alert(msg);
+}
 
 const RecipePickerService = {
   init({ inputEl, hiddenEl, listEl, onSelect }) {
@@ -1817,11 +1962,14 @@ const MatchService = {
 };
 
 const RecommendationService = {
-  getPantryNames() { return PantryRepository.getAll().map((i) => i.name); },
+  getPantryNames() {
+    if (!isFirestorePantryEnabled()) return [];
+    return getPantryItemsForUi().map((i) => i.name);
+  },
   getExpiryBoost(matched) {
     let boost = 0;
     for (const name of matched) {
-      const item = PantryRepository.getAll().find((p) => MatchService.normalize(p.name) === MatchService.normalize(name));
+      const item = getPantryItemsForUi().find((p) => MatchService.normalize(p.name) === MatchService.normalize(name));
       if (!item?.expiryDate) continue;
       const days = ExpiryService.daysUntil(item.expiryDate);
       if (days !== null && days <= CONFIG.EXPIRY_SOON_DAYS && days >= 0) boost += 10;
@@ -2221,13 +2369,19 @@ function pantryChipBadge(item) {
 }
 
 function renderPantryChips() {
-  const items = PantryRepository.getAll();
+  const items = getPantryItemsForUi();
+  if (!items.length && !isFirestorePantryEnabled()) {
+    dom.pantryChips.innerHTML = '<p class="hint hint--inline">로그인하면 보유 재료가 Firestore와 동기화됩니다.</p>';
+    return;
+  }
   dom.pantryChips.innerHTML = items.map((item) => `
     <span class="tag" role="listitem">${esc(item.name)}${pantryChipBadge(item)}
       <button type="button" class="tag__remove" data-rm="${esc(item.id)}" aria-label="삭제">&times;</button>
     </span>`).join('');
   dom.pantryChips.querySelectorAll('[data-rm]').forEach((btn) => {
-    btn.onclick = () => { PantryRepository.remove(btn.dataset.rm); refreshAll(); };
+    btn.onclick = () => {
+      removePantryItem(btn.dataset.rm).catch((err) => handlePantryFirestoreError(err));
+    };
   });
 }
 
@@ -2438,7 +2592,16 @@ function renderCommunity() {
 
 // ===== Render: Pantry Manage =====
 function renderPantryManage() {
-  const items = [...PantryRepository.getAll()].sort((a, b) => {
+  if (!isFirestorePantryEnabled()) {
+    dom.pantryCount.textContent = '';
+    dom.pantryList.innerHTML = '';
+    dom.pantryEmpty.hidden = false;
+    dom.pantryEmpty.querySelector('.empty-state__text').textContent = '로그인 후 Firestore에 저장된 보유 재료를 관리할 수 있어요';
+    return;
+  }
+  const emptyTextEl = dom.pantryEmpty.querySelector('.empty-state__text');
+  if (emptyTextEl) emptyTextEl.textContent = '등록된 재료가 없습니다';
+  const items = [...getPantryItemsForUi()].sort((a, b) => {
     const o = { expired: 0, soon: 1, ok: 2, none: 3 };
     return o[ExpiryService.status(a.expiryDate)] - o[ExpiryService.status(b.expiryDate)];
   });
@@ -2467,8 +2630,10 @@ function renderPantryManage() {
   dom.pantryList.querySelectorAll('[data-edit]').forEach((b) => { b.onclick = () => openPantryModal(b.dataset.edit); });
   dom.pantryList.querySelectorAll('[data-del]').forEach((b) => {
     b.onclick = () => {
-      const item = PantryRepository.getAll().find((x) => x.id === b.dataset.del);
-      if (confirm(`"${item?.name || '재료'}" 삭제할까요?`)) { PantryRepository.remove(b.dataset.del); refreshAll(); }
+      const item = getPantryItemsForUi().find((x) => x.id === b.dataset.del);
+      if (confirm(`"${item?.name || '재료'}" 삭제할까요?`)) {
+        removePantryItem(b.dataset.del).catch((err) => handlePantryFirestoreError(err));
+      }
     };
   });
 }
@@ -2832,13 +2997,13 @@ function addShoppingRecordToPantry(recordId) {
     showToast('추가할 재료가 없어요');
     return;
   }
-  const { added } = PantryIngredientService.addFromNames(record.ingredients, {
+  PantryIngredientService.addFromNames(record.ingredients, {
     recipeId: record.recipeId,
     recipeName: record.recipeName,
-  });
-  ShoppingRecordRepository.update(recordId, { pantryAdded: true });
-  refreshAll();
-  showToast(added ? `재료 ${added}개를 보유 재료에 추가했어요` : '이미 보유 재료에 있는 항목이에요');
+  }).then(({ added }) => {
+    ShoppingRecordRepository.update(recordId, { pantryAdded: true });
+    showToast(added ? `재료 ${added}개를 보유 재료에 추가했어요` : '이미 보유 재료에 있는 항목이에요');
+  }).catch(() => undefined);
 }
 
 function openShoppingModal(id = null, defaultDate = null) {
@@ -2895,6 +3060,16 @@ function handleShoppingModalSubmit(e) {
     currency: state.editingShoppingId ? undefined : state.currency,
   };
 
+  const finish = (msg) => {
+    state.selectedCalendarDate = date;
+    const [y, m] = date.split('-').map(Number);
+    state.calendarYear = y;
+    state.calendarMonth = m - 1;
+    closeModal('shopping');
+    refreshAll();
+    showToast(msg);
+  };
+
   let record;
   if (state.editingShoppingId) {
     record = ShoppingRecordRepository.update(state.editingShoppingId, {
@@ -2902,29 +3077,31 @@ function handleShoppingModalSubmit(e) {
       pantryAdded: existing.pantryAdded || shouldAddPantry,
     });
     if (shouldAddPantry) {
-      const { added } = PantryIngredientService.addFromNames(ingredients, { recipeId, recipeName });
-      if (record && !existing.pantryAdded) ShoppingRecordRepository.update(record.id, { pantryAdded: true });
-      showToast(added ? `수정 완료 · 재료 ${added}개를 보유 재료에 추가했어요` : '장보기 기록이 수정되었어요');
-    } else {
-      showToast('장보기 기록이 수정되었어요');
+      PantryIngredientService.addFromNames(ingredients, { recipeId, recipeName })
+        .then(({ added }) => {
+          if (record && !existing.pantryAdded) ShoppingRecordRepository.update(record.id, { pantryAdded: true });
+          finish(added ? `수정 완료 · 재료 ${added}개를 보유 재료에 추가했어요` : '장보기 기록이 수정되었어요');
+        })
+        .catch(() => finish('장보기 기록이 수정되었어요'));
+      return;
     }
-  } else {
-    record = ShoppingRecordRepository.create({ ...payload, pantryAdded: shouldAddPantry });
-    let msg = `장보기 ${formatMoney(amount, state.currency)} 기록 완료!`;
-    if (shouldAddPantry) {
-      const { added } = PantryIngredientService.addFromNames(ingredients, { recipeId, recipeName });
-      if (record) ShoppingRecordRepository.update(record.id, { pantryAdded: true });
-      if (added) msg += ` 재료 ${added}개 추가됨.`;
-    }
-    showToast(msg);
+    finish('장보기 기록이 수정되었어요');
+    return;
   }
 
-  state.selectedCalendarDate = date;
-  const [y, m] = date.split('-').map(Number);
-  state.calendarYear = y;
-  state.calendarMonth = m - 1;
-  closeModal('shopping');
-  refreshAll();
+  record = ShoppingRecordRepository.create({ ...payload, pantryAdded: shouldAddPantry });
+  let msg = `장보기 ${formatMoney(amount, state.currency)} 기록 완료!`;
+  if (shouldAddPantry) {
+    PantryIngredientService.addFromNames(ingredients, { recipeId, recipeName })
+      .then(({ added }) => {
+        if (record) ShoppingRecordRepository.update(record.id, { pantryAdded: true });
+        if (added) msg += ` 재료 ${added}개 추가됨.`;
+        finish(msg);
+      })
+      .catch(() => finish(msg));
+    return;
+  }
+  finish(msg);
 }
 
 function changeCalendarMonth(delta) {
@@ -3120,9 +3297,11 @@ function handleGroceryPurchaseComplete() {
     showToast('구매한 재료를 체크해 주세요');
     return;
   }
-  const { added } = PantryIngredientService.addFromNames(names, { skipDuplicates: true });
-  refreshAll();
-  showToast(`${added}개 재료를 냉장고에 추가했어요`);
+  PantryIngredientService.addFromNames(names, { skipDuplicates: true })
+    .then(({ added }) => {
+      showToast(`${added}개 재료를 냉장고에 추가했어요`);
+    })
+    .catch(() => undefined);
 }
 
 // ===== Recipe Detail Modal =====
@@ -3672,12 +3851,16 @@ function updatePhotoPreview(src) {
 
 // ===== Pantry Modal =====
 function openPantryModal(id = null) {
+  if (!isFirestorePantryEnabled()) {
+    alert('로그인 후 재료를 추가할 수 있습니다.');
+    return;
+  }
   state.editingPantryId = id;
   dom.pantryModalForm.reset();
   RecipePickerService.clear(state.pantryRecipePicker);
   dom.pantryModalTitle.textContent = id ? '재료 수정' : '재료 추가';
   if (id) {
-    const item = PantryRepository.getAll().find((x) => x.id === id);
+    const item = getPantryItemsForUi().find((x) => x.id === id);
     if (!item) return;
     dom.pantryModalName.value = item.name;
     dom.pantryModalQty.value = item.quantity;
@@ -3694,8 +3877,12 @@ function openPantryModal(id = null) {
   openModal('pantry');
 }
 
-function handlePantryModalSubmit(e) {
+async function handlePantryModalSubmit(e) {
   e.preventDefault();
+  if (!isFirestorePantryEnabled()) {
+    alert('로그인 후 재료를 추가할 수 있습니다.');
+    return;
+  }
   const name = dom.pantryModalName.value.trim();
   if (!name) return;
   const resolved = RecipePickerService.resolve(dom.pantryRecipeInput, dom.pantryRecipeId);
@@ -3707,10 +3894,13 @@ function handlePantryModalSubmit(e) {
     recipeId: resolved?.id || null,
     recipeName: resolved?.name || dom.pantryRecipeInput.value.trim(),
   };
-  if (state.editingPantryId) PantryRepository.update(state.editingPantryId, data);
-  else PantryRepository.create(data);
-  closeModal('pantry');
-  refreshAll();
+  try {
+    if (state.editingPantryId) await updatePantryItem(state.editingPantryId, data);
+    else await createPantryItem(data);
+    closeModal('pantry');
+  } catch (err) {
+    handlePantryFirestoreError(err);
+  }
 }
 
 function initRecipePickers() {
@@ -3732,17 +3922,30 @@ function initRecipePickers() {
 }
 
 // ===== Quick Add =====
-function handleQuickAdd(e) {
+// 추가 버튼(type=submit) · Enter → form submit → handleQuickAdd
+async function handleQuickAdd(e) {
   e.preventDefault();
   if (state.isComposing) return;
+  if (!isFirestorePantryEnabled()) {
+    alert('로그인 후 재료를 추가할 수 있습니다.');
+    return;
+  }
   const val = dom.quickInput.value.trim();
   if (!val) return;
-  val.split(/[,，、]/).map((s) => s.trim()).filter(Boolean).forEach((name) => {
-    const dup = PantryRepository.getAll().some((i) => MatchService.normalize(i.name) === MatchService.normalize(name));
-    if (!dup) PantryRepository.create({ name, quantity: '', unit: '', expiryDate: '' });
-  });
-  dom.quickInput.value = '';
-  refreshAll();
+
+  const names = val.split(/[,，、]/).map((s) => s.trim()).filter(Boolean);
+  let added = 0;
+  try {
+    for (const name of names) {
+      const dup = getPantryItemsForUi().some((i) => MatchService.normalize(i.name) === MatchService.normalize(name));
+      if (dup) continue;
+      await createPantryItem({ name, quantity: '', unit: '', expiryDate: '' });
+      added += 1;
+    }
+    dom.quickInput.value = '';
+  } catch (err) {
+    handlePantryFirestoreError(err);
+  }
 }
 
 // ===== Modals =====
@@ -3764,16 +3967,45 @@ function closeAllModals() {
 }
 
 // ===== PWA =====
+function isDevRuntime() {
+  const host = location.hostname;
+  const port = location.port;
+  return port === '8765'
+    || host === 'localhost'
+    || host === '127.0.0.1'
+    || /^192\.168\./.test(host)
+    || /^10\./.test(host);
+}
+
+async function clearServiceWorkerCaches() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((reg) => reg.unregister()));
+  } catch {
+    // ignore
+  }
+  if ('caches' in window) {
+    try {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
 
   if (!window.isSecureContext) {
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map((reg) => reg.unregister()));
-    } catch {
-      // file:// 또는 로컬 HTTP — SW 미지원, 앱은 그대로 실행
-    }
+    await clearServiceWorkerCaches();
+    return;
+  }
+
+  // 로컬 개발 서버 — SW 캐시 없이 새로고침만으로 최신 파일 반영
+  if (isDevRuntime()) {
+    await clearServiceWorkerCaches();
     return;
   }
 
@@ -3784,17 +4016,34 @@ async function registerServiceWorker() {
     window.location.reload();
   });
 
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=30').then((reg) => {
-      reg.update();
-      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-    }).catch(() => undefined);
-  });
+  const activateWaitingWorker = (reg) => {
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  };
+
+  try {
+    const reg = await navigator.serviceWorker.register('./sw.js?v=37');
+    reg.update();
+    activateWaitingWorker(reg);
+    reg.addEventListener('updatefound', () => {
+      const worker = reg.installing;
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          activateWaitingWorker(reg);
+        }
+      });
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update();
+    });
+  } catch {
+    // production SW optional
+  }
 }
 
 // ===== Init =====
 function init() {
-  PantryRepository.load();
+  PantryRepository.clear();
   RecipeRepository.load();
   SavedRecipeRepository.load();
   RecipeSaveCountRepository.load();
@@ -3901,22 +4150,36 @@ function init() {
   });
 
   navigate('main');
-
-  if (new URLSearchParams(location.search).get('demo') === '1' && !PantryRepository.getAll().length) {
-    [['계란', '6', '개', '2026-06-20'], ['양파', '2', '개', '2026-06-25'], ['김치', '1', '봉', '2026-06-18']].forEach(([name, q, u, exp]) => {
-      PantryRepository.create({ name, quantity: q, unit: u, expiryDate: exp });
-    });
-    refreshAll();
-  }
 }
 
 function startApp() {
   init();
   registerServiceWorker();
-  window.addEventListener('auth-state-changed', () => {
+  window.addEventListener('pantry-logout-clear', () => {
+    clearPantryState();
+    refreshAll();
+  });
+  window.addEventListener('auth-state-changed', (e) => {
     AiUsageService.refreshDisplay();
+    if (!e.detail?.user) {
+      clearPantryState();
+      navigate('main');
+    }
+    refreshAll();
+  });
+  window.addEventListener('pantry-firestore-sync', (e) => {
+    if (!isFirestorePantryEnabled()) {
+      clearPantryState();
+      refreshAll();
+      return;
+    }
+    const items = Array.isArray(e.detail?.items) ? e.detail.items : [];
+    PantryRepository.replaceAll(items);
+    refreshAll();
   });
 }
+
+window.clearPantryState = clearPantryState;
 
 if (window.__firebaseBootstrapPromise) {
   window.__firebaseBootstrapPromise.finally(startApp);

@@ -36,6 +36,11 @@ service cloud.firestore {
       allow update: if isOwner(uid) && quotaUnchanged();
       allow delete: if false;
 
+      // ── ingredients/{ingredientId} (보유 재료) ──
+      match /ingredients/{ingredientId} {
+        allow read, write: if isOwner(uid);
+      }
+
       // ── fridges/{fridgeId} ──
       match /fridges/{fridgeId} {
         allow read, write: if isOwner(uid);

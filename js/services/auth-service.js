@@ -48,24 +48,26 @@ export const AuthService = {
       return () => {};
     }
 
-    if (!redirectChecked) {
-      redirectChecked = true;
-      try {
-        console.log('[AuthService] getRedirectResult checking…');
-        const redirectResult = await getRedirectResult(auth);
-        if (redirectResult?.user) {
-          console.log('[AuthService] Redirect login success:', redirectResult.user.email);
-        }
-      } catch (err) {
-        const formatted = logAuthError('getRedirectResult failed', err);
-        window.dispatchEvent(new CustomEvent('auth-error', { detail: formatted }));
-      }
-    }
-
-    return onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log('[AuthService] auth state changed:', user ? user.email || user.uid : 'signed out');
       notifyListeners(user);
     });
+
+    if (!redirectChecked) {
+      redirectChecked = true;
+      getRedirectResult(auth)
+        .then((redirectResult) => {
+          if (redirectResult?.user) {
+            console.log('[AuthService] Redirect login success:', redirectResult.user.email);
+          }
+        })
+        .catch((err) => {
+          const formatted = logAuthError('getRedirectResult failed', err);
+          window.dispatchEvent(new CustomEvent('auth-error', { detail: formatted }));
+        });
+    }
+
+    return unsubscribe;
   },
 
   getCurrentUser() {

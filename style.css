@@ -11,11 +11,13 @@
   --color-bg: #ffffff;
   --color-surface: #f8f9fa;
   --color-border: #e9ecef;
-  --color-text: #212529;
-  --color-text-muted: #6c757d;
+  --color-text: #2b2b2b;
+  --color-text-muted: #777777;
   --color-primary: #ff6b35;
   --color-primary-light: #fff4ef;
   --color-primary-dark: #e55a2b;
+  --color-auth-bg: #fff8f0;
+  --color-auth-bg-end: #fff3e6;
   --color-success: #28a745;
   --color-success-light: #e8f5e9;
   --color-warning: #ffc107;
@@ -23,6 +25,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 999px;
   --font: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
   --max-width: 480px;
@@ -42,6 +45,264 @@ body {
   min-height: 100dvh;
   overflow-x: hidden;
   max-width: 100vw;
+}
+
+body.body-auth {
+  background: linear-gradient(180deg, var(--color-auth-bg) 0%, var(--color-auth-bg-end) 100%);
+}
+
+body.body-app {
+  background: var(--color-bg);
+}
+
+/* ===== Auth Gate (로그인 전체 화면) ===== */
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1.5rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  background: linear-gradient(180deg, var(--color-auth-bg) 0%, var(--color-auth-bg-end) 100%);
+  transition: opacity 0.32s ease, visibility 0.32s ease;
+}
+
+.auth-gate--hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.auth-gate__content {
+  width: 100%;
+  max-width: 22.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
+}
+
+.auth-gate__brand {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.auth-gate__logo {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(255, 107, 53, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+}
+
+.auth-gate__logo-icon {
+  font-size: 2.25rem;
+  line-height: 1;
+}
+
+.auth-gate__title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.auth-gate__subtitle {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.45;
+  max-width: 18rem;
+}
+
+.auth-gate__helper {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  max-width: 19rem;
+  margin-top: 0.125rem;
+}
+
+.auth-gate__card {
+  width: 100%;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12px 40px rgba(43, 43, 43, 0.08);
+  padding: 1.75rem 1.5rem;
+}
+
+.auth-gate__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.auth-gate__panel--login {
+  gap: 0.875rem;
+}
+
+.auth-gate__spinner {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 3px solid #f0e6dc;
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: auth-gate-spin 0.75s linear infinite;
+}
+
+.auth-gate__google-spinner {
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid #e8e8e8;
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: auth-gate-spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes auth-gate-spin {
+  to { transform: rotate(360deg); }
+}
+
+.auth-gate__status {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.auth-gate__google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: var(--color-text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 0.2s, box-shadow 0.2s, border-color 0.2s, opacity 0.2s;
+}
+
+.auth-gate__google-btn:hover:not(:disabled) {
+  background: #fafafa;
+  border-color: #d0d0d0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.auth-gate__google-btn:active:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.auth-gate__google-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.auth-gate__google-btn--loading {
+  pointer-events: none;
+}
+
+.auth-gate__google-btn--loading .auth-gate__google-icon {
+  display: none;
+}
+
+.auth-gate__google-btn--loading .auth-gate__google-spinner {
+  display: block;
+}
+
+.auth-gate__google-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.auth-gate__google-label {
+  flex: 1;
+  text-align: center;
+  padding-right: 1.25rem;
+}
+
+.auth-gate__google-btn--loading .auth-gate__google-label {
+  padding-right: 0;
+}
+
+.auth-gate__error {
+  width: 100%;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #b42318;
+  text-align: center;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: var(--radius-md);
+}
+
+.auth-gate__error--domain {
+  color: #7a2e0e;
+  background: #fff4ef;
+  border-color: #ffbb96;
+}
+
+.app-shell--visible {
+  animation: app-shell-enter 0.35s ease forwards;
+}
+
+@keyframes app-shell-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-data-loading {
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: rgba(43, 43, 43, 0.88);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  max-width: calc(100vw - 2rem);
+}
+
+.app-data-loading__spinner {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: auth-gate-spin 0.75s linear infinite;
+  flex-shrink: 0;
 }
 
 img {
@@ -146,35 +407,6 @@ textarea {
 
 .auth-bar__remaining--exhausted {
   color: #d64545;
-}
-
-.auth-bar__google-btn {
-  white-space: nowrap;
-}
-
-.auth-bar__hint {
-  margin: 0.5rem 0 0;
-  font-size: 0.6875rem;
-  line-height: 1.4;
-  color: var(--color-text-muted);
-}
-
-.auth-error {
-  margin: 0.5rem 0 0;
-  padding: 0.5rem 0.625rem;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: #b42318;
-  background: #fef3f2;
-  border: 1px solid #fecdca;
-  border-radius: var(--radius-md, 8px);
-  white-space: pre-wrap;
-}
-
-.auth-error--domain {
-  color: #7a2e0e;
-  background: #fff4ef;
-  border-color: #ffbb96;
 }
 
 .header__brand {
