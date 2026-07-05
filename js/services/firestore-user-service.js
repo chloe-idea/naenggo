@@ -7,12 +7,11 @@ import {
   setDoc,
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
-import { FREE_ANALYSIS_LIMIT, getFirebaseDb } from '../firebase.js';
+import { FREE_ANALYSIS_LIMIT, db } from '../firebase.js';
 
 const USERS_COLLECTION = 'users';
 
 function userDocRef(uid) {
-  const db = getFirebaseDb();
   if (!db || !uid) return null;
   return doc(db, USERS_COLLECTION, uid);
 }

@@ -6,11 +6,12 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  signOut,
+  signOut as firebaseSignOut,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import {
-  getFirebaseAuth,
-  getGoogleProvider,
+  auth,
+  googleProvider,
+  assertAuthReady,
   isFirebaseConfigured,
 } from '../firebase.js';
 import { formatAuthError, logAuthError } from './auth-errors.js';
@@ -42,14 +43,7 @@ export const AuthService = {
     if (typeof onChange === 'function') listeners.add(onChange);
 
     if (!isFirebaseConfigured()) {
-      console.error('[AuthService] firebase-config.js가 설정되지 않았습니다.');
-      notifyListeners(null);
-      return () => {};
-    }
-
-    const auth = getFirebaseAuth();
-    if (!auth) {
-      console.error('[AuthService] getFirebaseAuth() returned null');
+      console.error('[AuthService] Firebase auth is not ready (config or init failed).');
       notifyListeners(null);
       return () => {};
     }
@@ -75,7 +69,7 @@ export const AuthService = {
   },
 
   getCurrentUser() {
-    return currentUser || getFirebaseAuth()?.currentUser || null;
+    return currentUser || auth?.currentUser || null;
   },
 
   isLoggedIn() {
@@ -92,30 +86,17 @@ export const AuthService = {
     try {
       return await user.getIdToken(forceRefresh);
     } catch (err) {
-      console.error('[AuthService] getIdToken failed:', err);
+      console.error('[AuthService] getIdToken failed:', err?.code, err?.message, err);
       return null;
     }
   },
 
   async signInWithGoogle() {
-    if (!isFirebaseConfigured()) {
-      const err = new Error('Firebase 설정(firebase-config.js)이 완료되지 않았습니다.');
-      err.code = 'auth/config-not-set';
-      throw err;
-    }
-
-    const auth = getFirebaseAuth();
-    if (!auth) {
-      const err = new Error('Firebase Auth 초기화에 실패했습니다.');
-      err.code = 'auth/not-initialized';
-      throw err;
-    }
-
-    const provider = getGoogleProvider();
+    const { auth: authInstance, googleProvider: provider } = assertAuthReady();
     console.log('[AuthService] signInWithPopup start');
 
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(authInstance, provider);
       console.log('[AuthService] signInWithPopup success:', result.user?.email);
       return result.user;
     } catch (err) {
@@ -123,7 +104,7 @@ export const AuthService = {
 
       if (shouldUseRedirectFallback(err)) {
         console.log('[AuthService] signInWithRedirect fallback start');
-        await signInWithRedirect(auth, provider);
+        await signInWithRedirect(authInstance, provider);
         return null;
       }
 
@@ -136,10 +117,9 @@ export const AuthService = {
   },
 
   async signOut() {
-    const auth = getFirebaseAuth();
     if (!auth) return;
     console.log('[AuthService] signOut');
-    await signOut(auth);
+    await firebaseSignOut(auth);
   },
 
   subscribe(fn) {

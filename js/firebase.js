@@ -1,5 +1,6 @@
 /**
- * Firebase 앱 초기화 (Auth + Firestore) — 싱글톤, 중복 initializeApp 방지
+ * Firebase 앱 초기화 (Auth + Firestore)
+ * auth, db, googleProvider를 export — getter/전역 변수 의존 없이 import해서 사용
  */
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
@@ -8,58 +9,59 @@ import { firebaseConfig } from './firebase-config.js';
 
 export const FREE_ANALYSIS_LIMIT = 5;
 
-let app = null;
-let auth = null;
-let db = null;
-let googleProvider = null;
-
 function isConfigReady() {
   return Boolean(
     firebaseConfig?.apiKey
     && firebaseConfig.apiKey !== 'YOUR_API_KEY'
     && firebaseConfig?.projectId
-    && firebaseConfig.projectId !== 'YOUR_PROJECT_ID'
+    && firebaseConfig.projectId !== 'YOUR_PROJECT_ID',
   );
 }
 
-export function getFirebaseApp() {
-  if (!isConfigReady()) {
-    console.warn('[firebase] config not ready — firebase-config.js 확인');
-    return null;
-  }
-  if (app) return app;
-  if (getApps().length > 0) {
-    app = getApp();
-    console.log('[firebase] reusing existing app instance');
-    return app;
-  }
-  app = initializeApp(firebaseConfig);
-  console.log('[firebase] initializeApp OK, project:', firebaseConfig.projectId);
-  return app;
+export function isFirebaseConfigured() {
+  return isConfigReady() && Boolean(auth);
 }
 
-export function getFirebaseAuth() {
-  const firebaseApp = getFirebaseApp();
-  if (!firebaseApp) return null;
-  if (!auth) auth = getAuth(firebaseApp);
-  return auth;
-}
+let app = null;
+export let auth = null;
+export let db = null;
+export let googleProvider = null;
 
-export function getFirebaseDb() {
-  const firebaseApp = getFirebaseApp();
-  if (!firebaseApp) return null;
-  if (!db) db = getFirestore(firebaseApp);
-  return db;
-}
-
-export function getGoogleProvider() {
-  if (!googleProvider) {
+if (isConfigReady()) {
+  try {
+    app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: 'select_account' });
+    console.log('[firebase] initializeApp OK, project:', firebaseConfig.projectId);
+  } catch (err) {
+    console.error('[firebase] initializeApp failed:', err?.code || err?.name, err?.message, err);
+    app = null;
+    auth = null;
+    db = null;
+    googleProvider = null;
   }
-  return googleProvider;
+} else {
+  console.warn('[firebase] config not ready — js/firebase-config.js 확인');
 }
 
-export function isFirebaseConfigured() {
-  return isConfigReady();
+export function assertAuthReady() {
+  if (!isConfigReady()) {
+    const err = new Error('Firebase 설정(firebase-config.js)이 완료되지 않았습니다.');
+    err.code = 'auth/config-not-set';
+    throw err;
+  }
+  if (!auth || !googleProvider) {
+    const err = new Error('Firebase 인증 모듈을 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
+    err.code = 'auth/not-initialized';
+    throw err;
+  }
+  return { auth, googleProvider };
 }
+
+/** @deprecated — import { auth } from './firebase.js' 사용 */
+export function getFirebaseApp() { return app; }
+export function getFirebaseAuth() { return auth; }
+export function getFirebaseDb() { return db; }
+export function getGoogleProvider() { return googleProvider; }

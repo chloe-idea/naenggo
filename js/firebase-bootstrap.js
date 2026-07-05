@@ -1,14 +1,16 @@
 /**
- * Firebase 부트스트랩 — Auth UI + 전역 서비스 노출
- * 클릭 이벤트는 js/auth-ui-bridge.js (non-module)에서 처리
+ * Firebase 부트스트랩 — Auth UI + 앱 연동
+ * Google 로그인 버튼은 Firebase auth 준비 후에만 활성화
  */
 import { AuthService } from './services/auth-service.js';
 import { FirestoreUserService } from './services/firestore-user-service.js';
 import { AnalysisQuotaService } from './services/analysis-quota-service.js';
 import { formatAuthError } from './services/auth-errors.js';
-import { isFirebaseConfigured } from './firebase.js';
+import { auth, isFirebaseConfigured } from './firebase.js';
 
 const DEFAULT_GOOGLE_LABEL = 'Google 로그인';
+let authUiBound = false;
+let authReady = false;
 
 function $(id) {
   return document.getElementById(id);
@@ -19,11 +21,7 @@ function showAuthError(formatted) {
   if (!el || !formatted) return;
   el.hidden = false;
   el.textContent = [formatted.message, formatted.hint].filter(Boolean).join(' ');
-  if (formatted.code === 'auth/unauthorized-domain') {
-    el.classList.add('auth-error--domain');
-  } else {
-    el.classList.remove('auth-error--domain');
-  }
+  el.classList.toggle('auth-error--domain', formatted.code === 'auth/unauthorized-domain');
 }
 
 function clearAuthError() {
@@ -37,9 +35,18 @@ function clearAuthError() {
 function setGoogleButtonLoading(loading) {
   const btn = $('auth-google-btn');
   if (!btn) return;
-  btn.disabled = loading;
-  btn.textContent = loading ? '로그인 중…' : DEFAULT_GOOGLE_LABEL;
   btn.classList.toggle('btn--loading', loading);
+  btn.textContent = loading ? '로그인 중…' : DEFAULT_GOOGLE_LABEL;
+  btn.disabled = loading || !authReady || !isFirebaseConfigured();
+}
+
+function setGoogleButtonEnabled(enabled) {
+  authReady = enabled;
+  const btn = $('auth-google-btn');
+  if (!btn) return;
+  const loading = btn.classList.contains('btn--loading');
+  btn.disabled = !enabled || loading || !isFirebaseConfigured();
+  btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
 }
 
 function renderAuthUi(user) {
@@ -60,7 +67,7 @@ function renderAuthUi(user) {
     guestEl.hidden = false;
     userEl.hidden = true;
     if (guestHint) guestHint.hidden = false;
-    if (googleBtn) googleBtn.disabled = false;
+    if (googleBtn) googleBtn.disabled = true;
     showAuthError({
       message: 'Firebase 설정(firebase-config.js)이 필요합니다.',
       hint: 'js/firebase-config.js에 Console에서 받은 firebaseConfig 값을 입력해 주세요.',
@@ -94,8 +101,8 @@ function renderAuthUi(user) {
     userEl.hidden = true;
     if (guestHint) guestHint.hidden = false;
     if (googleBtn) {
-      googleBtn.disabled = false;
       googleBtn.textContent = DEFAULT_GOOGLE_LABEL;
+      googleBtn.disabled = !authReady;
     }
   }
 }
@@ -119,7 +126,7 @@ async function refreshHeaderQuota() {
     }
     window.dispatchEvent(new CustomEvent('analysis-quota-updated', { detail: usage }));
   } catch (err) {
-    console.error('[firebase-bootstrap] quota refresh failed:', err);
+    console.error('[firebase-bootstrap] quota refresh failed:', err?.code, err?.message, err);
     remainingEl.textContent = '무료 분석 —';
   }
 }
@@ -132,7 +139,7 @@ async function handleAuthChange(user) {
     try {
       await FirestoreUserService.ensureUserDocument(user);
     } catch (err) {
-      console.error('[firebase-bootstrap] ensureUserDocument failed:', err);
+      console.error('[firebase-bootstrap] ensureUserDocument failed:', err?.code, err?.message, err);
     }
   }
 
@@ -140,7 +147,21 @@ async function handleAuthChange(user) {
   window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
 }
 
-async function signInWithGoogleFlow() {
+async function signInWithGoogleFlow(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  if (!authReady || !auth) {
+    showAuthError({
+      message: 'Firebase 인증 모듈을 불러오는 중입니다.',
+      hint: '잠시 후 다시 시도해 주세요.',
+      code: 'auth/not-initialized',
+    });
+    return;
+  }
+
   console.log('[firebase-bootstrap] signInWithGoogleFlow');
   clearAuthError();
   setGoogleButtonLoading(true);
@@ -154,40 +175,71 @@ async function signInWithGoogleFlow() {
       console.log('[firebase-bootstrap] redirect flow — page will reload after Google sign-in');
     }
   } catch (err) {
-    console.error('[firebase-bootstrap] Google login failed:', err);
+    console.error('[firebase-bootstrap] Google login failed:', err?.code, err?.message, err);
     const formatted = err.authError || formatAuthError(err);
     showAuthError(formatted);
     if (formatted.code === 'auth/unauthorized-domain') {
       alert(`${formatted.message}\n\n${formatted.hint}`);
     }
-    throw err;
   } finally {
     if (!AuthService.isLoggedIn()) setGoogleButtonLoading(false);
   }
 }
 
-async function signOutFlow() {
+async function signOutFlow(event) {
+  if (event) event.preventDefault();
+  if (!authReady || !auth) return;
+
   console.log('[firebase-bootstrap] signOutFlow');
-  await AuthService.signOut();
-  clearAuthError();
-  await handleAuthChange(null);
+  try {
+    await AuthService.signOut();
+    clearAuthError();
+    await handleAuthChange(null);
+  } catch (err) {
+    console.error('[firebase-bootstrap] signOut failed:', err?.code, err?.message, err);
+    showAuthError(formatAuthError(err));
+  }
+}
+
+function bindAuthUi() {
+  if (authUiBound) return;
+  authUiBound = true;
+
+  const googleBtn = $('auth-google-btn');
+  const logoutBtn = $('auth-logout-btn');
+
+  if (!googleBtn) {
+    console.error('[firebase-bootstrap] #auth-google-btn not found');
+    return;
+  }
+
+  googleBtn.disabled = true;
+  googleBtn.addEventListener('click', signInWithGoogleFlow);
+  console.log('[firebase-bootstrap] Google login handler attached');
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', signOutFlow);
+  }
 }
 
 async function bootstrap() {
   console.log('[firebase-bootstrap] start', {
     configured: isFirebaseConfigured(),
+    authReady: Boolean(auth),
     hostname: location.hostname,
   });
 
-  window.__authSignInGoogle = signInWithGoogleFlow;
-  window.__authSignOut = signOutFlow;
-  window.__authHandleUser = handleAuthChange;
+  bindAuthUi();
+  renderAuthUi(null);
 
   try {
     await AuthService.init(handleAuthChange);
+    setGoogleButtonEnabled(isFirebaseConfigured());
   } catch (err) {
-    console.error('[firebase-bootstrap] AuthService.init failed:', err);
+    console.error('[firebase-bootstrap] AuthService.init failed:', err?.code, err?.message, err);
     showAuthError(formatAuthError(err));
+    setGoogleButtonEnabled(false);
+    throw err;
   }
 
   window.FirebaseServices = {
@@ -210,7 +262,7 @@ window.addEventListener('auth-error', (e) => {
 window.addEventListener('error', (event) => {
   const file = event.filename || '';
   if (file.includes('firebase') || file.includes('auth')) {
-    console.error('[firebase-bootstrap] script error:', event.message, file);
+    console.error('[firebase-bootstrap] script error:', event.message, file, event.error);
     showAuthError({
       message: `Firebase 스크립트 오류: ${event.message}`,
       hint: 'F12 → Console 탭에서 자세한 오류를 확인해 주세요.',
@@ -219,7 +271,11 @@ window.addEventListener('error', (event) => {
   }
 });
 
-window.__firebaseBootstrapPromise = bootstrap().catch((err) => {
-  console.error('[firebase-bootstrap] fatal error:', err);
-  showAuthError(formatAuthError(err));
-});
+bootstrap()
+  .then(() => {
+    window.__firebaseBootstrapComplete?.resolve(true);
+  })
+  .catch((err) => {
+    console.error('[firebase-bootstrap] fatal error:', err?.code, err?.message, err);
+    window.__firebaseBootstrapComplete?.reject(err);
+  });

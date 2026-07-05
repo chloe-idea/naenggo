@@ -2531,3 +2531,198 @@ textarea {
     height: 14rem;
   }
 }
+
+/* ===== Meal Planner & Grocery List ===== */
+.planner-toolbar__select {
+  height: 1.875rem;
+  padding: 0.1875rem 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.planner-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+}
+
+.planner-grid--month {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.planner-day {
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.planner-day--today {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.12);
+}
+
+.planner-day__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.planner-day__slots {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.planner-slot {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.planner-slot__label {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.planner-slot__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.4375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.8125rem;
+  background: var(--color-bg);
+}
+
+.budget-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.budget-box__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.budget-box__input {
+  width: 6.5rem;
+  padding: 0.4375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.budget-box__summary {
+  flex: 1 1 100%;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.budget-box__summary--over {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.grocery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.grocery-section__title {
+  margin: 0 0 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.grocery-section__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.grocery-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.grocery-item--checked {
+  opacity: 0.45;
+  order: 1;
+}
+
+.grocery-item__check {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
+}
+
+.grocery-item__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.grocery-item__price {
+  width: 4.5rem;
+  padding: 0.3125rem 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: right;
+}
+
+.grocery-list--mart .grocery-item {
+  padding: 0.875rem 1rem;
+  border-width: 1.5px;
+}
+
+.grocery-list--mart .grocery-item__check {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.grocery-list--mart .grocery-item__name {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.grocery-list--mart .grocery-section__title {
+  font-size: 1rem;
+}
+
+@media (min-width: 481px) {
+  .planner-grid:not(.planner-grid--month) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

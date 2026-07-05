@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=30">
 </head>
 <body>
   <div class="app">
@@ -30,7 +30,7 @@
           </div>
         </div>
         <div id="auth-guest" class="auth-bar auth-bar--guest">
-          <button type="button" id="auth-google-btn" class="btn btn--outline btn--sm auth-bar__google-btn">
+          <button type="button" id="auth-google-btn" class="btn btn--outline btn--sm auth-bar__google-btn" disabled aria-disabled="true">
             Google 로그인
           </button>
         </div>
@@ -154,6 +154,42 @@
           </div>
         </section>
       </div>
+      <!-- 식단 플래너 -->
+      <div id="view-planner" class="view" hidden>
+        <section class="section">
+          <div class="section__header">
+            <h2 class="section__title">식단 플래너</h2>
+            <div class="section__actions">
+              <select id="planner-range" class="planner-toolbar__select" aria-label="식단 보기">
+                <option value="week">주간</option>
+                <option value="month">월간</option>
+              </select>
+              <button type="button" id="planner-auto-btn" class="btn btn--ghost btn--sm">이번 주 식단 자동 생성</button>
+            </div>
+          </div>
+          <p class="hint">아침·점심·저녁·간식에 레시피를 고르거나 직접 메뉴명을 입력하세요.</p>
+          <div id="planner-grid" class="planner-grid"></div>
+        </section>
+
+        <section class="section">
+          <div class="section__header">
+            <h2 class="section__title">자동 장보기 리스트</h2>
+            <div class="section__actions">
+              <button type="button" id="mart-mode-toggle" class="btn btn--ghost btn--sm">마트 모드</button>
+              <button type="button" id="grocery-complete-btn" class="btn btn--primary btn--sm">구매 완료</button>
+            </div>
+          </div>
+          <div class="budget-box">
+            <label for="grocery-budget" class="budget-box__label">이번 주 예산</label>
+            <input type="number" id="grocery-budget" class="budget-box__input" min="0" step="0.01" inputmode="decimal" placeholder="예: 80">
+            <span id="grocery-budget-summary" class="budget-box__summary"></span>
+          </div>
+          <div id="grocery-list" class="grocery-list"></div>
+          <div id="grocery-empty" class="empty-state empty-state--compact" hidden>
+            <p class="empty-state__text">식단에 레시피를 추가하면 부족한 재료가 자동으로 표시됩니다</p>
+          </div>
+        </section>
+      </div>
       <!-- 식사 달력 -->
       <div id="view-calendar" class="view" hidden>
         <section class="section">
@@ -212,6 +248,10 @@
       <button type="button" class="tab-bar__item" data-view="community">
         <span class="tab-bar__icon" aria-hidden="true"></span>
         <span class="tab-bar__label">커뮤니티</span>
+      </button>
+      <button type="button" class="tab-bar__item" data-view="planner">
+        <span class="tab-bar__icon" aria-hidden="true"></span>
+        <span class="tab-bar__label">식단</span>
       </button>
       <button type="button" class="tab-bar__item" data-view="calendar">
         <span class="tab-bar__icon" aria-hidden="true"></span>
@@ -628,13 +668,27 @@
       }
     });
   </script>
-  <script src="js/auth-ui-bridge.js?v=28"></script>
-  <script type="module" src="js/firebase-bootstrap.js?v=28"></script>
-  <script src="app-config.js?v=28"></script>
-  <script src="nav-icons.js?v=28"></script>
-  <script src="recipe-placeholders.js?v=28"></script>
-  <script src="recipe-images.js?v=28"></script>
-  <script src="recipes-builtin.js?v=28"></script>
-  <script src="script.js?v=28" defer></script>
+  <script>
+    (function initFirebaseBootstrapPromise() {
+      if (window.__firebaseBootstrapPromise) return;
+      var resolveReady;
+      var rejectReady;
+      window.__firebaseBootstrapPromise = new Promise(function (resolve, reject) {
+        resolveReady = resolve;
+        rejectReady = reject;
+      });
+      window.__firebaseBootstrapComplete = {
+        resolve: function (value) { resolveReady(value); },
+        reject: function (error) { rejectReady(error); },
+      };
+    })();
+  </script>
+  <script type="module" src="js/firebase-bootstrap.js?v=30"></script>
+  <script src="app-config.js?v=30"></script>
+  <script src="nav-icons.js?v=30"></script>
+  <script src="recipe-placeholders.js?v=30"></script>
+  <script src="recipe-images.js?v=30"></script>
+  <script src="recipes-builtin.js?v=30"></script>
+  <script src="script.js?v=30" defer></script>
 </body>
 </html>

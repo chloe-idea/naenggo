@@ -15,6 +15,11 @@ window.NAV_ICONS = {
     <path d="M4 12h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
     <path d="M12 4c2.2 2.4 2.2 11.6 0 16M12 4c-2.2 2.4-2.2 11.6 0 16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
   </svg>`,
+  planner: `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="4" y="5" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M4 9h16M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <path d="M8 13h2M8 16h2M14 13h2M14 16h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  </svg>`,
   calendar: `<svg class="nav-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <rect x="4" y="5" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.6"/>
     <path d="M4 9h16M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
@@ -34,6 +39,7 @@ function initNavIcons() {
     main: NAV_ICONS.home,
     'my-recipes': NAV_ICONS.recipes,
     community: NAV_ICONS.community,
+    planner: NAV_ICONS.planner,
     calendar: NAV_ICONS.calendar,
   };
   document.querySelectorAll('.tab-bar__item[data-view]').forEach((btn) => {

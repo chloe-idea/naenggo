@@ -26,6 +26,8 @@ const CONFIG = {
     MEALS: 'naengjanggo_v2_meals',
     SHOPPING: 'naengjanggo_v2_shopping',
     CURRENCY: 'naengjanggo_v2_currency',
+    MEAL_PLAN: 'naengjanggo_v2_meal_plan',
+    GROCERY: 'naengjanggo_v2_grocery',
     CLIENT_USER_ID: 'naengjanggo_v2_client_user_id',
     // v1 마이그레이션
     LEGACY_PANTRY: 'naengjanggo_pantry_ingredients',
@@ -68,6 +70,7 @@ const VIEW_TITLES = {
   'my-recipes': '나만의 레시피를 관리하세요',
   community: '공개 레시피를 둘러보세요',
   pantry: '보유 재료를 상세 관리하세요',
+  planner: '일주일 식단과 장보기 리스트를 준비하세요',
   calendar: '해먹은 음식을 기록하고 확인하세요',
 };
 
@@ -76,6 +79,13 @@ const MEAL_TYPES = [
   { id: 'eat-out', label: '외식', emoji: '🍽️' },
   { id: 'delivery', label: '배달', emoji: '🛵' },
   { id: 'snack', label: '간식', emoji: '🍪' },
+];
+
+const PLANNER_SLOTS = [
+  { id: 'breakfast', label: '아침' },
+  { id: 'lunch', label: '점심' },
+  { id: 'dinner', label: '저녁' },
+  { id: 'snack', label: '간식' },
 ];
 
 function normalizeMealType(type) {
@@ -1433,6 +1443,150 @@ const ShoppingRecordRepository = {
   },
 };
 
+const MealPlanRepository = {
+  _plans: {},
+  load() {
+    this._plans = StorageAdapter.get(CONFIG.STORAGE.MEAL_PLAN, {});
+    return this._plans;
+  },
+  save() { StorageAdapter.set(CONFIG.STORAGE.MEAL_PLAN, this._plans); },
+  get(date, slot) {
+    return this._plans?.[date]?.[slot] || { recipeId: '', name: '' };
+  },
+  set(date, slot, data) {
+    if (!this._plans[date]) this._plans[date] = {};
+    this._plans[date][slot] = {
+      recipeId: data.recipeId || '',
+      name: data.name || '',
+    };
+    if (!this._plans[date][slot].recipeId && !this._plans[date][slot].name) {
+      delete this._plans[date][slot];
+    }
+    if (!Object.keys(this._plans[date]).length) delete this._plans[date];
+    this.save();
+  },
+  getRange(startDate, days) {
+    return Array.from({ length: days }, (_, i) => {
+      const d = new Date(`${startDate}T00:00:00`);
+      d.setDate(d.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+  },
+};
+
+const GroceryRepository = {
+  _state: { budget: '', items: {} },
+  load() {
+    this._state = StorageAdapter.get(CONFIG.STORAGE.GROCERY, { budget: '', items: {} });
+    if (!this._state.items) this._state.items = {};
+    return this._state;
+  },
+  save() { StorageAdapter.set(CONFIG.STORAGE.GROCERY, this._state); },
+  getMeta(key) { return this._state.items[key] || { checked: false, price: '' }; },
+  setChecked(key, checked) {
+    this._state.items[key] = { ...this.getMeta(key), checked: Boolean(checked) };
+    this.save();
+  },
+  setPrice(key, price) {
+    this._state.items[key] = { ...this.getMeta(key), price };
+    this.save();
+  },
+  setBudget(budget) {
+    this._state.budget = budget;
+    this.save();
+  },
+  getBudget() { return this._state.budget || ''; },
+};
+
+const GROCERY_CATEGORIES = [
+  { id: 'vegetable', label: '🥬 채소', test: (n) => /양파|대파|쪽파|마늘|생강|당근|감자|고구마|호박|애호박|시금치|상추|깻잎|배추|양배추|브로콜리|파프리카|오이|가지|무|청경채|숙주|콩나물|미나리|부추|버섯|표고|새송이|느타리|냉이|순두부|두부|김치|나물|피망|샐러드/.test(n) },
+  { id: 'fruit', label: '🍎 과일', test: (n) => /사과|배|바나나|딸기|포도|레몬|라임|오렌지|키위|블루베리|복숭아|수박|멜론|토마토|아보카도|망고|체리|자몽/.test(n) },
+  { id: 'meat', label: '🥩 고기/해산물', test: (n) => /소고기|돼지|닭|삼겹|목살|베이컨|햄|참치|고등어|연어|새우|오징어|조개|명태|갈비|안심|등심|치킨|오리|육|해물|조기|꽃게|전복|문어|삼치/.test(n) },
+  { id: 'dairy', label: '🥛 유제품', test: (n) => /우유|치즈|버터|요거트|생크림|모짜|크림치즈|계란|달걀|두유/.test(n) },
+  { id: 'grain', label: '🌾 곡류', test: (n) => /쌀|밥|면|국수|라면|파스타|스파게티|빵|떡|밀가루|중력분|옥수수|시리얼|오트|현미|잡곡/.test(n) },
+  { id: 'sauce', label: '🧂 소스/양념', test: (n) => /간장|된장|고추장|식초|설탕|소금|후추|참기름|들기름|올리브|케첩|마요|굴소스|다시다|미원|고춧가루|올리고|액젓|청|맛술|미림|와사비|머스타드|스테비아|알룰로스|물엿|올리브유/.test(n) },
+  { id: 'frozen', label: '🧊 냉동', test: (n) => /냉동|얼린|아이스/.test(n) },
+  { id: 'other', label: '📦 기타', test: () => true },
+];
+
+const GroceryListService = {
+  categorize(name) {
+    const n = String(name || '');
+    return GROCERY_CATEGORIES.find((c) => c.id === 'other' || c.test(n)) || GROCERY_CATEGORIES[GROCERY_CATEGORIES.length - 1];
+  },
+  itemKey(name) {
+    return MatchService.normalize(parseRecipeIngredient(name).name || name);
+  },
+  getPlannerDates(range) {
+    const now = new Date();
+    if (range === 'month') {
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const days = new Date(year, month + 1, 0).getDate();
+      return Array.from({ length: days }, (_, i) => {
+        const d = new Date(year, month, i + 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      });
+    }
+    const start = new Date(now);
+    const day = start.getDay();
+    start.setDate(start.getDate() - (day === 0 ? 6 : day - 1));
+    return MealPlanRepository.getRange(
+      `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`,
+      7,
+    );
+  },
+  resolveEntry(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return { recipeId: '', name: '' };
+    const recipe = RecipeRepository.getRecommendableRecipes().find(
+      (r) => MatchService.normalize(r.name) === MatchService.normalize(trimmed),
+    );
+    if (recipe) return { recipeId: recipe.id, name: recipe.name };
+    return { recipeId: '', name: trimmed };
+  },
+  computeMissing(planDates) {
+    const pantryNames = RecommendationService.getPantryNames();
+    const map = new Map();
+    for (const date of planDates) {
+      for (const slot of PLANNER_SLOTS) {
+        const entry = MealPlanRepository.get(date, slot.id);
+        if (!entry.recipeId) continue;
+        const recipe = RecipeRepository.getById(entry.recipeId);
+        if (!recipe) continue;
+        const { missing } = MatchService.analyze(pantryNames, recipe.ingredients);
+        for (const raw of missing) {
+          const { name } = parseRecipeIngredient(raw);
+          const display = name || raw;
+          const key = this.itemKey(display);
+          const prev = map.get(key) || { key, name: display, count: 0 };
+          prev.count += 1;
+          map.set(key, prev);
+        }
+      }
+    }
+    const grouped = {};
+    for (const cat of GROCERY_CATEGORIES) grouped[cat.id] = [];
+    for (const item of map.values()) {
+      const cat = this.categorize(item.name);
+      grouped[cat.id].push(item);
+    }
+    for (const cat of GROCERY_CATEGORIES) {
+      grouped[cat.id].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    }
+    return grouped;
+  },
+  estimateTotal(grouped) {
+    let total = 0;
+    for (const cat of GROCERY_CATEGORIES) {
+      for (const item of grouped[cat.id] || []) {
+        total += Number(GroceryRepository.getMeta(item.key).price) || 0;
+      }
+    }
+    return total;
+  },
+};
+
 const PantryIngredientService = {
   addFromNames(names, options = {}) {
     const { recipeId = null, recipeName = null, skipDuplicates = true } = options;
@@ -1766,6 +1920,8 @@ const state = {
   videoLinkMeta: null,
   videoExtractNeedsFallback: false,
   aiUsageRemaining: null,
+  plannerRange: 'week',
+  martMode: false,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -1774,8 +1930,12 @@ const dom = {
   toast: $('#toast'),
   views: {
     main: $('#view-main'), 'my-recipes': $('#view-my-recipes'), community: $('#view-community'),
-    pantry: $('#view-pantry'), calendar: $('#view-calendar'),
+    pantry: $('#view-pantry'), planner: $('#view-planner'), calendar: $('#view-calendar'),
   },
+  plannerRange: $('#planner-range'), plannerAutoBtn: $('#planner-auto-btn'), plannerGrid: $('#planner-grid'),
+  martModeToggle: $('#mart-mode-toggle'), groceryCompleteBtn: $('#grocery-complete-btn'),
+  groceryBudget: $('#grocery-budget'), groceryBudgetSummary: $('#grocery-budget-summary'),
+  groceryList: $('#grocery-list'), groceryEmpty: $('#grocery-empty'),
   tabItems: document.querySelectorAll('.tab-bar__item'),
   openPantryManageBtn: $('#open-pantry-manage-btn'),
   quickForm: $('#quick-ingredient-form'), quickInput: $('#quick-ingredient-input'),
@@ -2045,6 +2205,7 @@ function renderCurrentView() {
     case 'my-recipes': renderMyRecipes(); break;
     case 'community': renderCommunity(); break;
     case 'pantry': renderPantryManage(); break;
+    case 'planner': renderPlanner(); break;
     case 'calendar': renderCalendar(); break;
   }
 }
@@ -2773,6 +2934,197 @@ function changeCalendarMonth(delta) {
   renderCalendar();
 }
 
+// ===== Meal Planner =====
+const PLANNER_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function formatPlannerDayLabel(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return `${PLANNER_WEEKDAYS[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function getPlannerRecipeOptionsHTML() {
+  return RecipeRepository.getRecommendableRecipes()
+    .map((r) => `<option value="${esc(r.name)}"></option>`)
+    .join('');
+}
+
+function renderPlanner() {
+  if (!dom.plannerGrid) return;
+  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const isMonth = state.plannerRange === 'month';
+  dom.plannerGrid.classList.toggle('planner-grid--month', isMonth);
+  dom.plannerAutoBtn.hidden = isMonth;
+
+  dom.plannerGrid.innerHTML = dates.map((date) => {
+    const slots = PLANNER_SLOTS.map((slot) => {
+      const entry = MealPlanRepository.get(date, slot.id);
+      const value = entry.name || '';
+      return `
+        <label class="planner-slot">
+          <span class="planner-slot__label">${slot.label}</span>
+          <input type="text" class="planner-slot__input" list="planner-recipe-options"
+            data-date="${esc(date)}" data-slot="${slot.id}" value="${esc(value)}"
+            placeholder="메뉴 또는 레시피명" autocomplete="off">
+        </label>`;
+    }).join('');
+    const todayMark = date === todayStr() ? ' planner-day--today' : '';
+    return `
+      <article class="planner-day${todayMark}">
+        <h3 class="planner-day__title">${formatPlannerDayLabel(date)}</h3>
+        <div class="planner-day__slots">${slots}</div>
+      </article>`;
+  }).join('') + `<datalist id="planner-recipe-options">${getPlannerRecipeOptionsHTML()}</datalist>`;
+
+  dom.plannerGrid.querySelectorAll('.planner-slot__input').forEach((input) => {
+    input.addEventListener('change', () => {
+      const data = GroceryListService.resolveEntry(input.value);
+      MealPlanRepository.set(input.dataset.date, input.dataset.slot, data);
+      if (data.name && data.name !== input.value.trim()) input.value = data.name;
+      renderGroceryList();
+    });
+  });
+
+  if (dom.plannerRange) dom.plannerRange.value = state.plannerRange;
+  if (dom.groceryBudget) dom.groceryBudget.value = GroceryRepository.getBudget();
+  renderGroceryList();
+}
+
+function renderGroceryBudgetSummary(total) {
+  if (!dom.groceryBudgetSummary) return;
+  const budget = Number(GroceryRepository.getBudget()) || 0;
+  if (!budget && !total) {
+    dom.groceryBudgetSummary.textContent = '';
+    return;
+  }
+  if (!budget) {
+    dom.groceryBudgetSummary.textContent = `예상 ${formatMoney(total)}`;
+    return;
+  }
+  const diff = budget - total;
+  const diffLabel = diff >= 0
+    ? `여유 ${formatMoney(diff)}`
+    : `${formatMoney(Math.abs(diff))} 초과`;
+  dom.groceryBudgetSummary.textContent = `예상 ${formatMoney(total)} · ${diffLabel}`;
+  dom.groceryBudgetSummary.classList.toggle('budget-box__summary--over', diff < 0);
+}
+
+function renderGroceryList() {
+  if (!dom.groceryList) return;
+  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const grouped = GroceryListService.computeMissing(dates);
+  const totalItems = GROCERY_CATEGORIES.reduce((n, c) => n + (grouped[c.id]?.length || 0), 0);
+  const totalCost = GroceryListService.estimateTotal(grouped);
+
+  dom.groceryEmpty.hidden = totalItems > 0;
+  dom.groceryList.hidden = totalItems === 0;
+  dom.groceryList.classList.toggle('grocery-list--mart', state.martMode);
+  if (dom.martModeToggle) {
+    dom.martModeToggle.textContent = state.martMode ? '일반 모드' : '마트 모드';
+    dom.martModeToggle.classList.toggle('btn--primary', state.martMode);
+  }
+
+  renderGroceryBudgetSummary(totalCost);
+  if (!totalItems) {
+    dom.groceryList.innerHTML = '';
+    return;
+  }
+
+  const sections = GROCERY_CATEGORIES.filter((cat) => grouped[cat.id]?.length).map((cat) => {
+    const items = [...grouped[cat.id]].sort((a, b) => {
+      const ac = GroceryRepository.getMeta(a.key).checked ? 1 : 0;
+      const bc = GroceryRepository.getMeta(b.key).checked ? 1 : 0;
+      return ac - bc || a.name.localeCompare(b.name, 'ko');
+    });
+    const rows = items.map((item) => {
+      const meta = GroceryRepository.getMeta(item.key);
+      const qty = item.count > 1 ? ` ×${item.count}` : '';
+      const priceField = state.martMode ? '' : `
+        <input type="number" class="grocery-item__price" data-price-key="${esc(item.key)}"
+          min="0" step="0.01" inputmode="decimal" placeholder="금액"
+          value="${meta.price !== '' && meta.price != null ? esc(String(meta.price)) : ''}">`;
+      return `
+        <label class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
+          <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''}>
+          <span class="grocery-item__name">${esc(item.name)}${qty}</span>
+          ${priceField}
+        </label>`;
+    }).join('');
+    return `
+      <section class="grocery-section">
+        <h3 class="grocery-section__title">${cat.label}</h3>
+        <div class="grocery-section__items">${rows}</div>
+      </section>`;
+  }).join('');
+
+  dom.groceryList.innerHTML = sections;
+
+  dom.groceryList.querySelectorAll('.grocery-item__check').forEach((cb) => {
+    cb.onchange = () => {
+      GroceryRepository.setChecked(cb.dataset.checkKey, cb.checked);
+      renderGroceryList();
+    };
+  });
+  dom.groceryList.querySelectorAll('.grocery-item__price').forEach((input) => {
+    input.onchange = () => {
+      GroceryRepository.setPrice(input.dataset.priceKey, input.value);
+      renderGroceryBudgetSummary(GroceryListService.estimateTotal(grouped));
+    };
+  });
+}
+
+function autoGenerateWeeklyPlan() {
+  const dates = GroceryListService.getPlannerDates('week');
+  const recipes = RecipeRepository.getRecommendableRecipes();
+  const usedIds = new Set();
+  const slotPrefs = {
+    breakfast: new Set(['quick']),
+    lunch: new Set(),
+    dinner: new Set(),
+    snack: new Set(['snack']),
+  };
+
+  for (const date of dates) {
+    for (const slot of PLANNER_SLOTS) {
+      let candidates = RecommendationService.recommend(recipes, { activeFilters: slotPrefs[slot.id] });
+      candidates = candidates.filter((c) => !usedIds.has(c.recipe.id));
+      if (!candidates.length) {
+        candidates = RecommendationService.recommend(recipes, { activeFilters: slotPrefs[slot.id] });
+      }
+      candidates.sort((a, b) =>
+        b.expiryBoost - a.expiryBoost
+        || b.matchPercent - a.matchPercent
+        || a.missing.length - b.missing.length,
+      );
+      const pick = candidates[0];
+      if (!pick) continue;
+      MealPlanRepository.set(date, slot.id, { recipeId: pick.recipe.id, name: pick.recipe.name });
+      usedIds.add(pick.recipe.id);
+    }
+  }
+  renderPlanner();
+  showToast('이번 주 식단을 자동으로 채웠어요');
+}
+
+function handleGroceryPurchaseComplete() {
+  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const grouped = GroceryListService.computeMissing(dates);
+  const names = [];
+  for (const cat of GROCERY_CATEGORIES) {
+    for (const item of grouped[cat.id] || []) {
+      const meta = GroceryRepository.getMeta(item.key);
+      if (!meta.checked) continue;
+      names.push(item.count > 1 ? `${item.name} ${item.count}개` : item.name);
+    }
+  }
+  if (!names.length) {
+    showToast('구매한 재료를 체크해 주세요');
+    return;
+  }
+  const { added } = PantryIngredientService.addFromNames(names, { skipDuplicates: true });
+  refreshAll();
+  showToast(`${added}개 재료를 냉장고에 추가했어요`);
+}
+
 // ===== Recipe Detail Modal =====
 function openRecipeDetail(result) {
   const { recipe } = result;
@@ -3433,7 +3785,7 @@ async function registerServiceWorker() {
   });
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js?v=28').then((reg) => {
+    navigator.serviceWorker.register('./sw.js?v=30').then((reg) => {
       reg.update();
       if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     }).catch(() => undefined);
@@ -3449,6 +3801,8 @@ function init() {
   RecipeSaveCountRepository.syncExistingUserSaves(SavedRecipeRepository._ids);
   MealLogRepository.load();
   ShoppingRecordRepository.load();
+  MealPlanRepository.load();
+  GroceryRepository.load();
   renderFilters();
   dom.currencySelect.value = state.currency;
   initRecipePickers();
@@ -3480,6 +3834,22 @@ function init() {
   };
   dom.calendarPrev.onclick = () => changeCalendarMonth(-1);
   dom.calendarNext.onclick = () => changeCalendarMonth(1);
+  dom.plannerRange?.addEventListener('change', () => {
+    state.plannerRange = dom.plannerRange.value === 'month' ? 'month' : 'week';
+    renderPlanner();
+  });
+  dom.plannerAutoBtn?.addEventListener('click', autoGenerateWeeklyPlan);
+  dom.martModeToggle?.addEventListener('click', () => {
+    state.martMode = !state.martMode;
+    renderGroceryList();
+  });
+  dom.groceryCompleteBtn?.addEventListener('click', handleGroceryPurchaseComplete);
+  dom.groceryBudget?.addEventListener('change', () => {
+    GroceryRepository.setBudget(dom.groceryBudget.value);
+    renderGroceryBudgetSummary(GroceryListService.estimateTotal(
+      GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerRange)),
+    ));
+  });
   dom.pantryModalForm.addEventListener('submit', handlePantryModalSubmit);
   dom.mealModalForm.addEventListener('submit', handleMealModalSubmit);
   dom.shoppingModalForm.addEventListener('submit', handleShoppingModalSubmit);
@@ -3554,4 +3924,4 @@ if (window.__firebaseBootstrapPromise) {
   startApp();
 }
 
-window.AppServices = { PantryRepository, RecipeRepository, SavedRecipeRepository, RecipeSaveCountRepository, MealLogRepository, ShoppingRecordRepository, RecommendationService, MatchService, IngredientGroupService, FreshFoodService, AffiliateService, PantryIngredientService, RecipePickerService, VideoRecipeAnalysisService, ClientUserService, AiUsageService, mockExtractRecipeFromVideoUrl };
+window.AppServices = { PantryRepository, RecipeRepository, SavedRecipeRepository, RecipeSaveCountRepository, MealLogRepository, ShoppingRecordRepository, MealPlanRepository, GroceryRepository, GroceryListService, RecommendationService, MatchService, IngredientGroupService, FreshFoodService, AffiliateService, PantryIngredientService, RecipePickerService, VideoRecipeAnalysisService, ClientUserService, AiUsageService, mockExtractRecipeFromVideoUrl };
