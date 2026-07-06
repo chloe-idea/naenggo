@@ -4,7 +4,11 @@ import {
   runSttStage,
   runOcrStage,
 } from './video-pipeline/pipeline.js';
-import { mergeUserTextInput } from './youtube.js';
+import { mergeUserTextInput } from './video-pipeline/recipe-text.js';
+import {
+  resolveExtractTextPriority,
+  logExtractTextPreview,
+} from './video-text-priority.js';
 
 const SHORTCODE_RE = /^[A-Za-z0-9_-]{5,20}$/;
 
@@ -183,7 +187,7 @@ export async function fetchInstagramReelsContent(url, options = {}) {
     autoExtractFailed,
   } = pipelineResult;
 
-  return {
+  const content = {
     platform: platform || 'instagram',
     shortcode,
     title: title || '',
@@ -196,6 +200,29 @@ export async function fetchInstagramReelsContent(url, options = {}) {
     autoExtractFailed: Boolean(autoExtractFailed),
     pipelineSteps: pipelineSteps || [],
   };
+
+  const resolved = resolveExtractTextPriority({
+    title: content.title,
+    extractedDescription: content.extractedDescription,
+    extractedCaption: content.extractedCaption,
+    extractedTranscript: [content.sttText, content.ocrText].filter(Boolean).join('\n\n'),
+  });
+
+  logExtractTextPreview({
+    rawTitle: resolved.rawTitle,
+    rawDescription: resolved.rawDescription,
+    combinedText: resolved.combinedText,
+    textSource: resolved.textSource,
+    phase: 'instagram-fetch',
+  });
+
+  return {
+    ...content,
+    combinedText: resolved.combinedText,
+    rawTitle: resolved.rawTitle,
+    rawDescription: resolved.rawDescription,
+    textSource: resolved.textSource,
+  };
 }
 
 /** OpenAI 프롬프트용 구조화 컨텍스트 */
@@ -205,19 +232,43 @@ export function buildInstagramAnalysisContext({ instagramContent, url, userInput
   const extractedDescription = String(instagramContent?.extractedDescription || '').trim();
   const sttText = String(instagramContent?.sttText || '').trim();
   const ocrText = String(instagramContent?.ocrText || '').trim();
+  const rawTitle = String(instagramContent?.title || '').trim();
+  const transcriptLike = [sttText, ocrText].filter(Boolean).join('\n\n');
+
+  const resolved = resolveExtractTextPriority({
+    title: rawTitle,
+    extractedDescription,
+    extractedCaption,
+    extractedTranscript: transcriptLike,
+    userText: mergedUserText,
+  });
+
+  logExtractTextPreview({
+    rawTitle: resolved.rawTitle,
+    rawDescription: resolved.rawDescription,
+    combinedText: resolved.combinedText,
+    textSource: resolved.textSource,
+    phase: 'instagram-analysis',
+  });
 
   const autoExtractFailed = Boolean(
     instagramContent?.autoExtractFailed
-    || (!extractedCaption && !extractedDescription && !sttText && !ocrText)
+    && !resolved.primaryAnalysisText
+    && !mergedUserText
   );
 
   return {
     platform: 'instagram',
     sourceUrl: instagramContent?.sourceUrl || url,
     thumbnailUrl: instagramContent?.thumbnailUrl || null,
-    title: instagramContent?.title || '',
+    title: rawTitle,
+    rawTitle: resolved.rawTitle,
+    rawDescription: resolved.rawDescription,
+    combinedText: resolved.combinedText,
+    primaryAnalysisText: resolved.primaryAnalysisText,
+    textSource: resolved.textSource,
     extractedDescription: extractedDescription || extractedCaption,
-    extractedTranscript: [sttText, ocrText].filter(Boolean).join('\n\n'),
+    extractedTranscript: transcriptLike,
     extractedCaption,
     userText: mergedUserText,
     autoExtractFailed,

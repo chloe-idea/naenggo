@@ -16,81 +16,40 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    (function () {
-      var KEYS = ['naengjanggo_v2_pantry', 'naengjanggo_pantry_ingredients'];
-      var g = localStorage.getItem.bind(localStorage);
-      var s = localStorage.setItem.bind(localStorage);
-      localStorage.getItem = function (k) { return KEYS.indexOf(k) !== -1 ? null : g(k); };
-      localStorage.setItem = function (k, v) {
-        if (KEYS.indexOf(k) !== -1) { console.error('[pantry] blocked setItem', k); return; }
-        return s(k, v);
-      };
-    })();
-  </script>
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=64">
 </head>
-<body class="body-auth">
-  <!-- 로그인 게이트 (인증 전 전체 화면) -->
-  <div id="auth-gate" class="auth-gate" aria-hidden="false">
-    <div class="auth-gate__content">
-      <div class="auth-gate__brand">
-        <div class="auth-gate__logo" aria-hidden="true">
-          <span class="auth-gate__logo-icon">🧊</span>
-        </div>
-        <h1 class="auth-gate__title">냉장GO</h1>
-        <p class="auth-gate__subtitle">내 냉장고 재료로 오늘의 메뉴를 찾아보세요</p>
-        <p class="auth-gate__helper">로그인하면 어느 기기에서든 내 재료와 레시피를 확인할 수 있어요</p>
-      </div>
-
-      <div class="auth-gate__card">
-        <div id="auth-gate-loading" class="auth-gate__panel auth-gate__panel--loading">
-          <div class="auth-gate__spinner" role="status" aria-label="로딩 중"></div>
-          <p id="auth-gate-status" class="auth-gate__status">냉장고를 불러오는 중…</p>
-        </div>
-
-        <div id="auth-gate-login" class="auth-gate__panel auth-gate__panel--login" hidden>
-          <button type="button" id="auth-google-btn" class="auth-gate__google-btn" disabled aria-disabled="true">
-            <span class="auth-gate__google-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.56 2.95-2.23 5.45-4.76 7.08l7.73 6c4.51-4.16 7.09-10.27 7.09-17.55z"/>
-                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-              </svg>
-            </span>
-            <span class="auth-gate__google-label">Google로 계속하기</span>
-            <span class="auth-gate__google-spinner" hidden aria-hidden="true"></span>
-          </button>
-          <p id="auth-error" class="auth-gate__error" hidden role="alert"></p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="app-shell" class="app" hidden>
-    <div id="app-data-loading" class="app-data-loading" hidden role="status" aria-live="polite">
-      <span class="app-data-loading__spinner" aria-hidden="true"></span>
-      <span class="app-data-loading__text">내 재료를 불러오는 중…</span>
-    </div>
+<body class="body-app">
+  <div id="app-shell" class="app app-shell--visible">
     <header class="header">
-      <div class="header__top">
-        <div class="header__brand">
+      <div class="header__row">
+        <div id="header-brand" class="header__brand">
           <span class="header__icon" aria-hidden="true"></span>
-          <div>
+          <div class="header__brand-text">
             <h1 class="header__title">냉장GO</h1>
-            <p id="header-subtitle" class="header__subtitle">집에 있는 재료로 만들 수 있는 요리를 찾아보세요</p>
+            <p id="header-subtitle" class="header__subtitle">재료로 찾는 레시피</p>
           </div>
         </div>
-        <div id="auth-user" class="auth-bar auth-bar--user" hidden>
-          <div class="auth-bar__info">
-            <span id="auth-user-name" class="auth-bar__name"></span>
-            <span id="auth-user-email" class="auth-bar__email" hidden></span>
-            <span id="auth-header-remaining" class="auth-bar__remaining"></span>
+        <h1 id="header-community-title" class="header__community-title" hidden>
+          <span class="header__community-globe" aria-hidden="true">🌎</span>
+          공개 레시피 커뮤니티
+        </h1>
+        <div class="header__actions">
+          <div id="auth-guest" class="header-auth header-auth--guest">
+            <button type="button" id="auth-login-btn" class="header-login-btn" disabled aria-disabled="true">
+              <span class="header-login-btn__label">로그인</span>
+              <span class="header-login-btn__spinner" hidden aria-hidden="true"></span>
+            </button>
           </div>
-          <button type="button" id="auth-logout-btn" class="btn btn--ghost btn--sm">로그아웃</button>
+          <div id="auth-user" class="header-auth header-auth--user" hidden>
+            <button type="button" id="profile-menu-btn" class="profile-avatar-btn" aria-label="프로필 메뉴" aria-haspopup="dialog" aria-expanded="false">
+              <img id="profile-avatar-img" class="profile-avatar-btn__img" alt="" hidden>
+              <span id="profile-avatar-emoji" class="profile-avatar-btn__emoji" hidden aria-hidden="true">🧊</span>
+              <span id="profile-avatar-initial" class="profile-avatar-btn__initial">냉</span>
+            </button>
+          </div>
         </div>
       </div>
+      <p id="auth-error" class="auth-bar__error" hidden role="alert"></p>
     </header>
 
     <main class="main">
@@ -109,18 +68,13 @@
           <div id="pantry-chips" class="tags" role="list"></div>
         </section>
 
-        <section class="section">
-          <h2 class="section__title">필터</h2>
-          <div id="filter-chips" class="filter-chips"></div>
-        </section>
-
-        <section class="section section--compact">
+        <section class="section section--compact section--home-search">
           <h2 class="section__title">🔍 먹고 싶은 메뉴 찾기</h2>
           <input type="search" id="menu-search-input" class="menu-search__input"
             placeholder="오늘 먹고 싶은 메뉴는?" autocomplete="off" aria-label="먹고 싶은 메뉴 검색">
         </section>
 
-        <section class="section">
+        <section class="section section--home-recipes">
           <div class="section__header">
             <h2 class="section__title">추천 레시피</h2>
             <span id="results-count" class="results-count"></span>
@@ -134,13 +88,16 @@
           <div id="no-results" class="empty-state" hidden>
             <span class="empty-state__icon">🔍</span>
             <p class="empty-state__title">일치하는 레시피가 없어요</p>
-            <p class="empty-state__text">다른 재료를 추가하거나 필터를 변경해 보세요</p>
+            <p class="empty-state__text">다른 재료를 추가하거나 검색어를 변경해 보세요</p>
           </div>
         </section>
       </div>
 
       <!-- 내 레시피 -->
       <div id="view-my-recipes" class="view" hidden>
+        <div id="my-recipes-guest-hint" class="guest-hint" hidden>
+          <p class="guest-hint__text">로그인하면 저장한 레시피를 확인할 수 있어요.</p>
+        </div>
         <section class="section">
           <div class="section__header">
             <h2 class="section__title">내 레시피</h2>
@@ -166,22 +123,34 @@
       </div>
 
       <!-- 커뮤니티 -->
-      <div id="view-community" class="view" hidden>
-        <section class="section">
-          <h2 class="section__title">공개 레시피</h2>
-          <p class="hint">다른 사용자와 공유된 레시피입니다. 보유 재료와의 일치율을 확인할 수 있어요</p>
-          <div class="community-search">
-            <h3 class="community-search__title">🔍 공개 레시피 검색</h3>
-            <input type="search" id="community-search-input" class="menu-search__input"
-              placeholder="먹고 싶은 공개 레시피를 검색해보세요" autocomplete="off" aria-label="공개 레시피 검색">
+      <div id="view-community" class="view view--community" hidden>
+        <div class="community-page">
+          <div class="community-search-wrap">
+            <div class="community-search">
+              <span class="community-search__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
+                  <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <input type="search" id="community-search-input" class="community-search__input"
+                placeholder="레시피 이름 또는 재료를 검색해보세요." autocomplete="off" aria-label="공개 레시피 검색">
+              <button type="button" id="community-filter-btn" class="community-search__filter"
+                aria-label="필터" aria-expanded="false" aria-controls="community-filter-panel">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div id="community-filter-panel" class="community-filter-panel" hidden>
+              <div id="community-filter-chips" class="filter-chips community-filter-chips"></div>
+            </div>
           </div>
-          <div id="community-list" class="recipe-list"></div>
-          <div id="community-empty" class="empty-state" hidden>
-            <span class="empty-state__icon">🌐</span>
-            <p id="community-empty-title" class="empty-state__title">공개 레시피가 없어요</p>
-            <p id="community-empty-text" class="empty-state__text">내 레시피를 공개로 설정하면 커뮤니티에 표시됩니다</p>
+          <div id="community-list" class="recipe-list community-list"></div>
+          <div id="community-empty" class="community-empty" hidden>
+            <p id="community-empty-title" class="community-empty__text">검색 결과가 없습니다.</p>
           </div>
-        </section>
+        </div>
       </div>
 
       <!-- 재료 관리 -->
@@ -202,6 +171,9 @@
       </div>
       <!-- 식단 플래너 -->
       <div id="view-planner" class="view" hidden>
+        <div id="planner-guest-hint" class="guest-hint" hidden>
+          <p class="guest-hint__text">로그인하면 나만의 식단을 저장하고 관리할 수 있어요.</p>
+        </div>
         <section class="section">
           <div class="section__header">
             <h2 class="section__title">식단 플래너</h2>
@@ -238,6 +210,9 @@
       </div>
       <!-- 식사 달력 -->
       <div id="view-calendar" class="view" hidden>
+        <div id="calendar-guest-hint" class="guest-hint" hidden>
+          <p class="guest-hint__text">로그인하면 식사 기록을 달력에 저장할 수 있어요.</p>
+        </div>
         <section class="section">
           <div class="section__header">
             <h2 class="section__title">식사 달력</h2>
@@ -280,30 +255,7 @@
 
     <!-- 토스트 -->
     <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
-
-    <!-- 하단 네비게이션 -->
-    <nav class="tab-bar" aria-label="메인 메뉴">
-      <button type="button" class="tab-bar__item tab-bar__item--active" data-view="main">
-        <span class="tab-bar__icon" aria-hidden="true"></span>
-        <span class="tab-bar__label">홈</span>
-      </button>
-      <button type="button" class="tab-bar__item" data-view="my-recipes">
-        <span class="tab-bar__icon" aria-hidden="true"></span>
-        <span class="tab-bar__label">내 레시피</span>
-      </button>
-      <button type="button" class="tab-bar__item" data-view="community">
-        <span class="tab-bar__icon" aria-hidden="true"></span>
-        <span class="tab-bar__label">커뮤니티</span>
-      </button>
-      <button type="button" class="tab-bar__item" data-view="planner">
-        <span class="tab-bar__icon" aria-hidden="true"></span>
-        <span class="tab-bar__label">식단</span>
-      </button>
-      <button type="button" class="tab-bar__item" data-view="calendar">
-        <span class="tab-bar__icon" aria-hidden="true"></span>
-        <span class="tab-bar__label">식사달력</span>
-      </button>
-    </nav>
+    <div id="auth-gate-tooltip" class="auth-gate-tooltip" hidden role="tooltip">로그인하면 이 기능을 사용할 수 있습니다.</div>
 
     <!-- 식사 기록 모달 -->
     <div id="meal-modal" class="modal" hidden aria-hidden="true">
@@ -480,7 +432,7 @@
 
           <div id="recipe-form-tabs" class="form-tabs" role="tablist" aria-label="레시피 추가 방식">
             <button type="button" class="form-tabs__btn form-tabs__btn--active" data-recipe-tab="manual" role="tab" aria-selected="true">직접 입력</button>
-            <button type="button" class="form-tabs__btn" data-recipe-tab="video" role="tab" aria-selected="false">영상 링크로 추가</button>
+            <button type="button" class="form-tabs__btn" data-recipe-tab="video" data-auth-required role="tab" aria-selected="false">영상 링크로 추가<span class="auth-gate-badge" hidden aria-hidden="true">🔒</span></button>
           </div>
 
           <!-- 직접 입력 -->
@@ -491,15 +443,21 @@
             </div>
             <div class="form-field">
               <span class="form-field__label">사진 <span class="optional">(선택)</span></span>
-              <div class="photo-upload">
-                <div id="photo-preview" class="photo-upload__preview photo-upload__preview--empty">
-                  <span class="photo-upload__placeholder">📷</span>
-                  <span class="photo-upload__placeholder-text">사진 없음</span>
-                </div>
-                <div class="photo-upload__actions">
-                  <input type="file" id="recipe-photo" accept="image/*" hidden>
-                  <button type="button" id="photo-select-btn" class="btn btn--outline btn--sm">사진 선택</button>
-                  <button type="button" id="photo-remove-btn" class="btn btn--ghost btn--sm" hidden>삭제</button>
+              <div id="recipe-photo-upload" class="recipe-photo-upload">
+                <input type="file" id="recipe-photo" accept="image/jpeg,image/png,image/heic,image/heif,image/*" hidden>
+                <div class="recipe-photo-upload__frame">
+                  <button type="button" id="photo-preview" class="recipe-photo-upload__zone recipe-photo-upload__zone--empty" aria-label="사진 업로드">
+                    <span class="recipe-photo-upload__icon" aria-hidden="true">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="1.5"/>
+                      </svg>
+                    </span>
+                    <span class="recipe-photo-upload__title">사진을 추가하세요</span>
+                    <span class="recipe-photo-upload__hint">클릭하여 업로드</span>
+                    <span class="recipe-photo-upload__formats">JPG, PNG, HEIC</span>
+                  </button>
+                  <button type="button" id="photo-remove-btn" class="recipe-photo-upload__remove" hidden aria-label="사진 삭제">&times;</button>
                 </div>
               </div>
             </div>
@@ -567,7 +525,7 @@
             <div class="video-link-card">
               <div class="form-field video-link-card__field">
                 <label for="video-source-url" class="form-field__label">영상 링크 <span class="required">*</span></label>
-                <input type="url" id="video-source-url" class="form-field__input" placeholder="YouTube, Instagram, TikTok URL" inputmode="url" autocomplete="off">
+                <input type="url" id="video-source-url" class="form-field__input" placeholder="YouTube, Shorts, Instagram Reels, TikTok URL" inputmode="url" autocomplete="off">
                 <p class="form-field__hint">유튜브 · 인스타그램 · 틱톡 링크만 지원합니다</p>
               </div>
 
@@ -581,17 +539,12 @@
                   <p id="video-preview-title" class="video-link-preview__title"></p>
                 </div>
               </div>
-
-              <div id="video-extract-loading" class="video-extract-loading" hidden>
-                <span class="video-extract-loading__spinner" aria-hidden="true"></span>
-                <p class="video-extract-loading__text">영상을 확인하고 레시피를 추출하는 중이에요...</p>
-              </div>
             </div>
 
             <div class="form-field video-user-text-field">
               <label for="video-user-text" class="form-field__label">영상 설명글 / 캡션 (선택)</label>
               <textarea id="video-user-text" class="form-field__textarea" rows="4" placeholder="릴스·영상 캡션, 설명, 고정 댓글을 붙여넣어 주세요."></textarea>
-              <p id="video-user-text-hint" class="form-field__hint">영상 설명글/캡션을 함께 붙여넣으면 더 정확합니다</p>
+              <p id="video-user-text-hint" class="form-field__hint">YouTube·Shorts는 링크만으로 자동 추출을 시도합니다. Instagram·TikTok은 캡션 붙여넣기를 권장합니다.</p>
             </div>
 
             <div id="video-fallback-section" class="video-fallback-section" hidden>
@@ -700,14 +653,114 @@
         <img id="image-lightbox-img" class="image-lightbox__img" alt="">
       </div>
     </div>
+
+    <!-- 로그인 유도 모달 -->
+    <div id="login-prompt-modal" class="modal login-prompt-modal" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="login"></div>
+      <div class="modal__panel login-prompt" role="dialog" aria-modal="true" aria-labelledby="login-prompt-title">
+        <button type="button" class="modal__close" data-close-modal="login" aria-label="닫기">&times;</button>
+        <h2 id="login-prompt-title" class="login-prompt__title">🍳 로그인하고 냉장GO를 시작해보세요</h2>
+        <p class="login-prompt__desc">
+          로그인하면 내 레시피와 냉장고 정보를 안전하게 저장하고,
+          AI 레시피 추출과 식단 관리 기능을 이용할 수 있습니다.
+        </p>
+        <ul class="login-prompt__benefits" aria-label="로그인 혜택">
+          <li>✅ 내 레시피 자동 저장</li>
+          <li>✅ AI 영상 레시피 추출</li>
+          <li>✅ 식단 캘린더</li>
+          <li>✅ 장보기 목록</li>
+          <li>✅ 여러 기기 자동 동기화</li>
+        </ul>
+        <p id="login-prompt-quota" class="login-prompt__quota">로그인하면 매주 무료 AI 분석 5회를 제공합니다.</p>
+        <p id="login-prompt-error" class="login-prompt__error" hidden role="alert"></p>
+        <button type="button" id="login-prompt-google-btn" class="btn btn--primary btn--full login-prompt__google">
+          Google로 계속하기
+        </button>
+        <button type="button" id="login-prompt-dismiss-btn" class="btn btn--ghost btn--full login-prompt__dismiss">나중에 하기</button>
+      </div>
+    </div>
+
+    <!-- 프로필 메뉴 -->
+    <div id="profile-menu-modal" class="modal modal--sheet" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="profile"></div>
+      <div class="modal__panel profile-menu" role="dialog" aria-modal="true" aria-labelledby="profile-menu-title">
+        <button type="button" class="modal__close" data-close-modal="profile" aria-label="닫기">&times;</button>
+        <div class="profile-menu__header">
+          <div id="profile-menu-avatar" class="profile-menu__avatar" aria-hidden="true">
+            <img id="profile-menu-avatar-img" class="profile-menu__avatar-img" alt="" hidden>
+            <span id="profile-menu-avatar-emoji" class="profile-menu__avatar-emoji" hidden>🧊</span>
+            <span id="profile-menu-avatar-initial" class="profile-menu__avatar-initial">냉</span>
+          </div>
+          <div class="profile-menu__header-text">
+            <h2 id="profile-menu-title" class="profile-menu__name">프로필</h2>
+            <span id="profile-menu-quota" class="profile-menu__quota">무료 분석 확인 중…</span>
+          </div>
+        </div>
+
+        <div class="profile-menu__section">
+          <label for="profile-display-name" class="profile-menu__label">닉네임</label>
+          <div class="profile-menu__name-row">
+            <input type="text" id="profile-display-name" class="profile-menu__input" maxlength="20" placeholder="닉네임 입력" autocomplete="nickname">
+            <button type="button" id="profile-save-name-btn" class="btn btn--primary btn--sm">저장</button>
+          </div>
+        </div>
+
+        <div class="profile-menu__section">
+          <p class="profile-menu__label">프로필 이미지</p>
+          <div id="profile-avatar-picker" class="profile-avatar-picker" role="group" aria-label="프로필 이미지 선택">
+            <button type="button" class="profile-avatar-picker__btn" data-avatar-type="initial">글자</button>
+            <button type="button" class="profile-avatar-picker__btn" data-avatar-type="fridge">냉장GO</button>
+            <button type="button" class="profile-avatar-picker__btn" data-avatar-type="google">Google</button>
+          </div>
+        </div>
+
+        <div class="profile-menu__section profile-menu__account">
+          <p class="profile-menu__label">계정 정보</p>
+          <p id="profile-menu-email" class="profile-menu__email"></p>
+        </div>
+
+        <p id="profile-menu-sync" class="profile-menu__sync">데이터 동기화 완료</p>
+
+        <button type="button" id="profile-logout-btn" class="btn btn--ghost btn--full profile-menu__logout">로그아웃</button>
+      </div>
+    </div>
   </div>
 
+  <!-- 하단 네비게이션 (viewport 기준 fixed) -->
+  <nav class="tab-bar" aria-label="메인 메뉴">
+    <button type="button" class="tab-bar__item tab-bar__item--active" data-view="main">
+      <span class="tab-bar__icon" aria-hidden="true"></span>
+      <span class="tab-bar__label">홈</span>
+    </button>
+    <button type="button" class="tab-bar__item" data-view="my-recipes">
+      <span class="tab-bar__icon" aria-hidden="true"></span>
+      <span class="tab-bar__label">내 레시피</span>
+    </button>
+    <button type="button" class="tab-bar__item" data-view="community">
+      <span class="tab-bar__icon" aria-hidden="true"></span>
+      <span class="tab-bar__label">커뮤니티</span>
+    </button>
+    <button type="button" class="tab-bar__item" data-view="planner">
+      <span class="tab-bar__icon" aria-hidden="true"></span>
+      <span class="tab-bar__label">식단</span>
+    </button>
+    <button type="button" class="tab-bar__item" data-view="calendar">
+      <span class="tab-bar__icon" aria-hidden="true"></span>
+      <span class="tab-bar__label">식사달력</span>
+    </button>
+  </nav>
+
   <script>
+    function isIgnorableAuthNoise(message) {
+      var msg = String(message || '');
+      return /Cross-Origin-Opener-Policy|COOP|window\.closed|initial state/i.test(msg);
+    }
     window.addEventListener('error', function (e) {
+      if (isIgnorableAuthNoise(e.message)) return;
       if (e.filename && /firebase|auth-ui|gstatic/.test(e.filename)) {
         console.error('[auth] load error:', e.message, e.filename);
         var el = document.getElementById('auth-error');
-        if (el) {
+        if (el && e.error && e.error.code) {
           el.hidden = false;
           el.textContent = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.';
         }
@@ -729,12 +782,15 @@
       };
     })();
   </script>
-  <script type="module" src="js/firebase-bootstrap.js?v=37"></script>
-  <script src="app-config.js?v=37"></script>
-  <script src="nav-icons.js?v=37"></script>
-  <script src="recipe-placeholders.js?v=37"></script>
-  <script src="recipe-images.js?v=37"></script>
-  <script src="recipes-builtin.js?v=37"></script>
-  <script src="script.js?v=37" defer></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=58"></script>
+  <script src="js/video-extract-platform.js?v=54"></script>
+  <script src="app-config.js?v=56"></script>
+  <script src="nav-icons.js?v=47"></script>
+  <script src="recipe-placeholders.js?v=47"></script>
+  <script src="recipe-images.js?v=47"></script>
+  <script src="recipes-builtin.js?v=47"></script>
+  <script src="js/login-required-modal.js?v=62"></script>
+  <script src="js/auth-gate-ui.js?v=62"></script>
+  <script src="script.js?v=64" defer></script>
 </body>
 </html>

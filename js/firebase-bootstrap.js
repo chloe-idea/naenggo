@@ -1,19 +1,17 @@
 /**
- * Firebase 부트스트랩 — Auth UI + 앱 연동
- * authLoading → isLoggingIn → dataLoading 단계 분리, 병렬 동기화로 체감 속도 개선
+ * Firebase 부트스트랩 — 게스트 우선 + 로그인 시 Firestore 동기화
  */
 import { AuthService } from './services/auth-service.js';
-import { FirestoreUserService } from './services/firestore-user-service.js';
+import { FirestoreUserService, resolveProfileAvatar } from './services/firestore-user-service.js';
 import { FirestoreIngredientService } from './services/firestore-ingredient-service.js';
-import { migrateLegacyPantryToFirestore, purgePantryLocalStorage } from './services/pantry-local-migration.js';
+import { migrateLegacyPantryToFirestore } from './services/pantry-local-migration.js';
 import { AnalysisQuotaService } from './services/analysis-quota-service.js';
+import { FirestoreUserDataSync } from './services/firestore-user-data-sync.js';
 import { formatAuthError } from './services/auth-errors.js';
-import { createAuthGateController } from './services/auth-gate-controller.js';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
 
 const USER_ERROR_MESSAGE = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.';
-const DATA_LOAD_GATE_MS = 1800;
-const PANTRY_SNAPSHOT_TIMEOUT_MS = 8000;
+const DATA_LOADING_FALLBACK_MS = 2000;
 
 let authUiBound = false;
 let authReady = false;
@@ -21,71 +19,105 @@ let initialAuthResolved = false;
 let syncedUid = null;
 let activeAuthTask = null;
 let pendingAuthUid = undefined;
+let logoutInProgress = false;
+let dataLoadingFallbackTimer = null;
+let cachedUserProfile = null;
 
-const gate = createAuthGateController({
-  onUiSync: syncAuthGateUi,
-  onStateChange: (state) => {
-    window.__authGateState = state;
-  },
-});
+const authState = {
+  authLoading: true,
+  isLoggingIn: false,
+  dataLoading: false,
+  isLoggingOut: false,
+  user: null,
+};
 
 function $(id) {
   return document.getElementById(id);
 }
 
-function setBodyMode(mode) {
-  document.body.classList.toggle('body-auth', mode === 'auth');
-  document.body.classList.toggle('body-app', mode === 'app');
+function isIgnorableAuthNoise(message) {
+  const msg = String(message || '');
+  return /Cross-Origin-Opener-Policy|COOP|window\.closed|initial state/i.test(msg);
 }
 
-function syncAuthGateUi(state, { phase, message, phaseChanged }) {
-  const gateEl = $('auth-gate');
-  const loadingEl = $('auth-gate-loading');
-  const loginEl = $('auth-gate-login');
-  const statusEl = $('auth-gate-status');
-  const appOverlay = $('app-data-loading');
-
-  if (gateEl) {
-    gateEl.dataset.phase = phase;
-    gateEl.toggleAttribute('data-auth-loading', state.authLoading);
-    gateEl.toggleAttribute('data-logging-in', state.isLoggingIn);
-    gateEl.toggleAttribute('data-data-loading', state.dataLoading);
-    gateEl.toggleAttribute('data-logging-out', state.isLoggingOut);
-  }
-
-  const showLoadingPanel = state.authLoading || state.isLoggingIn || state.isLoggingOut
-    || (state.dataLoading && !state.appReady);
-
-  if (loadingEl) loadingEl.hidden = !showLoadingPanel;
-  if (loginEl) loginEl.hidden = showLoadingPanel || Boolean(state.user);
-
-  if (statusEl && message) statusEl.textContent = message;
-
-  if (appOverlay) {
-    appOverlay.hidden = !(state.appReady && state.dataLoading);
-  }
-
-  if (phaseChanged) {
-    console.log('[auth-gate]', phase, message || 'idle');
-  }
-
-  syncGoogleButton(state);
+function resolveAuthUser() {
+  if (authState.isLoggingOut) return null;
+  return authState.user || AuthService.getCurrentUser?.() || auth?.currentUser || null;
 }
 
-function syncGoogleButton(state) {
-  const btn = $('auth-google-btn');
+function patchAuthState(partial) {
+  Object.assign(authState, partial);
+  syncAuthUi();
+  updateProfileMenuSyncStatus();
+  window.__authGateState = { ...authState };
+  window.dispatchEvent(new CustomEvent('auth-gate-state', { detail: { ...authState } }));
+}
+
+function clearDataLoading(reason = 'unknown') {
+  if (dataLoadingFallbackTimer) {
+    clearTimeout(dataLoadingFallbackTimer);
+    dataLoadingFallbackTimer = null;
+  }
+  if (!authState.dataLoading) return;
+  console.log('[firebase-bootstrap] dataLoading cleared:', reason);
+  patchAuthState({ dataLoading: false });
+}
+
+function startDataLoading(user) {
+  if (!user?.uid || !AuthService.isLoggedIn()) return;
+  patchAuthState({ dataLoading: true, user });
+  if (dataLoadingFallbackTimer) clearTimeout(dataLoadingFallbackTimer);
+  dataLoadingFallbackTimer = window.setTimeout(() => {
+    clearDataLoading('2s fallback');
+  }, DATA_LOADING_FALLBACK_MS);
+}
+
+function isModalBlockingSyncHint() {
+  const recipeFormModal = document.getElementById('recipe-form-modal');
+  const profileModal = document.getElementById('profile-menu-modal');
+  if (recipeFormModal && !recipeFormModal.hidden) return true;
+  if (profileModal && !profileModal.hidden) return true;
+  return false;
+}
+
+function syncAuthUi() {
+  const guestEl = $('auth-guest');
+  const userEl = $('auth-user');
+
+  const user = resolveAuthUser();
+  const loggedIn = Boolean(user);
+
+  if (!loggedIn && authState.dataLoading) {
+    clearDataLoading('guest mode');
+  }
+
+  if (guestEl) {
+    guestEl.hidden = loggedIn;
+    guestEl.style.display = loggedIn ? 'none' : '';
+  }
+  if (userEl) {
+    userEl.hidden = !loggedIn;
+    userEl.style.display = loggedIn ? '' : 'none';
+  }
+
+  syncLoginButton();
+  updateProfileMenuSyncStatus();
+}
+
+function syncLoginButton() {
+  const btn = $('auth-login-btn');
   if (!btn) return;
 
-  const label = btn.querySelector('.auth-gate__google-label');
-  const spinner = btn.querySelector('.auth-gate__google-spinner');
-  const buttonLoading = state.isLoggingIn;
-  const disabled = buttonLoading || state.authLoading || !authReady || !isFirebaseConfigured();
+  const label = btn.querySelector('.header-login-btn__label');
+  const spinner = btn.querySelector('.header-login-btn__spinner');
+  const buttonLoading = authState.isLoggingIn;
+  const disabled = buttonLoading || authState.authLoading || !authReady || !isFirebaseConfigured();
 
-  btn.classList.toggle('auth-gate__google-btn--loading', buttonLoading);
+  btn.classList.toggle('header-login-btn--loading', buttonLoading);
   btn.disabled = disabled;
   btn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
 
-  if (label) label.textContent = buttonLoading ? '로그인 중입니다…' : 'Google로 계속하기';
+  if (label) label.textContent = buttonLoading ? '로그인 중…' : '로그인';
   if (spinner) spinner.hidden = !buttonLoading;
 }
 
@@ -96,16 +128,28 @@ function showAuthError(formatted) {
   let message = USER_ERROR_MESSAGE;
   if (formatted?.code === 'auth/unauthorized-domain') {
     message = '허용되지 않은 도메인입니다. Firebase Console에서 도메인을 추가해 주세요.';
-    el.classList.add('auth-gate__error--domain');
+    el.classList.add('auth-bar__error--domain');
   } else if (formatted?.code === 'auth/config-not-set') {
     message = '앱 설정을 확인해 주세요.';
-    el.classList.remove('auth-gate__error--domain');
+    el.classList.remove('auth-bar__error--domain');
+  } else if (formatted?.code === 'auth/popup-blocked') {
+    message = '브라우저가 로그인 팝업을 차단했습니다. 팝업을 허용한 뒤 다시 시도해 주세요.';
+    el.classList.remove('auth-bar__error--domain');
+  } else if (formatted?.code === 'auth/popup-closed-by-user' || formatted?.code === 'auth/cancelled-popup-request') {
+    message = 'Google 로그인 창이 닫혔습니다. 다시 시도해 주세요.';
+    el.classList.remove('auth-bar__error--domain');
+  } else if (formatted?.message) {
+    message = formatted.message;
+    el.classList.remove('auth-bar__error--domain');
   } else {
-    el.classList.remove('auth-gate__error--domain');
+    el.classList.remove('auth-bar__error--domain');
   }
 
   el.hidden = false;
   el.textContent = message;
+  if (typeof window.syncLoginPromptError === 'function') {
+    window.syncLoginPromptError(message);
+  }
 }
 
 function clearAuthError() {
@@ -113,83 +157,126 @@ function clearAuthError() {
   if (!el) return;
   el.hidden = true;
   el.textContent = '';
-  el.classList.remove('auth-gate__error--domain');
+  el.classList.remove('auth-bar__error--domain');
 }
 
 function setGoogleButtonEnabled(enabled) {
   authReady = enabled;
-  syncGoogleButton(gate.getState());
+  syncLoginButton();
 }
 
-function revealAppShell() {
-  const current = gate.getState();
-  if (current.appReady) return;
+function applyAvatarToElements(avatar, imgEl, emojiEl, initialEl) {
+  if (!initialEl) return;
 
-  gate.patch({ appReady: true, dataLoading: false });
-
-  const gateEl = $('auth-gate');
-  const shell = $('app-shell');
-
-  setBodyMode('app');
-  gateEl?.classList.add('auth-gate--hide');
-
-  window.setTimeout(() => {
-    if (gateEl) {
-      gateEl.hidden = true;
-      gateEl.setAttribute('aria-hidden', 'true');
+  if (imgEl) {
+    if (avatar.mode === 'image' && avatar.src) {
+      imgEl.src = avatar.src;
+      imgEl.alt = `${avatar.displayName} 프로필`;
+      imgEl.hidden = false;
+    } else {
+      imgEl.removeAttribute('src');
+      imgEl.hidden = true;
     }
-    if (shell) {
-      shell.hidden = false;
-      requestAnimationFrame(() => shell.classList.add('app-shell--visible'));
+  }
+
+  if (emojiEl) {
+    if (avatar.mode === 'emoji') {
+      emojiEl.textContent = avatar.emoji || '🧊';
+      emojiEl.hidden = false;
+    } else {
+      emojiEl.hidden = true;
     }
-  }, 280);
+  }
+
+  initialEl.textContent = avatar.initial || '냉';
+  initialEl.hidden = avatar.mode !== 'initial';
 }
 
-function hideAppShell({ keepLoading = false } = {}) {
-  syncedUid = null;
+function renderProfileAvatar(authUser, profile = null) {
+  const avatar = resolveProfileAvatar(profile, authUser);
+  applyAvatarToElements(
+    avatar,
+    $('profile-avatar-img'),
+    $('profile-avatar-emoji'),
+    $('profile-avatar-initial'),
+  );
+  applyAvatarToElements(
+    avatar,
+    $('profile-menu-avatar-img'),
+    $('profile-menu-avatar-emoji'),
+    $('profile-menu-avatar-initial'),
+  );
+  return avatar;
+}
 
-  const gateEl = $('auth-gate');
-  const shell = $('app-shell');
+function updateProfileMenuSyncStatus() {
+  const syncEl = $('profile-menu-sync');
+  if (!syncEl) return;
 
-  gate.patch({
-    appReady: false,
-    dataLoading: false,
-    user: null,
-    ...(keepLoading ? {} : { isLoggingOut: false }),
-  });
+  const user = resolveAuthUser();
+  if (!user) {
+    syncEl.hidden = true;
+    return;
+  }
 
-  setBodyMode('auth');
-  shell?.classList.remove('app-shell--visible');
-  if (shell) shell.hidden = true;
-
-  if (gateEl) {
-    gateEl.hidden = false;
-    gateEl.setAttribute('aria-hidden', 'false');
-    gateEl.classList.remove('auth-gate--hide');
+  syncEl.hidden = false;
+  if (authState.dataLoading) {
+    syncEl.textContent = '재료 동기화 중…';
+    syncEl.classList.add('profile-menu__sync--loading');
+  } else {
+    syncEl.textContent = '데이터 동기화 완료';
+    syncEl.classList.remove('profile-menu__sync--loading');
   }
 }
 
-function waitForPantrySnapshot(timeoutMs = PANTRY_SNAPSHOT_TIMEOUT_MS) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (items) => {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener('pantry-firestore-sync', onSync);
-      clearTimeout(timer);
-      resolve(items);
-    };
-    const onSync = (event) => finish(Array.isArray(event.detail?.items) ? event.detail.items : []);
-    window.addEventListener('pantry-firestore-sync', onSync);
-    const timer = window.setTimeout(() => finish([]), timeoutMs);
-  });
+function updateProfileMenuContent(authUser, profile = null) {
+  const resolvedProfile = profile || cachedUserProfile;
+  const avatar = renderProfileAvatar(authUser, resolvedProfile);
+  const titleEl = $('profile-menu-title');
+  const emailEl = $('profile-menu-email');
+  const nameInput = $('profile-display-name');
+  const picker = $('profile-avatar-picker');
+
+  if (titleEl) titleEl.textContent = avatar.displayName || '프로필';
+  if (emailEl) emailEl.textContent = authUser?.email || '—';
+  if (nameInput && document.activeElement !== nameInput) {
+    nameInput.value = resolvedProfile?.displayName || avatar.displayName || '';
+  }
+
+  if (picker) {
+    const activeType = resolvedProfile?.avatarType || avatar.avatarType || 'fridge';
+    picker.querySelectorAll('[data-avatar-type]').forEach((btn) => {
+      btn.classList.toggle('profile-avatar-picker__btn--active', btn.dataset.avatarType === activeType);
+      if (btn.dataset.avatarType === 'google') {
+        btn.disabled = !authUser?.photoURL;
+      }
+    });
+  }
+
+  updateProfileMenuSyncStatus();
+}
+
+async function loadUserProfile(authUser) {
+  if (!authUser?.uid) {
+    cachedUserProfile = null;
+    return null;
+  }
+  try {
+    cachedUserProfile = await FirestoreUserService.getUserDocument(authUser.uid);
+    if (!cachedUserProfile) {
+      cachedUserProfile = await FirestoreUserService.ensureUserDocument(authUser);
+    }
+  } catch (err) {
+    console.error('[firebase-bootstrap] loadUserProfile failed:', err);
+    cachedUserProfile = null;
+  }
+  updateProfileMenuContent(authUser, cachedUserProfile);
+  return cachedUserProfile;
 }
 
 function renderAuthUi(user) {
+  const resolvedUser = user ?? resolveAuthUser();
   const userEl = $('auth-user');
-  const nameEl = $('auth-user-name');
-  const emailEl = $('auth-user-email');
-  const remainingEl = $('auth-header-remaining');
 
   if (!userEl) {
     console.error('[firebase-bootstrap] auth UI elements not found in DOM');
@@ -202,137 +289,247 @@ function renderAuthUi(user) {
     return;
   }
 
-  if (user) {
+  if (resolvedUser) {
     userEl.hidden = false;
     clearAuthError();
-
-    const displayName = user.displayName || '';
-    const email = user.email || '';
-
-    if (nameEl) nameEl.textContent = displayName || email || '로그인됨';
-    if (emailEl) {
-      if (displayName && email) {
-        emailEl.textContent = email;
-        emailEl.hidden = false;
-      } else {
-        emailEl.textContent = '';
-        emailEl.hidden = true;
-      }
-    }
-    if (remainingEl) remainingEl.textContent = '무료 분석 확인 중…';
+    renderProfileAvatar(resolvedUser, cachedUserProfile);
   } else {
     userEl.hidden = true;
+    cachedUserProfile = null;
   }
+
+  syncAuthUi();
 }
 
-function refreshHeaderQuota() {
-  const remainingEl = $('auth-header-remaining');
-  if (!remainingEl) return Promise.resolve();
+function refreshProfileQuota() {
+  const quotaEl = $('profile-menu-quota');
+  if (!quotaEl) return Promise.resolve();
 
   return AnalysisQuotaService.fetchUsage()
     .then((usage) => {
       if (!usage) {
-        remainingEl.textContent = '무료 분석 —';
+        quotaEl.textContent = '무료 분석 —';
+        quotaEl.classList.remove('profile-menu__quota--exhausted');
         return;
       }
       if (usage.remaining > 0) {
-        remainingEl.textContent = `무료 분석 ${usage.remaining}회`;
-        remainingEl.classList.remove('auth-bar__remaining--exhausted');
+        quotaEl.textContent = `이번 주 남은 무료 분석 ${usage.remaining}회`;
+        quotaEl.classList.remove('profile-menu__quota--exhausted');
       } else {
-        remainingEl.textContent = '무료 분석 소진';
-        remainingEl.classList.add('auth-bar__remaining--exhausted');
+        quotaEl.textContent = '무료 분석 소진';
+        quotaEl.classList.add('profile-menu__quota--exhausted');
       }
       window.dispatchEvent(new CustomEvent('analysis-quota-updated', { detail: usage }));
     })
     .catch((err) => {
       console.error('[firebase-bootstrap] quota refresh failed:', err?.code, err?.message, err);
-      remainingEl.textContent = '무료 분석 —';
+      quotaEl.textContent = '무료 분석 —';
     });
+}
+
+function refreshHeaderQuota() {
+  return refreshProfileQuota();
+}
+
+function openProfileMenu() {
+  const modal = $('profile-menu-modal');
+  const btn = $('profile-menu-btn');
+  if (!modal || !resolveAuthUser()) return;
+
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+
+  updateProfileMenuContent(resolveAuthUser(), cachedUserProfile);
+  refreshProfileQuota();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function closeProfileMenu() {
+  const modal = $('profile-menu-modal');
+  const btn = $('profile-menu-btn');
+  if (!modal) return;
+
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+
+  const anyModalOpen = ['recipe-form-modal', 'meal-modal', 'shopping-modal', 'pantry-modal', 'recipe-modal']
+    .some((id) => {
+      const el = document.getElementById(id);
+      return el && !el.hidden;
+    });
+  if (!anyModalOpen) document.body.style.overflow = '';
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+async function saveProfileDisplayName() {
+  const user = resolveAuthUser();
+  const input = $('profile-display-name');
+  if (!user?.uid || !input) return;
+
+  const displayName = input.value.trim().slice(0, 20);
+  if (!displayName) return;
+
+  try {
+    cachedUserProfile = await FirestoreUserService.updateProfile(user.uid, { displayName });
+    renderAuthUi(user);
+    updateProfileMenuContent(user, cachedUserProfile);
+  } catch (err) {
+    console.error('[firebase-bootstrap] save displayName failed:', err);
+    showAuthError({ message: '닉네임 저장에 실패했어요.' });
+  }
+}
+
+async function saveProfileAvatarType(avatarType) {
+  const user = resolveAuthUser();
+  if (!user?.uid || !avatarType) return;
+
+  try {
+    cachedUserProfile = await FirestoreUserService.updateProfile(user.uid, { avatarType });
+    renderAuthUi(user);
+    updateProfileMenuContent(user, cachedUserProfile);
+  } catch (err) {
+    console.error('[firebase-bootstrap] save avatarType failed:', err);
+    showAuthError({ message: '프로필 이미지 변경에 실패했어요.' });
+  }
 }
 
 async function syncUserData(user) {
   const uid = user.uid;
-  if (syncedUid === uid) return;
+  if (!AuthService.isLoggedIn()) {
+    clearDataLoading('not logged in');
+    return;
+  }
+  if (syncedUid === uid && !authState.dataLoading) return;
 
-  FirestoreIngredientService.stopSync();
+  FirestoreUserDataSync.stopAll();
   syncedUid = uid;
+  startDataLoading(user);
 
-  gate.patch({ dataLoading: true, user });
+  if (typeof window.clearAllUserDataState === 'function') {
+    window.clearAllUserDataState();
+  }
 
-  // 1) Firestore 구독을 먼저 시작 — 첫 snapshot까지 대기
-  FirestoreIngredientService.startSync(
-    (items) => {
-      window.dispatchEvent(new CustomEvent('pantry-firestore-sync', { detail: { items } }));
-    },
-    (err) => {
-      console.error('[firebase-bootstrap] ingredients sync failed:', err?.code, err?.message, err);
-    },
-  );
+  try {
+    let firstSnapshotDone = false;
+    const finishFirstSnapshot = (reason) => {
+      if (firstSnapshotDone) return;
+      firstSnapshotDone = true;
+      clearDataLoading(reason);
+    };
 
-  const snapshotPromise = waitForPantrySnapshot(PANTRY_SNAPSHOT_TIMEOUT_MS);
-  const gateTimer = new Promise((resolve) => {
-    window.setTimeout(resolve, DATA_LOAD_GATE_MS);
-  });
+    let pending = 6;
+    const markSnapshot = () => {
+      pending -= 1;
+      if (pending <= 0) finishFirstSnapshot('all user snapshots');
+    };
 
-  // 2) 사용자 문서·마이그레이션은 백그라운드 병렬 처리 (게이트 대기에 포함하지 않음)
-  const backgroundTasks = Promise.allSettled([
-    FirestoreUserService.ensureUserDocument(user),
-    migrateLegacyPantryToFirestore(FirestoreIngredientService, uid),
-  ]).then((results) => {
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        const label = index === 0 ? 'ensureUserDocument' : 'pantry migration';
-        console.error(`[firebase-bootstrap] ${label} failed:`, result.reason);
-      }
+    FirestoreUserDataSync.startUserSync({
+      onIngredients: (items) => {
+        window.dispatchEvent(new CustomEvent('pantry-firestore-sync', { detail: { items } }));
+        markSnapshot();
+      },
+      onMyRecipes: (recipes) => {
+        window.dispatchEvent(new CustomEvent('my-recipes-firestore-sync', { detail: { recipes } }));
+        markSnapshot();
+      },
+      onMealCalendar: (logs) => {
+        window.dispatchEvent(new CustomEvent('meal-calendar-firestore-sync', { detail: { logs } }));
+        markSnapshot();
+      },
+      onMealPlans: (plans) => {
+        window.dispatchEvent(new CustomEvent('meal-plans-firestore-sync', { detail: { plans } }));
+        markSnapshot();
+      },
+      onShopping: (records) => {
+        window.dispatchEvent(new CustomEvent('shopping-firestore-sync', { detail: { records } }));
+        markSnapshot();
+      },
+      onSettings: (settings) => {
+        window.dispatchEvent(new CustomEvent('settings-firestore-sync', { detail: { settings } }));
+        markSnapshot();
+      },
+      onError: (err) => {
+        console.error('[firebase-bootstrap] user data sync failed:', err?.code, err?.message, err);
+        markSnapshot();
+      },
     });
-  });
 
-  // 3) 첫 snapshot 또는 짧은 타임아웃 중 먼저 도달하면 앱 진입
-  await Promise.race([snapshotPromise, gateTimer]);
-  backgroundTasks.catch(() => undefined);
+    Promise.allSettled([
+      FirestoreUserService.ensureUserDocument(user).then((doc) => {
+        if (doc) cachedUserProfile = doc;
+      }),
+      migrateLegacyPantryToFirestore(FirestoreIngredientService, uid),
+    ]).then((results) => {
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const label = index === 0 ? 'ensureUserDocument' : 'pantry migration';
+          console.error(`[firebase-bootstrap] ${label} failed:`, result.reason);
+        }
+      });
+    }).catch(() => undefined);
+  } catch (err) {
+    console.error('[firebase-bootstrap] syncUserData failed:', err);
+    clearDataLoading('sync error');
+  }
 }
 
-let logoutInProgress = false;
-
-function clearPantryImmediately() {
-  FirestoreIngredientService.stopSync();
-  syncedUid = null;
-  purgePantryLocalStorage();
-  window.dispatchEvent(new CustomEvent('pantry-firestore-sync', { detail: { items: [] } }));
-  window.dispatchEvent(new CustomEvent('pantry-logout-clear'));
-  if (typeof window.clearPantryState === 'function') {
-    window.clearPantryState();
-  }
+function startPublicRecipesSync() {
+  FirestoreUserDataSync.startPublicSync(
+    (recipes) => {
+      window.dispatchEvent(new CustomEvent('public-recipes-firestore-sync', { detail: { recipes } }));
+    },
+    (err) => {
+      console.error('[firebase-bootstrap] public recipes sync failed:', err?.code, err?.message, err);
+    },
+  );
 }
 
 async function handleSignedInUser(user) {
   if (logoutInProgress) return;
   const uid = user.uid;
+  patchAuthState({ isLoggingIn: false, authLoading: false, user });
   renderAuthUi(user);
-  gate.patch({ isLoggingIn: false, user });
+
+  window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
 
   await syncUserData(user);
 
-  if (gate.getState().isLoggingOut || !AuthService.isLoggedIn() || AuthService.getUid() !== uid) {
+  if (authState.isLoggingOut || !AuthService.isLoggedIn() || AuthService.getUid() !== uid) {
     console.log('[firebase-bootstrap] sign-in flow aborted (logged out during sync)');
     return;
   }
 
-  revealAppShell();
-
-  refreshHeaderQuota();
-  window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
+  await loadUserProfile(user);
+  refreshProfileQuota();
 }
 
 async function handleSignedOutUser() {
   logoutInProgress = false;
-  clearPantryImmediately();
+  FirestoreUserDataSync.stopAll();
+  syncedUid = null;
+  cachedUserProfile = null;
+  clearDataLoading('signed out');
+  closeProfileMenu();
+
+  if (typeof window.clearUserData === 'function') {
+    window.clearUserData();
+  } else if (typeof window.switchToGuestPantry === 'function') {
+    window.switchToGuestPantry();
+  }
+
   renderAuthUi(null);
-  hideAppShell();
-  gate.resetForGuest();
+  patchAuthState({
+    authLoading: false,
+    isLoggingIn: false,
+    isLoggingOut: false,
+    user: null,
+  });
   setGoogleButtonEnabled(authReady);
 
-  console.log('LOGOUT_SUCCESS_AND_INGREDIENTS_CLEARED');
+  console.log('LOGOUT_SUCCESS_GUEST_MODE');
   window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user: null } }));
 }
 
@@ -350,7 +547,7 @@ async function handleAuthChange(user) {
   activeAuthTask = (async () => {
     if (!initialAuthResolved) {
       initialAuthResolved = true;
-      gate.patch({ authLoading: false });
+      patchAuthState({ authLoading: false });
     }
 
     console.log('[firebase-bootstrap] handleAuthChange:', user?.email || 'guest');
@@ -369,7 +566,7 @@ async function handleAuthChange(user) {
       activeAuthTask = null;
     }
     if (user) {
-      gate.patch({ isLoggingIn: false, isLoggingOut: false });
+      patchAuthState({ isLoggingIn: false, isLoggingOut: false });
     }
   }
 }
@@ -380,8 +577,7 @@ async function signInWithGoogleFlow(event) {
     event.stopPropagation();
   }
 
-  const state = gate.getState();
-  if (state.isLoggingIn || state.authLoading || activeAuthTask) return;
+  if (authState.isLoggingIn || authState.authLoading || activeAuthTask) return;
 
   if (!authReady || !auth) {
     showAuthError({ code: 'auth/not-initialized' });
@@ -394,16 +590,24 @@ async function signInWithGoogleFlow(event) {
   }
 
   clearAuthError();
-  gate.patch({ isLoggingIn: true });
+  patchAuthState({ isLoggingIn: true });
 
   try {
     console.log('[firebase-bootstrap] signInWithGoogleFlow');
-    await AuthService.signInWithGoogle();
-    // onAuthStateChanged → handleAuthChange
+    const user = await AuthService.signInWithGoogle();
+    if (user) {
+      patchAuthState({ isLoggingIn: false, authLoading: false, user });
+      renderAuthUi(user);
+      console.log('POPUP_LOGIN_SUCCESS', user.uid);
+    }
   } catch (err) {
     console.error('[firebase-bootstrap] Google login failed:', err?.code, err?.message, err);
-    gate.patch({ isLoggingIn: false });
-    showAuthError(err.authError || formatAuthError(err));
+    patchAuthState({ isLoggingIn: false });
+    if (err?.authError) {
+      showAuthError(err.authError);
+    } else {
+      showAuthError(formatAuthError(err));
+    }
   }
 }
 
@@ -419,23 +623,25 @@ async function signOutFlow(event) {
   activeAuthTask = null;
   pendingAuthUid = null;
 
-  clearPantryImmediately();
-  hideAppShell();
-  gate.resetForGuest();
-  renderAuthUi(null);
-  setBodyMode('auth');
+  patchAuthState({ isLoggingOut: true, user: null });
   clearAuthError();
 
   try {
+    FirestoreUserDataSync.stopAll();
+
     if (auth && authReady) {
       await AuthService.signOut();
     }
+
+    if (typeof window.clearUserData === 'function') {
+      window.clearUserData();
+    }
+
     console.log('LOGOUT_SUCCESS');
-    console.log('LOGOUT_SUCCESS_AND_INGREDIENTS_CLEARED');
-    window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user: null } }));
   } catch (err) {
     console.error('LOGOUT_FAILED', err);
     showAuthError(formatAuthError(err));
+    patchAuthState({ isLoggingOut: false });
   } finally {
     logoutInProgress = false;
   }
@@ -445,23 +651,47 @@ function bindAuthUi() {
   if (authUiBound) return;
   authUiBound = true;
 
-  const googleBtn = $('auth-google-btn');
-  const logoutBtn = $('auth-logout-btn');
+  const loginBtn = $('auth-login-btn');
+  const profileBtn = $('profile-menu-btn');
+  const logoutBtn = $('profile-logout-btn');
+  const saveNameBtn = $('profile-save-name-btn');
+  const avatarPicker = $('profile-avatar-picker');
+  const profileModal = $('profile-menu-modal');
 
-  if (!googleBtn) {
-    console.error('[firebase-bootstrap] #auth-google-btn not found');
+  if (!loginBtn) {
+    console.error('[firebase-bootstrap] #auth-login-btn not found');
     return;
   }
 
-  googleBtn.disabled = true;
-  googleBtn.addEventListener('click', signInWithGoogleFlow);
-  console.log('[firebase-bootstrap] Google login handler attached');
+  loginBtn.disabled = true;
+  loginBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    if (typeof window.openLoginPrompt === 'function') {
+      window.openLoginPrompt();
+      return;
+    }
+    signInWithGoogleFlow(event);
+  });
+  console.log('[firebase-bootstrap] login handler attached');
 
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', signOutFlow, { capture: true });
-  }
+  profileBtn?.addEventListener('click', () => openProfileMenu());
+  logoutBtn?.addEventListener('click', (event) => {
+    closeProfileMenu();
+    signOutFlow(event);
+  }, { capture: true });
+  saveNameBtn?.addEventListener('click', saveProfileDisplayName);
+  avatarPicker?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-avatar-type]');
+    if (!btn || btn.disabled) return;
+    saveProfileAvatarType(btn.dataset.avatarType);
+  });
+
+  profileModal?.querySelectorAll('[data-close-modal="profile"]').forEach((el) => {
+    el.addEventListener('click', closeProfileMenu);
+  });
 
   window.__authSignOut = signOutFlow;
+  window.__authSignInGoogle = signInWithGoogleFlow;
 }
 
 async function bootstrap() {
@@ -471,9 +701,10 @@ async function bootstrap() {
     hostname: location.hostname,
   });
 
-  setBodyMode('auth');
+  document.body.classList.add('body-app');
   bindAuthUi();
-  gate.patch({ authLoading: true, isLoggingIn: false, dataLoading: false, isLoggingOut: false });
+  syncAuthUi();
+  patchAuthState({ authLoading: true, isLoggingIn: false, dataLoading: false, isLoggingOut: false });
 
   try {
     await AuthService.init(handleAuthChange);
@@ -481,15 +712,11 @@ async function bootstrap() {
 
     if (!initialAuthResolved) {
       initialAuthResolved = true;
-      gate.patch({ authLoading: false });
-    }
-
-    if (!AuthService.isLoggedIn() && !gate.getState().appReady) {
-      gate.resetForGuest();
+      patchAuthState({ authLoading: false });
     }
   } catch (err) {
     console.error('[firebase-bootstrap] AuthService.init failed:', err?.code, err?.message, err);
-    gate.patch({ authLoading: false, isLoggingIn: false, dataLoading: false });
+    patchAuthState({ authLoading: false, isLoggingIn: false, dataLoading: false });
     showAuthError(formatAuthError(err));
     setGoogleButtonEnabled(false);
     throw err;
@@ -502,28 +729,37 @@ async function bootstrap() {
     AuthService,
     FirestoreUserService,
     FirestoreIngredientService,
+    FirestoreUserDataSync,
     AnalysisQuotaService,
     refreshHeaderQuota,
     isConfigured: isFirebaseConfigured(),
-    getAuthGateState: () => gate.getState(),
+    getAuthGateState: () => ({ ...authState }),
   };
+
+  if (isFirebaseConfigured()) {
+    startPublicRecipesSync();
+  }
 
   window.dispatchEvent(new Event('firebase-ready'));
   console.log('[firebase-bootstrap] ready');
 }
 
 window.addEventListener('auth-error', (e) => {
-  if (e.detail) {
-    gate.patch({ isLoggingIn: false, authLoading: false });
+  if (e.detail && !isIgnorableAuthNoise(e.detail?.message)) {
+    patchAuthState({ isLoggingIn: false, authLoading: false });
     showAuthError(e.detail);
   }
 });
 
+window.addEventListener('ui-modal-change', () => {
+  syncAuthUi();
+});
+
 window.addEventListener('error', (event) => {
+  if (isIgnorableAuthNoise(event.message)) return;
   const file = event.filename || '';
   if (file.includes('firebase') || file.includes('auth')) {
     console.error('[firebase-bootstrap] script error:', event.message, file, event.error);
-    showAuthError({ code: 'auth/script-error' });
   }
 });
 

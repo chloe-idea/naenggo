@@ -8,10 +8,16 @@ export const FREE_ANALYSIS_LIMIT = 5;
 /** 논리 컬렉션 이름 (문서·팀 커뮤니케이션용) */
 export const Collection = {
   USERS: 'users',
+  PUBLIC_RECIPES: 'publicRecipes',
   RECIPES: 'recipes',
+  MY_RECIPES: 'myRecipes',
+  MEAL_PLANS: 'mealPlans',
+  MEAL_CALENDAR: 'mealCalendar',
+  SHOPPING: 'shopping',
+  SETTINGS: 'settings',
+  INGREDIENTS: 'ingredients',
   FRIDGES: 'fridges',
   FRIDGE_ITEMS: 'items',
-  INGREDIENTS: 'ingredients',
   MEAL_LOGS: 'mealLogs',
   SHOPPING_LISTS: 'shoppingLists',
   SHOPPING_ITEMS: 'items',
@@ -156,6 +162,31 @@ export function userIngredientsPath(uid) {
   return `${userPath(uid)}/${Collection.INGREDIENTS}`;
 }
 
+export function userMyRecipesPath(uid) {
+  return `${userPath(uid)}/${Collection.MY_RECIPES}`;
+}
+
+export function userMealPlansPath(uid) {
+  return `${userPath(uid)}/${Collection.MEAL_PLANS}`;
+}
+
+export function userMealCalendarPath(uid) {
+  return `${userPath(uid)}/${Collection.MEAL_CALENDAR}`;
+}
+
+export function userShoppingPath(uid) {
+  return `${userPath(uid)}/${Collection.SHOPPING}`;
+}
+
+export function userSettingsPath(uid) {
+  return `${userPath(uid)}/${Collection.SETTINGS}`;
+}
+
+export function publicRecipePath(recipeId) {
+  return `${Collection.PUBLIC_RECIPES}/${recipeId}`;
+}
+
+/** @deprecated mealCalendar 서브컬렉션 사용 */
 export function userMealLogsPath(uid) {
   return `${userPath(uid)}/${Collection.MEAL_LOGS}`;
 }

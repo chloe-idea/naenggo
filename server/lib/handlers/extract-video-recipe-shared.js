@@ -2,6 +2,17 @@ import {
   assertCanUseAnalysis,
   recordAnalysisUsage,
 } from '../analysis-quota.js';
+import {
+  OPENAI_ERROR_CODES,
+  resolveOpenAiHttpStatus,
+  toOpenAiErrorPayload,
+} from '../openai-errors.js';
+import {
+  buildExtractDebugPayload,
+  logAnalysisContextDebug,
+  logExtractFailure,
+  resolveExtractFailure,
+} from '../video-extract-debug.js';
 
 /**
  * YouTube / Instagram 등 플랫폼 공통 레시피 추출 핸들러
@@ -75,6 +86,8 @@ export async function handleExtractVideoRecipe({
       userInputs,
     });
 
+    logAnalysisContextDebug(context);
+
     try {
       await assertCanUseAnalysis({ userId: trimmedUserId, idToken: token });
     } catch (limitErr) {
@@ -102,16 +115,44 @@ export async function handleExtractVideoRecipe({
     try {
       recipe = await analyzeRecipe(context);
     } catch (aiErr) {
+      const failure = resolveExtractFailure(aiErr, context);
+      logExtractFailure(aiErr, context, {
+        openaiStatus: aiErr?.httpStatus,
+        openaiCode: aiErr?.openaiCode,
+      });
+      console.error('[extract-video-recipe] analyzeRecipe failed:', {
+        failureReason: failure.code,
+        failureReasonLabel: failure.label,
+        code: aiErr?.code,
+        message: aiErr?.message,
+        httpStatus: aiErr?.httpStatus,
+        openaiCode: aiErr?.openaiCode,
+        openaiMessage: aiErr?.openaiMessage,
+        contentAvailability: aiErr?.contentAvailability || null,
+      });
+      console.error(aiErr);
+
+      const debug = buildExtractDebugPayload({
+        context,
+        youtubeContent: context.platform === 'youtube' ? platformContent : null,
+        promptPreview: aiErr?.openaiPromptPreview || null,
+        openaiResponsePreview: aiErr?.openaiResponsePreview || null,
+        failure,
+      });
+
       if (aiErr.fallback) {
         return {
           status: 422,
           body: {
             success: false,
-            error: aiErr.code || 'EXTRACTION_FAILED',
-            message: aiErr.message,
+            error: aiErr.failureReason || aiErr.code || 'EXTRACTION_FAILED',
+            message: failure.userMessage,
+            failureReason: failure.code,
+            failureReasonLabel: failure.label,
             fallback: true,
             warning: context.autoExtractFailed ? autoExtractWarning : null,
             infoHint: infoHint || context.infoHint || null,
+            debug,
           },
         };
       }
@@ -119,7 +160,11 @@ export async function handleExtractVideoRecipe({
     }
 
     const aiUsage = await recordAnalysisUsage({ userId: trimmedUserId, idToken: token });
-    const warning = context.autoExtractFailed ? autoExtractWarning : null;
+    const warnings = [
+      context.autoExtractFailed ? autoExtractWarning : null,
+      recipe.extractionWarning || null,
+    ].filter(Boolean);
+    const warning = warnings.length ? warnings.join(' ') : null;
 
     return {
       status: 200,
@@ -128,12 +173,18 @@ export async function handleExtractVideoRecipe({
         ...recipe,
         aiUsage,
         warning,
+        extractionWarning: recipe.extractionWarning || null,
         infoHint: infoHint || context.infoHint || null,
         pipelineSteps: platformContent?.pipelineSteps || null,
       },
     };
   } catch (err) {
-    console.error('[extract-video-recipe]', err.code || err.message, err.details || '');
+    console.error('[extract-video-recipe]', {
+      code: err.code,
+      message: err.message,
+      stack: err.stack,
+      details: err.details,
+    });
 
     if (err.code === 'ANALYSIS_LIMIT_EXCEEDED' || err.code === 'DAILY_LIMIT_EXCEEDED') {
       return {
@@ -154,13 +205,22 @@ export async function handleExtractVideoRecipe({
       };
     }
 
-    if (err.code === 'MISSING_OPENAI_KEY') {
+    if (OPENAI_ERROR_CODES.has(err.code)) {
+      const failure = resolveExtractFailure(err, null);
       return {
-        status: 503,
+        status: resolveOpenAiHttpStatus(err),
         body: {
           success: false,
-          error: err.code,
-          message: '서버 AI 설정이 완료되지 않았습니다. 관리자에게 문의해 주세요.',
+          error: err.failureReason || err.code,
+          message: err.message,
+          failureReason: failure.code,
+          failureReasonLabel: failure.label,
+          ...toOpenAiErrorPayload(err),
+          debug: buildExtractDebugPayload({
+            promptPreview: err.openaiPromptPreview || null,
+            openaiResponsePreview: err.openaiResponsePreview || err.details?.slice?.(0, 500) || null,
+            failure,
+          }),
         },
       };
     }

@@ -10,12 +10,20 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    // users/{uid} 및 하위 컬렉션 (ingredients, mealLogs 등)
-    match /users/{userId}/{document=**} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    // 커뮤니티 공개 레시피 — 누구나 읽기, 작성자만 쓰기
+    match /publicRecipes/{recipeId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.isPublic == true;
+      allow update: if isSignedIn()
+        && resource.data.authorId == request.auth.uid
+        && request.resource.data.authorId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.authorId == request.auth.uid;
     }
 
-    // users/{uid} 프로필 문서 — freeAnalysisRemaining 서버 전용 필드 보호
+    // users/{uid} 프로필 문서
     match /users/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
@@ -24,6 +32,31 @@ service cloud.firestore {
           || !('freeAnalysisRemaining' in resource.data)
           || request.resource.data.freeAnalysisRemaining == resource.data.freeAnalysisRemaining);
       allow delete: if false;
+    }
+
+    // 개인 서브컬렉션 — 로그인 사용자 본인만 (top-level match)
+    match /users/{uid}/ingredients/{ingredientId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/myRecipes/{recipeId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/mealPlans/{planId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/mealCalendar/{logId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/shopping/{recordId} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/settings/{settingId} {
+      allow read, write: if isOwner(uid);
     }
   }
 }

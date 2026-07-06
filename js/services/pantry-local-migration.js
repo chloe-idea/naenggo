@@ -1,6 +1,6 @@
 /**
  * naengjanggo_v2_pantry localStorage → Firestore users/{uid}/ingredients 일회성 마이그레이션
- * 마이그레이션 완료 후 localStorage 키는 완전히 제거합니다.
+ * 마이그레이션 후 localStorage 키는 제거합니다.
  */
 import { getDocs } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 
@@ -36,24 +36,12 @@ export function readLegacyPantryFromLocalStorage() {
   return items.filter((item) => String(item.name || '').trim());
 }
 
-export function purgePantryLocalStorage() {
-  for (const key of PANTRY_LOCAL_STORAGE_KEYS) {
-    try {
-      localStorage.removeItem(key);
-    } catch (err) {
-      console.warn('[PantryMigration] removeItem failed:', key, err);
-    }
-  }
-  console.log('[PantryMigration] localStorage pantry keys removed');
-}
-
 export async function migrateLegacyPantryToFirestore(FirestoreIngredientService, uid) {
   if (!uid || !FirestoreIngredientService) return { migrated: 0, purged: false };
 
   const legacyItems = readLegacyPantryFromLocalStorage();
   if (!legacyItems.length) {
-    purgePantryLocalStorage();
-    return { migrated: 0, purged: true };
+    return { migrated: 0, purged: false };
   }
 
   const col = FirestoreIngredientService.ingredientsCollectionRef?.(uid);
@@ -72,9 +60,8 @@ export async function migrateLegacyPantryToFirestore(FirestoreIngredientService,
   }
 
   if (existingCount > 0) {
-    purgePantryLocalStorage();
-    console.log('[PantryMigration] Firestore already has ingredients — localStorage purged only');
-    return { migrated: 0, purged: true };
+    console.log('[PantryMigration] Firestore already has ingredients — skip migration');
+    return { migrated: 0, purged: false };
   }
 
   let migrated = 0;
@@ -88,7 +75,13 @@ export async function migrateLegacyPantryToFirestore(FirestoreIngredientService,
     }
   }
 
-  purgePantryLocalStorage();
   console.log('[PantryMigration] complete, migrated:', migrated);
-  return { migrated, purged: true };
+  for (const key of PANTRY_LOCAL_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+  return { migrated, purged: migrated > 0 };
 }

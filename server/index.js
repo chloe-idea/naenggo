@@ -2,10 +2,13 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import extractVideoRecipeRouter from './routes/extract-video-recipe.js';
 import extractYoutubeRecipeRouter from './routes/extract-youtube-recipe.js';
 import extractInstagramRecipeRouter from './routes/extract-instagram-recipe.js';
 import aiUsageRouter from './routes/ai-usage.js';
+import openaiHealthRouter from './routes/openai-health.js';
 import { getFirebaseAdminStatus } from './lib/firebase-admin.js';
+import { describeOpenAiKeyConfig, logOpenAiKeyConfig } from './lib/openai-config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -17,9 +20,11 @@ const PORT = Number(process.env.PORT) || 8765;
 
 app.use(express.json({ limit: '32kb' }));
 
+app.use('/api', extractVideoRecipeRouter);
 app.use('/api', extractYoutubeRecipeRouter);
 app.use('/api', extractInstagramRecipeRouter);
 app.use('/api', aiUsageRouter);
+app.use('/api', openaiHealthRouter);
 
 app.use(express.static(ROOT, {
   index: 'index.html',
@@ -32,7 +37,7 @@ app.use(express.static(ROOT, {
 }));
 
 app.listen(PORT, '0.0.0.0', () => {
-  const hasKey = Boolean(process.env.OPENAI_API_KEY);
+  const openAiInfo = describeOpenAiKeyConfig();
   const firebaseStatus = getFirebaseAdminStatus();
   const firebaseLabel = {
     'configured (json)': '설정됨 (JSON)',
@@ -46,10 +51,15 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  냉장GO 서버 (정적 + API)');
   console.log('============================================');
   console.log(`  http://localhost:${PORT}`);
-  console.log(`  API: POST /api/extract-youtube-recipe`);
+  console.log(`  API: POST /api/extract-video-recipe  (통합 — 권장)`);
+  console.log(`       POST /api/extract-youtube-recipe (레거시 alias)`);
   console.log(`       POST /api/extract-instagram-recipe`);
   console.log(`       GET  /api/ai-usage?userId=...`);
-  console.log(`  OpenAI: ${hasKey ? '설정됨' : '⚠️  OPENAI_API_KEY 미설정 (.env 확인)'}`);
+  console.log(`       GET  /api/openai-health`);
+  console.log(`  OpenAI: ${openAiInfo.present ? '설정됨' : '⚠️  OPENAI_API_KEY 미설정 (.env 확인)'}`);
+  if (openAiInfo.present) {
+    logOpenAiKeyConfig('startup');
+  }
   console.log(`  Firebase Admin: ${firebaseLabel}`);
   console.log('============================================');
   console.log('');

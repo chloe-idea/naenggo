@@ -1,3 +1,20 @@
+import { createOpenAiHttpError } from './openai-errors.js';
+import { getOpenAiApiKey, getOpenAiEndpoint, getOpenAiModel } from './openai-config.js';
+import {
+  classifyMissingTextFailure,
+  logOpenAiPromptDebug,
+  logOpenAiResponseDebug,
+  summarizeContentAvailability,
+} from './video-extract-debug.js';
+import {
+  looksLikeRecipeText,
+  logExtractTextPreview,
+  buildFullCombinedText,
+  shouldRetryRecipeExtraction,
+} from './video-text-priority.js';
+import { VIDEO_EXTRACT_UI } from './video-pipeline/constants.js';
+import { logVideoExtractPipeline } from './video-pipeline/debug.js';
+
 const VALID_CATEGORIES = new Set([
   'korean', 'western', 'japanese', 'chinese', 'diet', 'high-protein',
 ]);
@@ -9,9 +26,12 @@ const PLATFORM_LABELS = {
   tiktok: 'TikTok',
 };
 
-function buildSystemPrompt(platform = 'youtube') {
+function buildSystemPrompt(platform = 'youtube', { strict = true } = {}) {
   const label = PLATFORM_LABELS[platform] || '영상';
-  return `당신은 요리 레시피 추출 전문가입니다. ${label} URL, 제목, 설명글, 자막/캡션, 사용자 입력 텍스트에서 레시피만 추출하세요.
+  const notARecipeRule = strict
+    ? '음악·예능·브이로그 등 요리와 전혀 무관한 영상일 때만 error 필드에 "NOT_A_RECIPE"를 넣으세요.'
+    : 'error 필드를 사용하지 마세요. 요리/레시피 영상으로 보이면 재료·조리 순서를 최대한 추출하세요.';
+  return `당신은 요리 레시피 추출 전문가입니다. ${label} URL, 제목, 설명글, 자막/캡션, 사용자 입력 텍스트에서 레시피를 추출하세요.
 반드시 JSON 객체 하나만 반환하세요. 키:
 - title (문자열, 레시피 이름)
 - ingredients (문자열 배열, 필수 재료)
@@ -23,7 +43,9 @@ function buildSystemPrompt(platform = 'youtube') {
 - category ("korean"|"western"|"japanese"|"chinese"|"diet"|"high-protein")
 
 원문 전체를 저장하지 말고 요약된 레시피 정보만 추출하세요.
-레시피 정보가 전혀 없으면 error 필드에 "NOT_A_RECIPE"를 넣으세요.`;
+설명/자막이 구조화되어 있지 않아도 요리 관련 내용이면 재료·조리 순서를 추론해 채우세요.
+제목만 요리명이어도 일반적인 재료·조리 순서를 합리적으로 추정할 수 있습니다.
+${notARecipeRule}`;
 }
 
 function cleanStringArray(value) {
@@ -60,42 +82,54 @@ function buildPromptContent(context) {
     extractedTranscript,
     extractedCaption,
     userText,
+    textSource,
+    combinedText,
   } = context;
 
   const platformLabel = PLATFORM_LABELS[platform] || '영상';
-  const captionBlock = extractedCaption && extractedCaption !== extractedDescription
-    ? `추출된 캡션:\n${extractedCaption.slice(0, 8000)}`
-    : '';
+  const descriptionText = String(extractedDescription || '').trim();
+  const captionText = String(extractedCaption || '').trim();
+  const metadataText = [descriptionText, captionText].filter(Boolean).join('\n\n').trim();
+  const fullCombinedText = String(combinedText || '').trim()
+    || buildFullCombinedText({
+      title,
+      description: descriptionText,
+      caption: captionText,
+      transcript: extractedTranscript,
+      userText,
+    });
+  const preferDescription = textSource === 'description'
+    || textSource === 'description-fallback'
+    || looksLikeRecipeText(metadataText);
 
-  return [
-    `${platformLabel} URL: ${sourceUrl}`,
-    title ? `추출된 제목: ${title}` : '',
-    extractedDescription ? `추출된 설명글:\n${extractedDescription.slice(0, 6000)}` : '',
-    captionBlock,
-    extractedTranscript ? `추출된 자막/음성/화면 텍스트:\n${extractedTranscript.slice(0, 8000)}` : '',
-    userText ? `사용자 입력 설명글/캡션:\n${userText.slice(0, 8000)}` : '',
-  ].filter(Boolean).join('\n\n');
-}
+  const parts = [`${platformLabel} URL: ${sourceUrl}`];
 
-export async function analyzeVideoTextToRecipe(context) {
-  const {
-    platform = 'youtube',
-    sourceUrl,
-    title,
-    thumbnailUrl,
-  } = context;
-
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    const err = new Error('서버에 OpenAI API Key가 설정되지 않았습니다.');
-    err.code = 'MISSING_OPENAI_KEY';
-    throw err;
+  if (fullCombinedText) {
+    const label = preferDescription
+      ? '[최우선 — title+description+caption+transcript+사용자 입력 (description/metadata 우선)]'
+      : '[통합 텍스트 — title+description+caption+transcript+사용자 입력]';
+    parts.push(`${label}\n${fullCombinedText.slice(0, 12000)}`);
+  } else if (title) {
+    parts.push(`영상 제목(참고): ${title}`);
   }
 
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-  const endpoint = process.env.OPENAI_ENDPOINT || 'https://api.openai.com/v1/chat/completions';
-  const userContent = buildPromptContent(context);
+  return parts.filter(Boolean).join('\n\n');
+}
 
+/** OpenAI 호출 전 분석 가능한 텍스트가 있는지 확인 — 완전히 빈 경우만 거부 */
+export function hasAnalyzableText(context) {
+  const combined = String(context?.combinedText || '').trim();
+  if (combined.length > 0) return true;
+
+  const userText = String(context?.userText || '').trim();
+  const desc = String(context?.extractedDescription || '').trim();
+  const transcript = String(context?.extractedTranscript || '').trim();
+  const caption = String(context?.extractedCaption || '').trim();
+  const title = String(context?.title || '').trim();
+  return Boolean(userText || desc || transcript || caption || title);
+}
+
+async function requestOpenAiRecipe({ systemPrompt, userContent, apiKey, model, endpoint }) {
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -106,7 +140,7 @@ export async function analyzeVideoTextToRecipe(context) {
       model,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: buildSystemPrompt(platform) },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ],
       temperature: 0.2,
@@ -115,10 +149,12 @@ export async function analyzeVideoTextToRecipe(context) {
 
   if (!response.ok) {
     const body = await response.text();
-    const err = new Error(`OpenAI API 오류 (${response.status})`);
-    err.code = 'OPENAI_ERROR';
-    err.details = body.slice(0, 300);
-    throw err;
+    const httpErr = createOpenAiHttpError(response, body);
+    httpErr.failureReason = 'OPENAI_RESPONSE_FAILED';
+    httpErr.failureReasonLabel = 'OpenAI 응답 실패';
+    httpErr.openaiPromptPreview = userContent.slice(0, 500);
+    httpErr.openaiResponsePreview = body.slice(0, 500);
+    throw httpErr;
   }
 
   const data = await response.json();
@@ -126,27 +162,51 @@ export async function analyzeVideoTextToRecipe(context) {
   if (!content) {
     const err = new Error('OpenAI 응답이 비어 있습니다.');
     err.code = 'OPENAI_EMPTY';
+    console.error('[OpenAI] empty response:', { data });
     throw err;
   }
 
   let parsed;
   try {
     parsed = JSON.parse(content);
-  } catch {
+  } catch (parseErr) {
     const err = new Error('OpenAI 응답 JSON 파싱에 실패했습니다.');
     err.code = 'OPENAI_PARSE';
+    err.failureReason = 'OPENAI_RESPONSE_FAILED';
+    err.failureReasonLabel = 'OpenAI 응답 실패';
+    err.responseBody = content;
+    err.openaiPromptPreview = userContent.slice(0, 500);
+    err.openaiResponsePreview = content.slice(0, 500);
+    logOpenAiResponseDebug(content, null);
+    console.error('[OpenAI] JSON parse failed:', { content: content.slice(0, 500), parseErr });
     throw err;
   }
 
-  const fallbackHint = platform === 'instagram'
-    ? '릴스 캡션이나 설명글을 붙여넣으면 더 정확하게 정리해드릴게요.'
-    : '영상 설명글이나 캡션을 붙여넣으면 더 정확하게 정리해드릴게요.';
+  logOpenAiResponseDebug(content, parsed);
+  return { content, parsed };
+}
+
+function throwNotARecipeError({ userContent, content, parsed }) {
+  const err = new Error(VIDEO_EXTRACT_UI.FALLBACK_MSG);
+  err.code = 'NOT_A_RECIPE';
+  err.failureReason = 'OPENAI_NOT_A_RECIPE';
+  err.failureReasonLabel = '레시피 정보 부족';
+  err.openaiPromptPreview = userContent.slice(0, 500);
+  err.openaiResponsePreview = content.slice(0, 500);
+  err.fallback = true;
+  throw err;
+}
+
+function finalizeRecipeFromParsed(parsed, context, userContent, content) {
+  const {
+    platform = 'youtube',
+    sourceUrl,
+    title,
+    thumbnailUrl,
+  } = context;
 
   if (parsed.error === 'NOT_A_RECIPE') {
-    const err = new Error(`레시피 정보를 찾지 못했어요. ${fallbackHint}`);
-    err.code = 'NOT_A_RECIPE';
-    err.fallback = true;
-    throw err;
+    throwNotARecipeError({ userContent, content, parsed });
   }
 
   const recipe = normalizeRecipe(parsed, {
@@ -156,18 +216,129 @@ export async function analyzeVideoTextToRecipe(context) {
     sourcePlatform: platform,
   });
 
-  if (!recipe.ingredients.length || !recipe.steps.length) {
-    const err = new Error(
-      platform === 'instagram'
-        ? '레시피 재료나 조리 순서를 추출하지 못했어요. 릴스 캡션을 붙여넣어 주세요.'
-        : '레시피 재료나 조리 순서를 추출하지 못했어요. 영상 설명글이나 캡션을 붙여넣어 주세요.'
-    );
+  const parsedIngredientsCount = recipe.ingredients.length;
+  const parsedStepsCount = recipe.steps.length;
+
+  console.log('[YouTube Extract] parse result', {
+    videoId: context.videoId || null,
+    apiStatus: context.apiStatus || null,
+    titleLength: String(context.title || title || '').length,
+    descriptionLength: String(context.extractedDescription || '').length,
+    transcriptLength: String(context.extractedTranscript || '').length,
+    combinedTextLength: String(context.combinedText || '').length,
+    parsedIngredientsCount,
+    parsedStepsCount,
+  });
+
+  logVideoExtractPipeline({
+    phase: 'openai-parse',
+    platform: context.detectedPlatform || context.platform,
+    videoId: context.videoId,
+    apiStatus: context.apiStatus,
+    title: context.title || title,
+    description: context.extractedDescription,
+    captionText: context.extractedCaption,
+    transcriptText: context.extractedTranscript,
+    userPastedText: context.userText,
+    combinedText: context.combinedText,
+    parsedIngredientsCount,
+    parsedStepsCount,
+  });
+
+  if (parsedIngredientsCount === 0 && parsedStepsCount === 0) {
+    const err = new Error(VIDEO_EXTRACT_UI.FALLBACK_MSG);
     err.code = 'INCOMPLETE_RECIPE';
+    err.failureReason = 'INCOMPLETE_RECIPE';
+    err.failureReasonLabel = '레시피 정보 불완전';
+    err.openaiPromptPreview = userContent.slice(0, 500);
+    err.openaiResponsePreview = content.slice(0, 500);
     err.fallback = true;
     throw err;
   }
 
+  if (parsedIngredientsCount === 0 || parsedStepsCount === 0) {
+    recipe.extractionWarning = parsedIngredientsCount === 0
+      ? VIDEO_EXTRACT_UI.PARTIAL_INGREDIENTS
+      : VIDEO_EXTRACT_UI.PARTIAL_STEPS;
+  }
+
   return recipe;
+}
+
+export async function analyzeVideoTextToRecipe(context) {
+  const {
+    platform = 'youtube',
+    sourceUrl,
+    title,
+    thumbnailUrl,
+  } = context;
+
+  if (!hasAnalyzableText(context)) {
+    const failure = classifyMissingTextFailure(context);
+    const availability = summarizeContentAvailability(context);
+    console.warn('[OpenAI] analyzable text missing:', availability);
+    const err = new Error(failure.userMessage);
+    err.code = failure.code;
+    err.failureReason = failure.code;
+    err.failureReasonLabel = failure.label;
+    err.contentAvailability = availability;
+    err.fallback = true;
+    throw err;
+  }
+
+  const apiKey = getOpenAiApiKey();
+  if (!apiKey) {
+    const err = new Error(
+      '서버에 OpenAI API Key가 설정되지 않았습니다. Vercel 환경변수 OPENAI_API_KEY를 확인해 주세요.',
+    );
+    err.code = 'MISSING_OPENAI_KEY';
+    throw err;
+  }
+
+  const model = getOpenAiModel();
+  const endpoint = getOpenAiEndpoint();
+
+  logExtractTextPreview({
+    rawTitle: context.rawTitle || title,
+    rawDescription: context.rawDescription || context.extractedDescription,
+    combinedText: context.combinedText,
+    textSource: context.textSource,
+    phase: 'openai-analyze',
+  });
+
+  const userContent = buildPromptContent(context);
+  const systemPrompt = buildSystemPrompt(platform, { strict: true });
+
+  logOpenAiPromptDebug(systemPrompt, userContent);
+
+  console.log('[OpenAI:request] key fingerprint:', {
+    first10: apiKey.slice(0, 10),
+    last4: apiKey.slice(-4),
+    model,
+    endpoint,
+  });
+
+  let { content, parsed } = await requestOpenAiRecipe({
+    systemPrompt,
+    userContent,
+    apiKey,
+    model,
+    endpoint,
+  });
+
+  if (parsed.error === 'NOT_A_RECIPE' && shouldRetryRecipeExtraction(context)) {
+    console.warn('[OpenAI] NOT_A_RECIPE — 요리 신호 감지, 재시도(관대 모드)');
+    const retryPrompt = buildSystemPrompt(platform, { strict: false });
+    ({ content, parsed } = await requestOpenAiRecipe({
+      systemPrompt: retryPrompt,
+      userContent,
+      apiKey,
+      model,
+      endpoint,
+    }));
+  }
+
+  return finalizeRecipeFromParsed(parsed, context, userContent, content);
 }
 
 /** @deprecated analyzeVideoTextToRecipe 사용 */

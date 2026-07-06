@@ -1,9 +1,7 @@
 /**
- * Google 로그인 버튼 — ES module 실패 시에도 클릭이 동작하도록 보장 (non-module)
+ * 로그인 버튼 — ES module 실패 시에도 클릭이 동작하도록 보장 (non-module)
  */
 (function authUiBridge() {
-  const GOOGLE_LABEL = 'Google 로그인';
-
   function showErr(msg, hint) {
     const text = [msg, hint].filter(Boolean).join(' ');
     console.error('[auth-ui-bridge]', text);
@@ -15,11 +13,12 @@
   }
 
   function setLoading(on) {
-    const btn = document.getElementById('auth-google-btn');
+    const btn = document.getElementById('auth-login-btn');
     if (!btn) return;
+    const label = btn.querySelector('.header-login-btn__label');
     btn.disabled = on;
-    btn.textContent = on ? '로그인 중…' : GOOGLE_LABEL;
-    btn.classList.toggle('btn--loading', on);
+    btn.classList.toggle('header-login-btn--loading', on);
+    if (label) label.textContent = on ? '로그인 중…' : '로그인';
   }
 
   async function waitFirebase(timeoutMs) {
@@ -40,13 +39,13 @@
     throw new Error('Firebase Auth를 초기화하지 못했습니다. F12 콘솔 오류를 확인해 주세요.');
   }
 
-  async function handleGoogleClick(event) {
+  async function handleLoginClick(event) {
     if (event) {
       event.preventDefault();
       event.stopPropagation();
     }
 
-    console.log('[auth-ui-bridge] Google login clicked');
+    console.log('[auth-ui-bridge] login clicked');
     setLoading(true);
 
     const errEl = document.getElementById('auth-error');
@@ -96,15 +95,15 @@
   }
 
   function bind() {
-    const googleBtn = document.getElementById('auth-google-btn');
-    const logoutBtn = document.getElementById('auth-logout-btn');
+    const loginBtn = document.getElementById('auth-login-btn');
+    const logoutBtn = document.getElementById('profile-logout-btn');
 
-    if (!googleBtn) {
-      console.error('[auth-ui-bridge] #auth-google-btn not found');
+    if (!loginBtn) {
+      console.error('[auth-ui-bridge] #auth-login-btn not found');
       return;
     }
 
-    googleBtn.addEventListener('click', handleGoogleClick);
+    loginBtn.addEventListener('click', handleLoginClick);
     console.log('[auth-ui-bridge] click handler attached (guaranteed)');
 
     if (logoutBtn) {

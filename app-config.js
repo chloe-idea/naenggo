@@ -52,6 +52,7 @@
     },
     videoExtract: {
       apiBaseUrl,
+      videoRecipeApiUrl: buildApiUrl('/api/extract-video-recipe'),
       youtubeRecipeApiUrl: buildApiUrl('/api/extract-youtube-recipe'),
       instagramRecipeApiUrl: buildApiUrl('/api/extract-instagram-recipe'),
       aiUsageApiUrl: buildApiUrl('/api/ai-usage'),

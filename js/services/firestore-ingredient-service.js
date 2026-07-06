@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { auth, db } from '../firebase.js';
+import { sanitizeFirestorePayload } from './firestore-payload.js';
 
 const INGREDIENTS_COLLECTION = 'ingredients';
 
@@ -150,7 +151,10 @@ export const FirestoreIngredientService = {
     console.log('SAVE_TARGET: Firestore users/' + user.uid + '/ingredients');
 
     try {
-      const docRef = await addDoc(col, payload);
+      const docRef = await addDoc(
+        col,
+        sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'),
+      );
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', docRef.id);
       return { id: docRef.id, firestoreId: docRef.id, ...payload };
     } catch (error) {
@@ -179,7 +183,10 @@ export const FirestoreIngredientService = {
     if (!payload.name) throw new Error('재료명이 비어 있습니다.');
 
     try {
-      await updateDoc(ref, payload);
+      await updateDoc(
+        ref,
+        sanitizeFirestorePayload(payload, 'FirestoreIngredientService.updateIngredient'),
+      );
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', docId);
     } catch (error) {
       console.error('INGREDIENT_FIRESTORE_SAVE_FAILED', error);

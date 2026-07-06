@@ -1,11 +1,9 @@
 /**
- * Firebase Authentication (Google 로그인)
+ * Firebase Authentication (Google 로그인 — popup 전용)
  */
 import {
   onAuthStateChanged,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut as firebaseSignOut,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import {
@@ -18,22 +16,12 @@ import { formatAuthError, logAuthError } from './auth-errors.js';
 
 let currentUser = null;
 const listeners = new Set();
-let redirectChecked = false;
 
 function notifyListeners(user) {
   currentUser = user;
   listeners.forEach((fn) => {
     try { fn(user); } catch (err) { console.warn('[AuthService] listener error:', err); }
   });
-}
-
-function shouldUseRedirectFallback(err) {
-  const code = String(err?.code || '');
-  return [
-    'auth/popup-blocked',
-    'auth/popup-closed-by-user',
-    'auth/cancelled-popup-request',
-  ].includes(code);
 }
 
 export const AuthService = {
@@ -50,22 +38,10 @@ export const AuthService = {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log('[AuthService] auth state changed:', user ? user.email || user.uid : 'signed out');
+      if (user) currentUser = user;
+      else currentUser = null;
       notifyListeners(user);
     });
-
-    if (!redirectChecked) {
-      redirectChecked = true;
-      getRedirectResult(auth)
-        .then((redirectResult) => {
-          if (redirectResult?.user) {
-            console.log('[AuthService] Redirect login success:', redirectResult.user.email);
-          }
-        })
-        .catch((err) => {
-          const formatted = logAuthError('getRedirectResult failed', err);
-          window.dispatchEvent(new CustomEvent('auth-error', { detail: formatted }));
-        });
-    }
 
     return unsubscribe;
   },
@@ -100,16 +76,11 @@ export const AuthService = {
     try {
       const result = await signInWithPopup(authInstance, provider);
       console.log('[AuthService] signInWithPopup success:', result.user?.email);
+      currentUser = result.user;
+      notifyListeners(result.user);
       return result.user;
     } catch (err) {
       logAuthError('signInWithPopup failed', err);
-
-      if (shouldUseRedirectFallback(err)) {
-        console.log('[AuthService] signInWithRedirect fallback start');
-        await signInWithRedirect(authInstance, provider);
-        return null;
-      }
-
       const formatted = formatAuthError(err);
       const wrapped = new Error(formatted.message);
       wrapped.code = formatted.code;
@@ -121,6 +92,7 @@ export const AuthService = {
   async signOut() {
     if (!auth) return;
     console.log('[AuthService] signOut');
+    currentUser = null;
     await firebaseSignOut(auth);
   },
 
