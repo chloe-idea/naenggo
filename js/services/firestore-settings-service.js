@@ -22,7 +22,8 @@ function settingsDoc(uid) {
 
 const DEFAULT_SETTINGS = {
   currency: 'KRW',
-  grocery: { budget: '', items: {} },
+  monthlyFoodBudget: 0,
+  grocery: { budget: '', items: {}, manualItems: [] },
   savedRecipeIds: [],
 };
 
@@ -47,11 +48,13 @@ export const FirestoreSettingsService = {
         const data = snap.exists() ? snap.data() : {};
         onSettings?.({
           currency: data.currency || DEFAULT_SETTINGS.currency,
+          monthlyFoodBudget: Number(data.monthlyFoodBudget) || 0,
           grocery: {
             budget: data.grocery?.budget ?? '',
             items: data.grocery?.items && typeof data.grocery.items === 'object'
               ? data.grocery.items
               : {},
+            manualItems: Array.isArray(data.grocery?.manualItems) ? data.grocery.manualItems : [],
           },
           savedRecipeIds: Array.isArray(data.savedRecipeIds) ? data.savedRecipeIds : [],
         });
@@ -80,6 +83,10 @@ export const FirestoreSettingsService = {
 
   async saveCurrency(currency) {
     return this.saveSettings({ currency });
+  },
+
+  async saveMonthlyFoodBudget(monthlyFoodBudget) {
+    return this.saveSettings({ monthlyFoodBudget: Number(monthlyFoodBudget) || 0 });
   },
 
   async saveSavedRecipeIds(savedRecipeIds) {

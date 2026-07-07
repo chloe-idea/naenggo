@@ -27,6 +27,7 @@ const CONFIG = {
     MEALS: 'naengjanggo_v2_meals',
     SHOPPING: 'naengjanggo_v2_shopping',
     CURRENCY: 'naengjanggo_v2_currency',
+    MONTHLY_FOOD_BUDGET: 'naengjanggo_v2_monthly_food_budget',
     MEAL_PLAN: 'naengjanggo_v2_meal_plan',
     GROCERY: 'naengjanggo_v2_grocery',
     CLIENT_USER_ID: 'naengjanggo_v2_client_user_id',
@@ -85,7 +86,6 @@ function pantryItemEmoji(name) {
 const VIEW_TITLES = {
   main: '집에 있는 재료로 만들 수 있는 요리를 찾아보세요',
   'my-recipes': '나만의 레시피를 관리하세요',
-  community: '다른 사람들이 만든 레시피를 검색하고 저장해보세요.',
   pantry: '보유 재료를 상세 관리하세요',
   planner: '일주일 식단과 장보기 리스트를 준비하세요',
   calendar: '해먹은 음식을 기록하고 확인하세요',
@@ -1699,7 +1699,15 @@ const RecipeRepository = {
       || PublicRecipeRepository.getById(id);
   },
   getPublicRecipes() {
-    return [...BUILTIN_RECIPES, ...PublicRecipeRepository.getAll()];
+    return this.getHomeRecipes();
+  },
+  getHomeRecipes() {
+    const builtinIds = new Set(BUILTIN_RECIPES.map((r) => r.id));
+    const publicRecipes = PublicRecipeRepository.getAll().filter(
+      (r) => r.visibility === 'public' || r.isPublic !== false,
+    );
+    const dedupedPublic = publicRecipes.filter((r) => !builtinIds.has(r.id));
+    return [...BUILTIN_RECIPES, ...dedupedPublic];
   },
   getRecommendableRecipes() {
     return [...BUILTIN_RECIPES, ...this._userRecipes];
@@ -2047,16 +2055,26 @@ const MealPlanRepository = {
     this._plans = plans && typeof plans === 'object' ? plans : {};
   },
   get(date, slot) {
-    return this._plans?.[date]?.[slot] || { recipeId: '', name: '' };
+    const raw = this._plans?.[date]?.[slot] || {};
+    return {
+      recipeId: raw.recipeId || '',
+      name: raw.name || '',
+      memo: raw.memo || '',
+      recorded: Boolean(raw.recorded),
+    };
   },
   set(date, slot, data) {
     if (!this._plans[date]) this._plans[date] = {};
-    this._plans[date][slot] = {
+    const next = {
       recipeId: data.recipeId || '',
       name: data.name || '',
+      memo: data.memo || '',
+      recorded: Boolean(data.recorded),
     };
-    if (!this._plans[date][slot].recipeId && !this._plans[date][slot].name) {
+    if (!next.recipeId && !next.name) {
       delete this._plans[date][slot];
+    } else {
+      this._plans[date][slot] = next;
     }
     if (!Object.keys(this._plans[date]).length) delete this._plans[date];
     this.save();
@@ -2071,22 +2089,67 @@ const MealPlanRepository = {
 };
 
 const GroceryRepository = {
-  _state: { budget: '', items: {} },
+  _state: { budget: '', items: {}, manualItems: [] },
   load() {
     this.clearSession();
+    if (isGuestUser()) {
+      try {
+        const raw = localStorage.getItem(CONFIG.STORAGE.GROCERY);
+        if (raw) this.replaceState(JSON.parse(raw));
+      } catch {
+        // ignore corrupt guest grocery cache
+      }
+    }
     return this._state;
   },
   save() {
-    // 장보기 리스트 — localStorage 미사용
+    if (!isGuestUser()) return;
+    try {
+      localStorage.setItem(CONFIG.STORAGE.GROCERY, JSON.stringify(this._state));
+    } catch {
+      // ignore quota errors
+    }
   },
   clearSession() {
-    this._state = { budget: '', items: {} };
+    this._state = { budget: '', items: {}, manualItems: [] };
   },
   replaceState(state) {
     this._state = {
       budget: state?.budget ?? '',
       items: state?.items && typeof state.items === 'object' ? state.items : {},
+      manualItems: Array.isArray(state?.manualItems)
+        ? state.manualItems.map((item) => this._normalizeManualItem(item)).filter(Boolean)
+        : [],
     };
+  },
+  _normalizeManualItem(raw) {
+    const name = String(raw?.name || '').trim();
+    if (!name) return null;
+    const id = raw?.id || StorageAdapter.createId('grocery-item');
+    return {
+      id,
+      name,
+      quantity: String(raw?.quantity || '').trim(),
+      unit: String(raw?.unit || '').trim(),
+      price: raw?.price !== '' && raw?.price != null ? String(raw.price) : '',
+      createdAt: raw?.createdAt || new Date().toISOString(),
+    };
+  },
+  getManualItems() {
+    return [...(this._state.manualItems || [])];
+  },
+  addManualItem(data) {
+    const item = this._normalizeManualItem({
+      ...data,
+      id: StorageAdapter.createId('grocery-item'),
+      createdAt: new Date().toISOString(),
+    });
+    if (!item) return null;
+    this._state.manualItems.push(item);
+    const key = GroceryListService.manualItemKey(item.id);
+    this._state.items[key] = { checked: false, price: item.price };
+    this.save();
+    return item;
   },
   getMeta(key) { return this._state.items[key] || { checked: false, price: '' }; },
   setChecked(key, checked) {
@@ -2116,6 +2179,17 @@ const GROCERY_CATEGORIES = [
 ];
 
 const GroceryListService = {
+  manualItemKey(id) {
+    return `manual:${id}`;
+  },
+  formatManualDisplay(item) {
+    const name = String(item?.name || '').trim();
+    const quantity = String(item?.quantity || '').trim();
+    const unit = String(item?.unit || '').trim();
+    if (quantity && unit) return `${name} ${quantity}${unit}`;
+    if (quantity) return `${name} ${quantity}`;
+    return name;
+  },
   categorize(name) {
     const n = String(name || '');
     return GROCERY_CATEGORIES.find((c) => c.id === 'other' || c.test(n)) || GROCERY_CATEGORIES[GROCERY_CATEGORIES.length - 1];
@@ -2180,7 +2254,23 @@ const GroceryListService = {
     for (const cat of GROCERY_CATEGORIES) {
       grouped[cat.id].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     }
+    this.mergeManualItems(grouped);
     return grouped;
+  },
+  mergeManualItems(grouped) {
+    for (const item of GroceryRepository.getManualItems()) {
+      const cat = this.categorize(item.name);
+      grouped[cat.id].push({
+        key: this.manualItemKey(item.id),
+        name: this.formatManualDisplay(item),
+        count: 1,
+        manual: true,
+        manualId: item.id,
+      });
+    }
+    for (const cat of GROCERY_CATEGORIES) {
+      grouped[cat.id].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    }
   },
   estimateTotal(grouped) {
     let total = 0;
@@ -2391,8 +2481,8 @@ async function saveMealLogToStore(payload, editingId = null) {
   }
   const existing = editingId ? MealLogRepository.getAll().find((l) => l.id === editingId) : null;
   const merged = existing ? { ...existing, ...payload } : { ...payload, id: StorageAdapter.createId('meal') };
-  await getFirestoreUserDataSync().mealCalendar.saveLog(merged);
-  return merged;
+  const logId = await getFirestoreUserDataSync().mealCalendar.saveLog(merged);
+  return { ...merged, id: logId, firestoreId: logId };
 }
 
 async function deleteMealLogFromStore(logId) {
@@ -2451,19 +2541,29 @@ function markMealPlanLocalMutation() {
 }
 
 async function persistGroceryState() {
-  if (!isLoggedInAppUser()) {
-    notifyGuestPersonalDataNotPersisted('장보기 목록');
+  if (isGuestUser()) {
+    GroceryRepository.save();
     return;
   }
+  if (!isLoggedInAppUser()) return;
   await getFirestoreUserDataSync().settings.saveGroceryState({
     budget: GroceryRepository.getBudget(),
     items: GroceryRepository._state.items,
+    manualItems: GroceryRepository.getManualItems(),
   });
 }
 
 async function persistCurrencySetting() {
   if (!isLoggedInAppUser()) return;
   await getFirestoreUserDataSync().settings.saveCurrency(state.currency);
+}
+
+async function persistMonthlyFoodBudget() {
+  if (isLoggedInAppUser()) {
+    await getFirestoreUserDataSync().settings.saveMonthlyFoodBudget(state.monthlyFoodBudget);
+    return;
+  }
+  StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
 }
 
 async function persistSavedRecipeIds() {
@@ -2796,13 +2896,83 @@ const RecommendationService = {
   },
   reasonFor(result) {
     if (result.missing.length === 0 && result.substituted.length === 0) return '🔥 바로 가능';
-    if (result.missing.length === 1) return `🛒 ${result.missing[0]}만 있으면 가능`;
+    if (result.missing.length === 1) return `🛒 ${formatIngredientDisplay(result.missing[0])}만 있으면 가능`;
+    if (result.missing.length === 2) {
+      const names = result.missing.map((m) => formatIngredientDisplay(m));
+      return `🛒 ${names.join(', ')} 필요`;
+    }
+    if (result.missing.length > 2) {
+      const names = result.missing.slice(0, 2).map((m) => formatIngredientDisplay(m));
+      return `🛒 ${names.join(', ')} 외 ${result.missing.length - 2}개 필요`;
+    }
     if (result.expiryBoost > 0) return '⚠️ 임박 재료 활용';
     if (this.isHighProtein(result.recipe)) return '💪 고단백';
     if (this.isDiet(result.recipe)) return '🥗 다이어트';
     if (this.isSnack(result.recipe)) return '🍪 간식';
     if (Number(result.recipe.cookTime) <= 15) return '⏱️ 15분 이하';
     return '';
+  },
+  matchesHomeSearch(recipe, query) {
+    const q = normalizeIngredient(query);
+    if (!q) return true;
+    const categoryLabel = CATEGORY_MAP[recipe.category]?.tags?.join(' ') || '';
+    const haystack = [
+      recipe.name,
+      ...(recipe.ingredients || []).map(formatIngredientDisplay),
+      recipe.authorName,
+      recipe.category,
+      categoryLabel,
+    ].filter(Boolean).map(normalizeIngredient).join(' ');
+    return haystack.includes(q);
+  },
+  compareHomeResultsByDate(a, b) {
+    const dateA = a.recipe.publishedAt || a.recipe.createdAt || '';
+    const dateB = b.recipe.publishedAt || b.recipe.createdAt || '';
+    if (dateA !== dateB) return dateB.localeCompare(dateA);
+    return RecipeSaveCountRepository.getCount(b.recipe.id) - RecipeSaveCountRepository.getCount(a.recipe.id);
+  },
+  compareHomeResults(a, b) {
+    const tier = (r) => {
+      const missingCount = r.missing?.length ?? 0;
+      const subCount = r.substituted?.length ?? 0;
+      if (missingCount === 0 && subCount === 0) return 0;
+      if (missingCount === 1) return 1;
+      if (missingCount === 2) return 2;
+      return 3;
+    };
+    const tierDiff = tier(a) - tier(b);
+    if (tierDiff !== 0) return tierDiff;
+    if ((b.matchPercent || 0) !== (a.matchPercent || 0)) return (b.matchPercent || 0) - (a.matchPercent || 0);
+    if ((b.expiryBoost || 0) !== (a.expiryBoost || 0)) return (b.expiryBoost || 0) - (a.expiryBoost || 0);
+    return this.compareHomeResultsByDate(a, b);
+  },
+  recommendHome(recipes, { activeFilters = new Set(), query = '' } = {}) {
+    const names = this.getPantryNames();
+    const q = query.trim();
+    const hasPantry = names.length > 0;
+    const hasSearchMode = Boolean(q || activeFilters?.size);
+    const results = [];
+
+    for (const recipe of recipes) {
+      if (q && !this.matchesHomeSearch(recipe, q)) continue;
+      const analysis = MatchService.analyze(names, recipe.ingredients);
+      const result = {
+        recipe,
+        ...analysis,
+        expiryBoost: this.getExpiryBoost(analysis.matchedPantryNames),
+      };
+      if (hasPantry && !hasSearchMode && analysis.matchPercent <= 0) continue;
+      if (activeFilters?.size && !this.matchesFilters(result, activeFilters)) continue;
+      results.push({
+        ...result,
+        recommendationReason: hasPantry ? this.reasonFor(result) : '',
+      });
+    }
+
+    if (hasPantry || hasSearchMode) {
+      return results.sort((a, b) => this.compareHomeResults(a, b));
+    }
+    return results.sort((a, b) => this.compareHomeResultsByDate(a, b));
   },
   matchesFilters(result, activeFilters) {
     if (!activeFilters?.size) return true;
@@ -2861,7 +3031,7 @@ const ExpiryService = {
 
 // ===== State & DOM =====
 const state = {
-  view: 'main', filters: new Set(), communityFilters: new Set(), menuSearch: '', communitySearch: '',
+  view: 'main', filters: new Set(), menuSearch: '',
   editingRecipeId: null, editingPantryId: null,
   editingMealId: null, editingShoppingId: null, formImage: null, mealFormImage: null, isComposing: false, detailRecipeId: null,
   calendarYear: new Date().getFullYear(), calendarMonth: new Date().getMonth(),
@@ -2869,6 +3039,7 @@ const state = {
   currency: CURRENCY_OPTIONS[StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)]
     ? StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)
     : DEFAULT_CURRENCY,
+  monthlyFoodBudget: Number(StorageAdapter.get(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, '')) || 0,
   shoppingRecipePicker: null,
   pantryRecipePicker: null,
   recipeFormTab: 'manual',
@@ -2888,10 +3059,9 @@ const $ = (s) => document.querySelector(s);
 const dom = {
   headerSubtitle: $('#header-subtitle'),
   headerBrand: $('#header-brand'),
-  headerCommunityTitle: $('#header-community-title'),
   toast: $('#toast'),
   views: {
-    main: $('#view-main'), 'my-recipes': $('#view-my-recipes'), community: $('#view-community'),
+    main: $('#view-main'), 'my-recipes': $('#view-my-recipes'),
     pantry: $('#view-pantry'), planner: $('#view-planner'), calendar: $('#view-calendar'),
   },
   plannerRange: $('#planner-range'), plannerAutoBtn: $('#planner-auto-btn'), plannerGrid: $('#planner-grid'),
@@ -2902,8 +3072,13 @@ const dom = {
   plannerRecipeSearch: $('#planner-recipe-search'), plannerRecipeTabs: $('#planner-recipe-tabs'),
   plannerRecipeList: $('#planner-recipe-list'), plannerRecipeEmpty: $('#planner-recipe-empty'),
   martModeToggle: $('#mart-mode-toggle'), groceryCompleteBtn: $('#grocery-complete-btn'),
+  groceryAddItemBtn: $('#grocery-add-item-btn'),
   groceryBudget: $('#grocery-budget'), groceryBudgetSummary: $('#grocery-budget-summary'),
   groceryList: $('#grocery-list'), groceryEmpty: $('#grocery-empty'),
+  groceryItemModal: $('#grocery-item-modal'), groceryItemModalForm: $('#grocery-item-modal-form'),
+  groceryItemModalTitle: $('#grocery-item-modal-title'), groceryItemName: $('#grocery-item-name'),
+  groceryItemQuantity: $('#grocery-item-quantity'), groceryItemUnit: $('#grocery-item-unit'),
+  groceryItemPrice: $('#grocery-item-price'),
   tabItems: document.querySelectorAll('.tab-bar__item'),
   openPantryManageBtn: $('#open-pantry-manage-btn'),
   quickForm: $('#quick-ingredient-form'), quickInput: $('#quick-ingredient-input'),
@@ -2921,10 +3096,6 @@ const dom = {
   myRecipesList: $('#my-recipes-list'), myRecipesCount: $('#my-recipes-count'), myRecipesEmpty: $('#my-recipes-empty'),
   myRecipesGuestHint: $('#my-recipes-guest-hint'),
   savedList: $('#saved-recipes-list'), savedCount: $('#saved-recipes-count'), savedEmpty: $('#saved-recipes-empty'),
-  communityList: $('#community-list'), communityEmpty: $('#community-empty'),
-  communitySearchInput: $('#community-search-input'), communityEmptyTitle: $('#community-empty-title'),
-  communityFilterBtn: $('#community-filter-btn'), communityFilterPanel: $('#community-filter-panel'),
-  communityFilterChips: $('#community-filter-chips'),
   pantryList: $('#pantry-list'), pantryCount: $('#pantry-manage-count'), pantryEmpty: $('#pantry-empty'),
   openPantryAdd: $('#open-pantry-add-btn'), openRecipeForm: $('#open-recipe-form-btn'),
   openVideoRecipeFormBtn: $('#open-video-recipe-form-btn'),
@@ -2933,7 +3104,9 @@ const dom = {
   calendarPrev: $('#calendar-prev'), calendarNext: $('#calendar-next'),
   calendarWeekdays: $('#calendar-weekdays'), calendarDays: $('#calendar-days'),
   calendarDaySection: $('#calendar-day-section'), calendarDayLabel: $('#calendar-day-label'),
+  calendarDaySheet: $('#calendar-day-sheet'), calendarDaySheetTitle: $('#calendar-day-sheet-title'),
   calendarDayList: $('#calendar-day-list'), calendarDayEmpty: $('#calendar-day-empty'),
+  monthlyFoodBudget: $('#monthly-food-budget'),
   openMealAddBtn: $('#open-meal-add-btn'), openShoppingAddBtn: $('#open-shopping-add-btn'),
   mealModal: $('#meal-modal'), mealModalForm: $('#meal-modal-form'), mealModalTitle: $('#meal-modal-title'),
   mealDate: $('#meal-date'), mealTypeField: $('#meal-type-field'), mealTypeTabs: $('#meal-type-tabs'),
@@ -3130,7 +3303,7 @@ function closeImageLightbox() {
   dom.imageLightbox.hidden = true;
   dom.imageLightbox.setAttribute('aria-hidden', 'true');
   dom.imageLightboxImg.removeAttribute('src');
-  const modalOpen = [dom.recipeModal, dom.recipeFormModal, dom.pantryModal, dom.mealModal, dom.shoppingModal]
+  const modalOpen = [dom.recipeModal, dom.recipeFormModal, dom.pantryModal, dom.mealModal, dom.shoppingModal, dom.groceryItemModal]
     .some((m) => m && !m.hidden);
   if (!modalOpen) document.body.style.overflow = '';
 }
@@ -3176,25 +3349,28 @@ function compressImage(file) {
 }
 
 // ===== Navigation =====
+function isPublicCommunityRecipe(recipe) {
+  return recipe?.source === 'user' && (recipe.visibility === 'public' || recipe.isPublic === true);
+}
+
 function switchView(view) {
+  if (view === 'community') view = 'main';
+  const prevView = state.view;
   state.view = view;
-  Object.entries(dom.views).forEach(([k, el]) => { el.hidden = k !== view; });
+  Object.entries(dom.views).forEach(([k, el]) => { if (el) el.hidden = k !== view; });
   dom.tabItems.forEach((tab) => tab.classList.toggle('tab-bar__item--active', tab.dataset.view === view));
-  document.body.classList.toggle('view--community', view === 'community');
   document.body.classList.toggle('view--main', view === 'main');
-  if (dom.headerCommunityTitle) dom.headerCommunityTitle.hidden = view !== 'community';
+  document.body.classList.toggle('view--calendar', view === 'calendar');
+  if (prevView === 'main' && view !== 'main') toggleHomeFilterPanel(false);
   if (dom.headerSubtitle) {
-    if (view === 'community') {
-      dom.headerSubtitle.hidden = true;
-    } else {
-      dom.headerSubtitle.hidden = false;
-      dom.headerSubtitle.textContent = VIEW_TITLES[view] || VIEW_TITLES.main;
-    }
+    dom.headerSubtitle.hidden = false;
+    dom.headerSubtitle.textContent = VIEW_TITLES[view] || VIEW_TITLES.main;
   }
   renderCurrentView();
 }
 
 function navigate(view) {
+  if (view === 'community') view = 'main';
   switchView(view);
   closeAllModals();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3219,7 +3395,6 @@ function renderCurrentView() {
   switch (state.view) {
     case 'main': renderHome(); break;
     case 'my-recipes': renderMyRecipes(); break;
-    case 'community': renderCommunity(); break;
     case 'pantry': renderPantryManage(); break;
     case 'planner': renderPlanner(); break;
     case 'calendar': renderCalendar(); break;
@@ -3312,12 +3487,15 @@ function recipeOriginHTML(recipe, { compact = false } = {}) {
 }
 
 // ===== Render: Recipe Card =====
-function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryNames, exact, substituted, recommendationReason, showAuthor, showVisibility, showCardSave, showCardMealLog, showCardFork, showSaveCount, hideMatchBadge, hideOrigin, hideReason, hideExpiryHint, showMissingLine }) {
+function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryNames, exact, substituted, recommendationReason, showAuthor, showVisibility, showCardSave, showCardMealLog, showCardFork, showSaveCount, hideMatchBadge, hideOrigin, hideReason, hideExpiryHint, showMissingLine, showCommunityBadge }) {
   const badge = !hideMatchBadge && matchPercent != null ? (matchPercent >= 70 ? 'high' : matchPercent >= 40 ? 'mid' : 'low') : null;
   const img = recipeCardImageHTML(recipe);
   const soon = !hideExpiryHint && matchedPantryNames?.length && RecommendationService.getExpiryBoost(matchedPantryNames) > 0;
   const saved = SavedRecipeRepository.isSaved(recipe.id);
   const saveCount = showSaveCount ? RecipeSaveCountRepository.getCount(recipe.id) : 0;
+  const communityBadge = showCommunityBadge
+    ? '<span class="recipe-card__community-badge">🌍 Community</span>'
+    : '';
   let headerAction = '';
   if (showCardSave) {
     headerAction = `<button type="button" class="recipe-card__action-btn${saved ? ' recipe-card__action-btn--saved' : ''}" data-save-id="${esc(recipe.id)}" data-auth-required aria-label="레시피 저장">${saved ? '⭐ 저장됨' : '☆ 저장'}</button>`;
@@ -3337,7 +3515,10 @@ function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryN
       <div class="recipe-card__image-wrap">${img}</div>
       <div class="recipe-card__body">
         <div class="recipe-card__top">
-          <span class="recipe-card__name">${esc(recipe.name)}</span>
+          <div class="recipe-card__title-wrap">
+            <span class="recipe-card__name">${esc(recipe.name)}</span>
+            ${communityBadge}
+          </div>
           <div class="recipe-card__header-end">
             ${headerAction || forkBtn ? `<div class="recipe-card__actions-row">${headerAction}${forkBtn}</div>` : ''}
             ${badge ? `<span class="match-badge match-badge--${badge}">${matchPercent}%</span>` : ''}
@@ -3472,29 +3653,34 @@ function renderHome() {
   const names = RecommendationService.getPantryNames();
   const query = state.menuSearch.trim();
   const hasSearchMode = Boolean(query || state.filters.size);
-  dom.emptyState.hidden = names.length > 0 || hasSearchMode;
+  const homeRecipes = RecipeRepository.getHomeRecipes();
+
+  dom.emptyState.hidden = names.length > 0 || hasSearchMode || homeRecipes.length > 0;
   dom.noResults.hidden = true;
   dom.recipeList.innerHTML = '';
   if (dom.homeTodayHero) {
     dom.homeTodayHero.hidden = true;
     dom.homeTodayHero.innerHTML = '';
   }
-  if (!names.length && !hasSearchMode) {
-    dom.resultsCount.textContent = '';
-    return;
-  }
 
-  const results = RecommendationService.recommend(RecipeRepository.getRecommendableRecipes(), { activeFilters: state.filters, query });
+  const results = RecommendationService.recommendHome(homeRecipes, { activeFilters: state.filters, query });
   dom.noResults.hidden = results.length > 0;
   dom.resultsCount.textContent = results.length ? `${results.length}개` : '';
 
-  if (results.length && dom.homeTodayHero) {
+  if (results.length && names.length && dom.homeTodayHero) {
     dom.homeTodayHero.hidden = false;
     dom.homeTodayHero.innerHTML = homeTodayHeroHTML(results[0]);
     bindHomeTodayHero(dom.homeTodayHero, results[0]);
   }
 
-  dom.recipeList.innerHTML = results.map((r) => recipeCardHTML({ ...r })).join('');
+  dom.recipeList.innerHTML = results.map((r) => recipeCardHTML({
+    ...r,
+    showMissingLine: true,
+    showCardSave: isPublicCommunityRecipe(r.recipe),
+    showCardFork: true,
+    showAuthor: isPublicCommunityRecipe(r.recipe),
+    showCommunityBadge: isPublicCommunityRecipe(r.recipe),
+  })).join('');
   bindRecipeCards(dom.recipeList, results);
   syncAuthGateUi();
 }
@@ -3549,84 +3735,6 @@ function renderMyRecipes() {
   syncAuthGateUi();
 }
 
-// ===== Render: Community =====
-function matchesCommunitySearch(recipe, query) {
-  const q = normalizeIngredient(query);
-  if (!q) return true;
-  const categoryLabel = CATEGORY_MAP[recipe.category]?.tags?.join(' ') || '';
-  const haystack = [
-    recipe.name,
-    ...(recipe.ingredients || []).map(formatIngredientDisplay),
-    recipe.authorName,
-    recipe.category,
-    categoryLabel,
-  ].filter(Boolean).map(normalizeIngredient).join(' ');
-  return haystack.includes(q);
-}
-
-function renderCommunityFilters() {
-  if (!dom.communityFilterChips) return;
-  dom.communityFilterChips.innerHTML = FILTERS.map((f) => `
-    <button type="button" class="filter-chip${state.communityFilters.has(f.id) ? ' filter-chip--active' : ''}" data-community-f="${f.id}">${f.label}</button>
-  `).join('');
-  dom.communityFilterChips.querySelectorAll('[data-community-f]').forEach((c) => {
-    c.onclick = () => {
-      if (state.communityFilters.has(c.dataset.communityF)) state.communityFilters.delete(c.dataset.communityF);
-      else state.communityFilters.add(c.dataset.communityF);
-      renderCommunityFilters();
-      renderCommunity();
-    };
-  });
-}
-
-function renderCommunity() {
-  renderCommunityFilters();
-  const publicRecipes = RecipeRepository.getPublicRecipes();
-  const names = RecommendationService.getPantryNames();
-  const query = state.communitySearch.trim();
-  const filteredRecipes = publicRecipes.filter((recipe) => matchesCommunitySearch(recipe, query));
-
-  const results = filteredRecipes.map((recipe) => {
-    const a = names.length
-      ? MatchService.analyze(names, recipe.ingredients)
-      : { matched: [], missing: recipe.ingredients, matchPercent: 0, exact: [], substituted: [], matchedPantryNames: [] };
-    return {
-      recipe,
-      ...a,
-      expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
-    };
-  }).filter((r) => RecommendationService.matchesFilters(r, state.communityFilters))
-    .sort((a, b) => (b.matchPercent || 0) - (a.matchPercent || 0));
-
-  const hasSearch = Boolean(query || state.communityFilters.size);
-  dom.communityEmpty.hidden = results.length > 0;
-  if (dom.communityEmptyTitle) {
-    dom.communityEmptyTitle.textContent = hasSearch ? '검색 결과가 없습니다.' : '공개 레시피가 없어요';
-  }
-
-  dom.communityList.innerHTML = results.map((r) => recipeCardHTML({
-    ...r,
-    showAuthor: true,
-    showCardSave: true,
-    showSaveCount: true,
-    showCardFork: true,
-    hideMatchBadge: true,
-    hideOrigin: true,
-    hideReason: true,
-    hideExpiryHint: true,
-    showMissingLine: true,
-  })).join('');
-  bindRecipeCards(dom.communityList, results);
-  syncAuthGateUi();
-}
-
-function toggleCommunityFilterPanel(force) {
-  if (!dom.communityFilterPanel || !dom.communityFilterBtn) return;
-  const open = typeof force === 'boolean' ? force : dom.communityFilterPanel.hidden;
-  dom.communityFilterPanel.hidden = !open;
-  dom.communityFilterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-
 // ===== Render: Pantry Manage =====
 function renderPantryManage() {
   const emptyTextEl = dom.pantryEmpty.querySelector('.empty-state__text');
@@ -3669,14 +3777,12 @@ function renderPantryManage() {
 }
 
 // ===== Render: Calendar =====
-function renderMealStats() {
-  const year = state.calendarYear;
-  const month = state.calendarMonth + 1;
+function getCalendarMonthStats(year, month) {
   const monthLogs = MealLogRepository.getByMonth(year, month);
   const shoppingRecords = ShoppingRecordRepository.getByMonth(year, month);
-  const counts = { 'home-cook': 0, 'eat-out': 0, delivery: 0, snack: 0 };
+  const counts = { 'home-cook': 0, 'eat-out': 0, delivery: 0 };
   const costs = { 'eat-out': {}, delivery: {}, snack: {} };
-  const foodCounts = {};
+  const combinedTotals = {};
 
   monthLogs.forEach((log) => {
     const type = normalizeMealType(log.mealType);
@@ -3685,30 +3791,87 @@ function renderMealStats() {
       const code = log.currency || DEFAULT_CURRENCY;
       costs[type][code] = (costs[type][code] || 0) + (Number(log.cost) || 0);
     }
-    foodCounts[log.name] = (foodCounts[log.name] || 0) + 1;
   });
+
   const shoppingTotals = sumAmountsByCurrency(shoppingRecords, (r) => r.amount, (r) => r.currency);
-  const eatOutTotal = formatMoneyTotalsByCurrency(costs['eat-out']);
-  const deliveryTotal = formatMoneyTotalsByCurrency(costs.delivery);
-  const snackTotal = formatMoneyTotalsByCurrency(costs.snack);
-  const shoppingTotal = formatMoneyTotalsByCurrency(shoppingTotals);
-  const combinedTotals = { ...shoppingTotals };
+  Object.entries(shoppingTotals).forEach(([code, amount]) => {
+    combinedTotals[code] = (combinedTotals[code] || 0) + amount;
+  });
   ['eat-out', 'delivery', 'snack'].forEach((type) => {
     Object.entries(costs[type]).forEach(([code, amount]) => {
       combinedTotals[code] = (combinedTotals[code] || 0) + amount;
     });
   });
-  const totalFoodCost = formatMoneyTotalsByCurrency(combinedTotals);
-  const topFood = Object.entries(foodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+
+  const primaryCode = state.currency || DEFAULT_CURRENCY;
+  const primaryTotal = combinedTotals[primaryCode] || 0;
+
+  return {
+    counts,
+    totalFoodCost: formatMoneyTotalsByCurrency(combinedTotals),
+    primaryTotal,
+    primaryCode,
+  };
+}
+
+function getCalendarDayIcons(meals, shoppingRecords) {
+  const order = ['home-cook', 'eat-out', 'delivery', 'snack', 'shopping'];
+  const iconByKey = {
+    'home-cook': mealTypeInfo('home-cook').emoji,
+    'eat-out': mealTypeInfo('eat-out').emoji,
+    delivery: mealTypeInfo('delivery').emoji,
+    snack: mealTypeInfo('snack').emoji,
+    shopping: '🛒',
+  };
+  const present = new Set();
+  meals.forEach((log) => {
+    const type = normalizeMealType(log.mealType);
+    if (iconByKey[type]) present.add(type);
+  });
+  if (shoppingRecords.length) present.add('shopping');
+  return order.filter((key) => present.has(key)).map((key) => iconByKey[key]);
+}
+
+function renderMealStats() {
+  const year = state.calendarYear;
+  const month = state.calendarMonth + 1;
+  const { counts, totalFoodCost, primaryTotal } = getCalendarMonthStats(year, month);
+  const budget = Number(state.monthlyFoodBudget) || 0;
+  const progressPct = budget > 0 ? Math.min(100, Math.round((primaryTotal / budget) * 100)) : 0;
+  const progressHTML = budget > 0 ? `
+    <div class="calendar-spend-card__progress">
+      <div class="calendar-spend-card__progress-track" aria-hidden="true">
+        <span class="calendar-spend-card__progress-bar" style="width:${progressPct}%"></span>
+      </div>
+      <span class="calendar-spend-card__progress-text">목표 대비 ${progressPct}%</span>
+    </div>` : '';
 
   dom.mealStats.innerHTML = `
-    <div class="meal-stat"><span class="meal-stat__label">🍳 직접 요리</span><span class="meal-stat__value">${counts['home-cook']}회</span></div>
-    <div class="meal-stat"><span class="meal-stat__label">🍽️ 외식</span><span class="meal-stat__value">${counts['eat-out']}회<br>${eatOutTotal}</span></div>
-    <div class="meal-stat"><span class="meal-stat__label">🛵 배달</span><span class="meal-stat__value">${counts.delivery}회<br>${deliveryTotal}</span></div>
-    <div class="meal-stat"><span class="meal-stat__label">🍪 간식</span><span class="meal-stat__value">${counts.snack}회<br>${snackTotal}</span></div>
-    <div class="meal-stat"><span class="meal-stat__label">🛒 장보기</span><span class="meal-stat__value">${shoppingTotal}</span></div>
-    <div class="meal-stat"><span class="meal-stat__label">💰 이번 달 총 식비</span><span class="meal-stat__value">${totalFoodCost}</span></div>
-    <div class="meal-stat meal-stat--wide"><span class="meal-stat__label">🏆 가장 많이 먹은 음식</span><span class="meal-stat__value">${esc(topFood)}</span></div>`;
+    <div class="calendar-summary__spend calendar-spend-card">
+      <p class="calendar-spend-card__label">💰 이번 달 식비</p>
+      <p class="calendar-spend-card__amount">${totalFoodCost}</p>
+      ${progressHTML}
+      <div class="calendar-spend-card__goal">
+        <label for="monthly-food-budget" class="calendar-spend-card__goal-label">월 목표</label>
+        <input type="number" id="monthly-food-budget" class="calendar-spend-card__goal-input"
+          min="0" step="0.01" inputmode="decimal" placeholder="예: 500000"
+          value="${budget > 0 ? esc(String(budget)) : ''}" aria-label="이번 달 식비 목표">
+      </div>
+    </div>
+    <div class="calendar-summary__counts calendar-counts">
+      <span class="calendar-counts__item">🍳 직접요리 <strong>${counts['home-cook']}회</strong></span>
+      <span class="calendar-counts__item">🍽 외식 <strong>${counts['eat-out']}회</strong></span>
+      <span class="calendar-counts__item">🛵 배달 <strong>${counts.delivery}회</strong></span>
+    </div>`;
+
+  dom.monthlyFoodBudget = $('#monthly-food-budget');
+  if (dom.monthlyFoodBudget) {
+    dom.monthlyFoodBudget.onchange = () => {
+      state.monthlyFoodBudget = Number(dom.monthlyFoodBudget.value) || 0;
+      persistMonthlyFoodBudget().catch(() => undefined);
+      renderMealStats();
+    };
+  }
 }
 
 function formatCalendarMealLine(log) {
@@ -3755,20 +3918,18 @@ function renderCalendar() {
     const dateStr = `${prefix}-${String(d).padStart(2, '0')}`;
     const meals = logsByDate[dateStr] || [];
     const shopping = shoppingByDate[dateStr] || [];
-    const lines = [
-      ...meals.map(formatCalendarMealLine),
-      ...shopping.map(formatCalendarShoppingLine),
-    ];
+    const icons = getCalendarDayIcons(meals, shopping);
     const classes = ['calendar-day'];
     if (dateStr === today) classes.push('calendar-day--today');
     if (dateStr === state.selectedCalendarDate) classes.push('calendar-day--selected');
-    if (lines.length) classes.push('calendar-day--has-meals');
-    const previewLines = lines.slice(0, 2).map(esc);
-    const extra = lines.length > 2 ? `<span class="calendar-day__more">+${lines.length - 2}</span>` : '';
+    if (icons.length) classes.push('calendar-day--has-meals');
+    const iconsHTML = icons.length
+      ? `<span class="calendar-day__icons" aria-hidden="true">${icons.join('')}</span>`
+      : '';
     html += `
-      <button type="button" class="${classes.join(' ')}" data-date="${dateStr}">
+      <button type="button" class="${classes.join(' ')}" data-date="${dateStr}" aria-label="${d}일${icons.length ? `, 기록 ${icons.length}종` : ''}">
         <span class="calendar-day__num">${d}</span>
-        ${lines.length ? `<span class="calendar-day__meals">${previewLines.join('<br>')}${extra}</span>` : ''}
+        ${iconsHTML}
       </button>`;
   }
 
@@ -3778,19 +3939,43 @@ function renderCalendar() {
   });
 
   renderMealStats();
-  if (state.selectedCalendarDate) renderCalendarDayDetail(state.selectedCalendarDate);
-  else dom.calendarDaySection.hidden = true;
+  if (state.selectedCalendarDate && dom.calendarDaySheet && !dom.calendarDaySheet.hidden) {
+    renderCalendarDayDetail(state.selectedCalendarDate);
+  }
+}
+
+function closeCalendarDaySheet() {
+  if (!dom.calendarDaySheet) return;
+  dom.calendarDaySheet.hidden = true;
+  dom.calendarDaySheet.setAttribute('aria-hidden', 'true');
+  updateBodyScrollLock();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function openCalendarDaySheet() {
+  if (!dom.calendarDaySheet) return;
+  dom.calendarDaySheet.hidden = false;
+  dom.calendarDaySheet.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 
 function selectCalendarDate(dateStr) {
   state.selectedCalendarDate = dateStr;
-  renderCalendar();
+  dom.calendarDays?.querySelectorAll('.calendar-day:not(.calendar-day--empty)').forEach((btn) => {
+    btn.classList.toggle('calendar-day--selected', btn.dataset.date === dateStr);
+  });
+  renderCalendarDayDetail(dateStr);
+  openCalendarDaySheet();
 }
 
 function renderCalendarDayDetail(dateStr) {
+  if (dom.calendarDaySheetTitle) {
+    dom.calendarDaySheetTitle.textContent = `${formatDateLabel(dateStr)} 기록`;
+  }
+  if (dom.calendarDayLabel) dom.calendarDayLabel.textContent = formatDateLabel(dateStr);
+
   if (isGuestUser()) {
-    dom.calendarDaySection.hidden = false;
-    dom.calendarDayLabel.textContent = formatDateLabel(dateStr);
     dom.calendarDayEmpty.hidden = false;
     dom.calendarDayList.innerHTML = '';
     const emptyText = dom.calendarDayEmpty?.querySelector('.empty-state__text');
@@ -3800,8 +3985,6 @@ function renderCalendarDayDetail(dateStr) {
 
   const logs = MealLogRepository.getByDate(dateStr);
   const shoppingRecords = ShoppingRecordRepository.getByDate(dateStr);
-  dom.calendarDaySection.hidden = false;
-  dom.calendarDayLabel.textContent = formatDateLabel(dateStr);
   dom.calendarDayEmpty.hidden = logs.length + shoppingRecords.length > 0;
 
   const mealItems = logs.map((log) => {
@@ -4173,6 +4356,8 @@ function changeCalendarMonth(delta) {
   state.calendarMonth += delta;
   if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
   else if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
+  state.selectedCalendarDate = null;
+  closeCalendarDaySheet();
   renderCalendar();
 }
 
@@ -4211,6 +4396,16 @@ function plannerMealThumbHTML(recipe) {
   return '<div class="planner-meal__thumb planner-meal__thumb--empty" aria-hidden="true">📷</div>';
 }
 
+function plannerMealRecordLabel(entry) {
+  return entry.recorded ? '기록 완료' : '식사기록';
+}
+
+function buildPlannerMealMemo(date, slotId, entry) {
+  if (entry.memo) return entry.memo;
+  const slot = plannerSlotInfo(slotId);
+  return `${slot.emoji} ${slot.label} · ${formatPlannerDayLabel(date)} 식단`;
+}
+
 function plannerMealCardHTML(date, slot, animate = false) {
   const entry = MealPlanRepository.get(date, slot.id);
   const recipe = getPlannerMealDisplay(entry);
@@ -4227,6 +4422,7 @@ function plannerMealCardHTML(date, slot, animate = false) {
     ? `<p class="planner-meal__match">${matchPercent}% 재료 일치</p>`
     : '';
   const animClass = animate ? ' planner-meal--enter' : '';
+  const recordBtnClass = entry.recorded ? ' planner-meal__record--done' : '';
   return `
     <article class="planner-meal${animClass}" data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}">
       <div class="planner-meal__head">
@@ -4243,6 +4439,14 @@ function plannerMealCardHTML(date, slot, animate = false) {
           </div>
         </div>
       </button>
+      <div class="planner-meal__actions">
+        <button type="button" class="planner-meal__record btn btn--ghost btn--sm${recordBtnClass}"
+          data-planner-record data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}"
+          ${entry.recorded ? 'disabled aria-disabled="true"' : ''}
+          aria-label="${esc(slot.label)} ${esc(recipe.name)} ${plannerMealRecordLabel(entry)}">
+          ${plannerMealRecordLabel(entry)}
+        </button>
+      </div>
     </article>`;
 }
 
@@ -4417,8 +4621,8 @@ function getPlannerRecipePickerItems(tab, query) {
   let items = [];
   if (tab === 'mine') {
     items = RecipeRepository.getUserRecipes().map((recipe) => ({ recipe, matchPercent: null }));
-  } else if (tab === 'community') {
-    items = RecipeRepository.getPublicRecipes().map((recipe) => {
+  } else if (tab === 'public') {
+    items = RecipeRepository.getHomeRecipes().map((recipe) => {
       const a = names.length
         ? MatchService.analyze(names, recipe.ingredients)
         : { matchPercent: null };
@@ -4497,10 +4701,96 @@ function openPlannerRecipeSheet(date, slotId, action) {
 function confirmPlannerRecipe(recipe) {
   const { date, slot, action } = state.plannerSheet;
   if (!date || !slot || !recipe) return;
-  setPlannerMeal(date, slot, { recipeId: recipe.id, name: recipe.name }, { animate: true });
+  setPlannerMeal(date, slot, { recipeId: recipe.id, name: recipe.name, memo: '', recorded: false }, { animate: true });
   closePlannerSheets();
   const slotLabel = plannerSlotInfo(slot).label;
   showToast(action === 'edit' ? `${slotLabel} 식단을 수정했어요` : `${slotLabel}에 ${recipe.name}을(를) 추가했어요`);
+}
+
+async function recordPlannerMealToCalendar(dateKey, slotId) {
+  const normalizedDate = String(dateKey || '').trim();
+  const normalizedSlot = String(slotId || '').trim();
+  if (!normalizedDate || !normalizedSlot) return;
+
+  const entry = MealPlanRepository.get(normalizedDate, normalizedSlot);
+  if (entry.recorded) {
+    showToast('이미 식사 기록이 완료된 식단이에요');
+    return;
+  }
+
+  const recipe = getPlannerMealDisplay(entry);
+  if (!recipe?.name) {
+    showToast('기록할 식단 정보가 없어요');
+    return;
+  }
+
+  const memo = buildPlannerMealMemo(normalizedDate, normalizedSlot, entry);
+  let ingredients = [];
+  let usedExpiring = false;
+  if (entry.recipeId) {
+    const fullRecipe = RecipeRepository.getById(entry.recipeId);
+    if (fullRecipe?.ingredients?.length) {
+      ingredients = [...fullRecipe.ingredients];
+      const names = RecommendationService.getPantryNames();
+      usedExpiring = RecommendationService.getExpiryBoost(
+        MatchService.analyze(names, fullRecipe.ingredients).matchedPantryNames,
+      ) > 0;
+    }
+  }
+
+  const payload = {
+    date: normalizedDate,
+    name: recipe.name,
+    mealType: 'home-cook',
+    recipeId: entry.recipeId || null,
+    memo,
+    cost: 0,
+    currency: DEFAULT_CURRENCY,
+    ingredients,
+    usedExpiringIngredients: usedExpiring,
+    photo: '',
+  };
+
+  try {
+    const log = await saveMealLogToStore(payload);
+    if (log && !MealLogRepository.getAll().some((l) => l.id === log.id || l.firestoreId === log.firestoreId)) {
+      MealLogRepository._logs.push({
+        ...log,
+        mealType: normalizeMealType(log.mealType),
+        cost: Number(log.cost) || 0,
+        currency: log.currency || DEFAULT_CURRENCY,
+      });
+    }
+
+    markMealPlanLocalMutation();
+    MealPlanRepository.set(normalizedDate, normalizedSlot, {
+      ...entry,
+      recorded: true,
+    });
+    await persistMealPlans();
+
+    state.selectedCalendarDate = normalizedDate;
+    const [y, m] = normalizedDate.split('-').map(Number);
+    state.calendarYear = y;
+    state.calendarMonth = m - 1;
+
+    renderPlanner();
+    renderCalendar();
+    showToast(`"${recipe.name}" 식사 기록을 추가했어요`);
+  } catch (err) {
+    console.error('[MealPlanner] recordPlannerMealToCalendar failed', { dateKey: normalizedDate, slotId: normalizedSlot, err });
+    showToast(err?.message || '식사 기록에 실패했어요');
+  }
+}
+
+function handlePlannerMealRecord(dateKey, slotId) {
+  if (isGuestUser()) {
+    requireAppLogin({
+      redirectAfterLogin: () => recordPlannerMealToCalendar(dateKey, slotId),
+    });
+    return;
+  }
+  recordPlannerMealToCalendar(dateKey, slotId);
 }
 
 function initPlannerGridDelegation() {
@@ -4530,6 +4820,16 @@ function initPlannerGridDelegation() {
         return;
       }
       openPlannerRecipeSheet(dateKey, mealType, 'edit');
+      return;
+    }
+
+    const recordBtn = e.target.closest('[data-planner-record]');
+    if (recordBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (recordBtn.disabled) return;
+      const { dateKey, mealType } = readPlannerMealDataset(recordBtn);
+      handlePlannerMealRecord(dateKey, mealType);
       return;
     }
 
@@ -4599,16 +4899,6 @@ function renderGroceryBudgetSummary(total) {
 function renderGroceryList() {
   if (!dom.groceryList) return;
 
-  if (isGuestUser()) {
-    dom.groceryEmpty.hidden = false;
-    dom.groceryList.hidden = true;
-    dom.groceryList.innerHTML = '';
-    const emptyText = dom.groceryEmpty?.querySelector('.empty-state__text');
-    if (emptyText) emptyText.textContent = '로그인하면 장보기 목록을 저장할 수 있어요.';
-    if (dom.groceryBudgetSummary) dom.groceryBudgetSummary.textContent = '';
-    return;
-  }
-
   const dates = GroceryListService.getPlannerDates(state.plannerRange);
   const grouped = GroceryListService.computeMissing(dates);
   const totalItems = GROCERY_CATEGORIES.reduce((n, c) => n + (grouped[c.id]?.length || 0), 0);
@@ -4620,6 +4910,8 @@ function renderGroceryList() {
   if (dom.martModeToggle) {
     dom.martModeToggle.textContent = state.martMode ? '일반 모드' : '마트 모드';
     dom.martModeToggle.classList.toggle('btn--primary', state.martMode);
+    dom.martModeToggle.classList.toggle('btn--outline', !state.martMode);
+    dom.martModeToggle.classList.remove('btn--ghost');
   }
 
   renderGroceryBudgetSummary(totalCost);
@@ -4636,7 +4928,8 @@ function renderGroceryList() {
     });
     const rows = items.map((item) => {
       const meta = GroceryRepository.getMeta(item.key);
-      const qty = item.count > 1 ? ` ×${item.count}` : '';
+      const qty = !item.manual && item.count > 1 ? ` ×${item.count}` : '';
+      const manualBadge = item.manual ? '<span class="grocery-item__badge">직접</span>' : '';
       const priceField = state.martMode ? '' : `
         <input type="number" class="grocery-item__price" data-price-key="${esc(item.key)}"
           min="0" step="0.01" inputmode="decimal" placeholder="금액"
@@ -4644,7 +4937,7 @@ function renderGroceryList() {
       return `
         <label class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
           <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''}>
-          <span class="grocery-item__name">${esc(item.name)}${qty}</span>
+          <span class="grocery-item__name">${manualBadge}${esc(item.name)}${qty}</span>
           ${priceField}
         </label>`;
     }).join('');
@@ -4659,20 +4952,16 @@ function renderGroceryList() {
 
   dom.groceryList.querySelectorAll('.grocery-item__check').forEach((cb) => {
     cb.onchange = () => {
-      requireAppLogin(() => {
-        GroceryRepository.setChecked(cb.dataset.checkKey, cb.checked);
-        persistGroceryState().catch(() => undefined);
-        renderGroceryList();
-      });
+      GroceryRepository.setChecked(cb.dataset.checkKey, cb.checked);
+      persistGroceryState().catch(() => undefined);
+      renderGroceryList();
     };
   });
   dom.groceryList.querySelectorAll('.grocery-item__price').forEach((input) => {
     input.onchange = () => {
-      requireAppLogin(() => {
-        GroceryRepository.setPrice(input.dataset.priceKey, input.value);
-        persistGroceryState().catch(() => undefined);
-        renderGroceryBudgetSummary(GroceryListService.estimateTotal(grouped));
-      });
+      GroceryRepository.setPrice(input.dataset.priceKey, input.value);
+      persistGroceryState().catch(() => undefined);
+      renderGroceryBudgetSummary(GroceryListService.estimateTotal(grouped));
     };
   });
 }
@@ -4702,7 +4991,7 @@ function autoGenerateWeeklyPlan() {
       );
       const pick = candidates[0];
       if (!pick) continue;
-      MealPlanRepository.set(date, slot.id, { recipeId: pick.recipe.id, name: pick.recipe.name });
+      MealPlanRepository.set(date, slot.id, { recipeId: pick.recipe.id, name: pick.recipe.name, memo: '', recorded: false });
       usedIds.add(pick.recipe.id);
     }
   }
@@ -4722,6 +5011,10 @@ function handleGroceryPurchaseComplete() {
     for (const item of grouped[cat.id] || []) {
       const meta = GroceryRepository.getMeta(item.key);
       if (!meta.checked) continue;
+      if (item.manual) {
+        names.push(item.name);
+        continue;
+      }
       names.push(item.count > 1 ? `${item.name} ${item.count}개` : item.name);
     }
   }
@@ -5480,6 +5773,35 @@ function initRecipePhotoUpload() {
   });
 }
 
+// ===== Grocery Item Modal =====
+function openGroceryItemModal() {
+  dom.groceryItemModalForm?.reset();
+  if (dom.groceryItemModalTitle) dom.groceryItemModalTitle.textContent = '물품 추가';
+  openModal('grocery-item');
+  requestAnimationFrame(() => dom.groceryItemName?.focus());
+}
+
+function handleGroceryItemModalSubmit(e) {
+  e.preventDefault();
+  const name = dom.groceryItemName?.value.trim();
+  if (!name) {
+    showToast('물품명을 입력해 주세요');
+    dom.groceryItemName?.focus();
+    return;
+  }
+  const item = GroceryRepository.addManualItem({
+    name,
+    quantity: dom.groceryItemQuantity?.value.trim() || '',
+    unit: dom.groceryItemUnit?.value || '',
+    price: dom.groceryItemPrice?.value ?? '',
+  });
+  if (!item) return;
+  persistGroceryState().catch(() => undefined);
+  closeModal('grocery-item');
+  renderGroceryList();
+  showToast('장보기 목록에 추가했어요');
+}
+
 // ===== Pantry Modal =====
 function openPantryModal(id = null) {
   if (!isLoggedInAppUser()) {
@@ -5613,6 +5935,8 @@ function updateBodyScrollLock() {
     || !dom.pantryModal.hidden
     || !dom.mealModal.hidden
     || !dom.shoppingModal.hidden
+    || (dom.groceryItemModal && !dom.groceryItemModal.hidden)
+    || (dom.calendarDaySheet && !dom.calendarDaySheet.hidden)
     || (dom.plannerSlotSheet && !dom.plannerSlotSheet.hidden)
     || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
     || (dom.loginPromptModal && !dom.loginPromptModal.hidden);
@@ -5622,21 +5946,36 @@ function updateBodyScrollLock() {
 window.updateBodyScrollLock = updateBodyScrollLock;
 
 function openModal(type) {
-  const m = { recipe: dom.recipeModal, form: dom.recipeFormModal, pantry: dom.pantryModal, meal: dom.mealModal, shopping: dom.shoppingModal }[type];
+  const m = {
+    recipe: dom.recipeModal,
+    form: dom.recipeFormModal,
+    pantry: dom.pantryModal,
+    meal: dom.mealModal,
+    shopping: dom.shoppingModal,
+    'grocery-item': dom.groceryItemModal,
+  }[type];
   m.hidden = false; m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 function closeModal(type) {
-  const m = { recipe: dom.recipeModal, form: dom.recipeFormModal, pantry: dom.pantryModal, meal: dom.mealModal, shopping: dom.shoppingModal }[type];
+  const m = {
+    recipe: dom.recipeModal,
+    form: dom.recipeFormModal,
+    pantry: dom.pantryModal,
+    meal: dom.mealModal,
+    shopping: dom.shoppingModal,
+    'grocery-item': dom.groceryItemModal,
+  }[type];
   if (!m) return;
   m.hidden = true; m.setAttribute('aria-hidden', 'true');
   updateBodyScrollLock();
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 function closeAllModals() {
-  ['recipe', 'form', 'pantry', 'meal', 'shopping'].forEach(closeModal);
+  ['recipe', 'form', 'pantry', 'meal', 'shopping', 'grocery-item'].forEach(closeModal);
   closePlannerSheets();
+  closeCalendarDaySheet();
   if (window.LoginRequiredModal?.isOpen()) window.LoginRequiredModal.close(true);
   closeImageLightbox();
 }
@@ -5748,11 +6087,6 @@ function init() {
     dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   dom.headerNotifyBtn?.addEventListener('click', () => showToast('알림 기능은 준비 중이에요'));
-  dom.communitySearchInput.addEventListener('input', () => {
-    state.communitySearch = dom.communitySearchInput.value;
-    renderCommunity();
-  });
-  dom.communityFilterBtn?.addEventListener('click', () => toggleCommunityFilterPanel());
   dom.openPantryAdd.onclick = () => openPantryModal();
   dom.openRecipeForm.onclick = (e) => {
     e.preventDefault();
@@ -5781,22 +6115,10 @@ function init() {
     renderGroceryList();
   });
   dom.groceryCompleteBtn?.addEventListener('click', () => requireAppLogin(handleGroceryPurchaseComplete));
+  dom.groceryAddItemBtn?.addEventListener('click', () => openGroceryItemModal());
+  dom.groceryItemModalForm?.addEventListener('submit', handleGroceryItemModalSubmit);
   dom.groceryBudget?.addEventListener('change', () => {
     const pendingBudget = dom.groceryBudget.value;
-    if (isGuestUser()) {
-      dom.groceryBudget.value = GroceryRepository.getBudget();
-      requireAppLogin({
-        redirectAfterLogin: () => {
-          dom.groceryBudget.value = pendingBudget;
-          GroceryRepository.setBudget(pendingBudget);
-          persistGroceryState().catch(() => undefined);
-          renderGroceryBudgetSummary(GroceryListService.estimateTotal(
-            GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerRange)),
-          ));
-        },
-      });
-      return;
-    }
     GroceryRepository.setBudget(pendingBudget);
     persistGroceryState().catch(() => undefined);
     renderGroceryBudgetSummary(GroceryListService.estimateTotal(
@@ -5844,6 +6166,7 @@ function init() {
     el.onclick = () => {
       const type = el.dataset.closeModal;
       if (type === 'login') window.LoginRequiredModal?.close(true);
+      else if (type === 'calendar-day') closeCalendarDaySheet();
       else if (type !== 'profile') closeModal(type);
     };
   });
@@ -5900,13 +6223,16 @@ function startApp() {
       state.currency = settings.currency;
       if (dom.currencySelect) dom.currencySelect.value = settings.currency;
     }
+    if (settings.monthlyFoodBudget != null) {
+      state.monthlyFoodBudget = Number(settings.monthlyFoodBudget) || 0;
+      StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
+    }
     if (settings.grocery) GroceryRepository.replaceState(settings.grocery);
     if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
     refreshAll();
   });
   window.addEventListener('public-recipes-firestore-sync', (e) => {
     PublicRecipeRepository.replaceAll(e.detail?.recipes || []);
-    if (state.view === 'community') renderCommunity();
     refreshAll();
   });
 }

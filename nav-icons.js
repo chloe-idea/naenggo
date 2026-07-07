@@ -38,7 +38,6 @@ function initNavIcons() {
   const map = {
     main: NAV_ICONS.home,
     'my-recipes': NAV_ICONS.recipes,
-    community: NAV_ICONS.community,
     planner: NAV_ICONS.planner,
     calendar: NAV_ICONS.calendar,
   };

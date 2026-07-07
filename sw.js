@@ -2,13 +2,13 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v59';
+const CACHE_NAME = 'naengjanggo-v67';
 
 const ASSETS = [
   'index.html',
   'app-config.js?v=47',
-  'style.css?v=78',
-  'script.js?v=75',
+  'style.css?v=85',
+  'script.js?v=81',
   'js/firebase.js',
   'js/firebase-config.js',
   'js/firebase-bootstrap.js?v=50',

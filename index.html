@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=78">
+  <link rel="stylesheet" href="style.css?v=85">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -29,10 +29,6 @@
             <p id="header-subtitle" class="header__subtitle">재료로 찾는 레시피</p>
           </div>
         </div>
-        <h1 id="header-community-title" class="header__community-title" hidden>
-          <span class="header__community-globe" aria-hidden="true">🌎</span>
-          공개 레시피 커뮤니티
-        </h1>
         <div class="header__actions">
           <button type="button" id="header-notify-btn" class="header-icon-btn" aria-label="알림">
             <svg class="header-icon-btn__svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -87,7 +83,7 @@
 
         <section class="section section--home-recipes home-main-content">
           <div class="section__header">
-            <h2 class="section__title">지금 만들 수 있는 레시피</h2>
+            <h2 class="section__title">레시피 탐색</h2>
             <button type="button" id="home-recipes-see-all" class="home-see-all">전체 보기 &gt;</button>
           </div>
           <span id="results-count" class="results-count visually-hidden" aria-hidden="true"></span>
@@ -104,19 +100,27 @@
           </div>
         </section>
 
-        <section class="section section--compact section--home-search home-search-dock" aria-label="먹고 싶은 메뉴 검색">
-          <h2 class="section__title section__title--search home-search-dock__title">먹고 싶은 메뉴 검색</h2>
-          <div class="home-search-bar">
-            <input type="search" id="menu-search-input" class="home-search-bar__input"
-              placeholder="오늘 먹고 싶은 메뉴는?" autocomplete="off" aria-label="먹고 싶은 메뉴 검색">
-            <button type="button" id="home-filter-btn" class="home-filter-btn" aria-label="필터" aria-expanded="false" aria-controls="home-filter-panel">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-          <div id="home-filter-panel" class="home-filter-panel" hidden>
-            <div id="home-filter-chips" class="filter-chips"></div>
+        <section class="home-search-dock" aria-label="먹고 싶은 메뉴 검색">
+          <h2 class="visually-hidden">먹고 싶은 메뉴 검색</h2>
+          <div class="home-search-float">
+            <div class="home-search-bar">
+              <span class="home-search-bar__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"/>
+                  <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <input type="search" id="menu-search-input" class="home-search-bar__input"
+                placeholder="오늘 먹고 싶은 메뉴는?" autocomplete="off" aria-label="먹고 싶은 메뉴 검색">
+              <button type="button" id="home-filter-btn" class="home-filter-btn" aria-label="필터" aria-expanded="false" aria-controls="home-filter-panel">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div id="home-filter-panel" class="home-filter-panel" hidden>
+              <div id="home-filter-chips" class="filter-chips"></div>
+            </div>
           </div>
         </section>
       </div>
@@ -149,37 +153,6 @@
             <p class="empty-state__text">저장한 레시피가 없어요. 마음에 드는 레시피를 저장해 보세요</p>
           </div>
         </section>
-      </div>
-
-      <!-- 커뮤니티 -->
-      <div id="view-community" class="view view--community" hidden>
-        <div class="community-page">
-          <div class="community-search-wrap">
-            <div class="community-search">
-              <span class="community-search__icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.75"/>
-                  <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                </svg>
-              </span>
-              <input type="search" id="community-search-input" class="community-search__input"
-                placeholder="레시피 이름 또는 재료를 검색해보세요." autocomplete="off" aria-label="공개 레시피 검색">
-              <button type="button" id="community-filter-btn" class="community-search__filter"
-                aria-label="필터" aria-expanded="false" aria-controls="community-filter-panel">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                </svg>
-              </button>
-            </div>
-            <div id="community-filter-panel" class="community-filter-panel" hidden>
-              <div id="community-filter-chips" class="filter-chips community-filter-chips"></div>
-            </div>
-          </div>
-          <div id="community-list" class="recipe-list community-list"></div>
-          <div id="community-empty" class="community-empty" hidden>
-            <p id="community-empty-title" class="community-empty__text">검색 결과가 없습니다.</p>
-          </div>
-        </div>
       </div>
 
       <!-- 재료 관리 -->
@@ -220,9 +193,10 @@
 
         <section class="section">
           <div class="section__header">
-            <h2 class="section__title">자동 장보기 리스트</h2>
+            <h2 class="section__title">장보기 리스트</h2>
             <div class="section__actions">
-              <button type="button" id="mart-mode-toggle" class="btn btn--ghost btn--sm">마트 모드</button>
+              <button type="button" id="grocery-add-item-btn" class="btn btn--ghost btn--sm">+ 물품 추가</button>
+              <button type="button" id="mart-mode-toggle" class="btn btn--outline btn--sm">마트 모드</button>
               <button type="button" id="grocery-complete-btn" class="btn btn--primary btn--sm">구매 완료</button>
             </div>
           </div>
@@ -233,20 +207,19 @@
           </div>
           <div id="grocery-list" class="grocery-list"></div>
           <div id="grocery-empty" class="empty-state empty-state--compact" hidden>
-            <p class="empty-state__text">식단에 레시피를 추가하면 부족한 재료가 자동으로 표시됩니다</p>
+            <p class="empty-state__text">식단에 레시피를 추가하거나 + 물품 추가로 장보기 목록을 만들어 보세요</p>
           </div>
         </section>
       </div>
       <!-- 식사 달력 -->
-      <div id="view-calendar" class="view" hidden>
+      <div id="view-calendar" class="view calendar-view" hidden>
         <div id="calendar-guest-hint" class="guest-hint" hidden>
           <p class="guest-hint__text">로그인하면 식사 기록을 달력에 저장할 수 있어요.</p>
         </div>
-        <section class="section">
-          <div class="section__header">
-            <h2 class="section__title">식사 달력</h2>
-            <div class="calendar-settings">
-              <label for="currency-select" class="calendar-settings__label">통화</label>
+        <section class="section section--calendar-top">
+          <div class="calendar-header">
+            <h2 class="section__title calendar-header__title">식사 달력</h2>
+            <div class="calendar-header__meta">
               <select id="currency-select" class="calendar-settings__select" aria-label="통화 설정">
                 <option value="KRW">KRW (₩)</option>
                 <option value="USD">USD ($)</option>
@@ -256,27 +229,22 @@
                 <option value="GBP">GBP</option>
               </select>
             </div>
-            <div class="section__actions">
-              <button type="button" id="open-meal-add-btn" class="btn btn--ghost btn--sm">+ 직접 기록</button>
-              <button type="button" id="open-shopping-add-btn" class="btn btn--ghost btn--sm">🛒 장보기 기록</button>
+            <div class="calendar-header__actions">
+              <button type="button" id="open-meal-add-btn" class="btn btn--ghost btn--xs">+ 직접 기록</button>
+              <button type="button" id="open-shopping-add-btn" class="btn btn--ghost btn--xs">🛒 장보기</button>
             </div>
           </div>
-          <div id="meal-stats" class="meal-stats"></div>
+          <div id="meal-stats" class="calendar-summary"></div>
         </section>
-        <section class="section">
+        <section class="section section--calendar-main">
           <div class="calendar-nav">
             <button type="button" id="calendar-prev" class="calendar-nav__btn" aria-label="이전 달">‹</button>
             <span id="calendar-label" class="calendar-nav__label"></span>
             <button type="button" id="calendar-next" class="calendar-nav__btn" aria-label="다음 달">›</button>
           </div>
-          <div class="calendar-grid" id="calendar-weekdays"></div>
-          <div class="calendar-grid calendar-grid--days" id="calendar-days"></div>
-        </section>
-        <section class="section" id="calendar-day-section" hidden>
-          <h3 class="section__title"><span id="calendar-day-label"></span> 기록</h3>
-          <div id="calendar-day-list" class="meal-day-list"></div>
-          <div id="calendar-day-empty" class="empty-state empty-state--compact" hidden>
-            <p class="empty-state__text">이 날짜에 기록된 식사가 없어요</p>
+          <div class="calendar-board">
+            <div class="calendar-grid" id="calendar-weekdays"></div>
+            <div class="calendar-grid calendar-grid--days" id="calendar-days"></div>
           </div>
         </section>
       </div>
@@ -388,6 +356,46 @@
             <div class="form-actions">
               <button type="button" class="btn btn--ghost" data-close-modal="shopping">취소</button>
               <button type="submit" class="btn btn--primary">저장하기</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 장보기 물품 추가 모달 -->
+    <div id="grocery-item-modal" class="modal" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="grocery-item"></div>
+      <div class="modal__panel modal__panel--form" role="dialog" aria-modal="true">
+        <button type="button" class="modal__close" data-close-modal="grocery-item">&times;</button>
+        <div class="form-modal">
+          <h2 id="grocery-item-modal-title" class="form-modal__title">물품 추가</h2>
+          <form id="grocery-item-modal-form" class="recipe-form">
+            <div class="form-field">
+              <label for="grocery-item-name" class="form-field__label">물품명 <span class="required">*</span></label>
+              <input type="text" id="grocery-item-name" class="form-field__input" required placeholder="예: 우유, 계란">
+            </div>
+            <div class="form-row">
+              <div class="form-field">
+                <label for="grocery-item-quantity" class="form-field__label">수량 <span class="optional">(선택)</span></label>
+                <input type="text" id="grocery-item-quantity" class="form-field__input" inputmode="decimal" placeholder="예: 2">
+              </div>
+              <div class="form-field">
+                <label for="grocery-item-unit" class="form-field__label">단위 <span class="optional">(선택)</span></label>
+                <select id="grocery-item-unit" class="form-field__select">
+                  <option value="">선택</option>
+                  <option value="개">개</option><option value="g">g</option><option value="kg">kg</option>
+                  <option value="ml">ml</option><option value="L">L</option><option value="봉">봉</option>
+                  <option value="팩">팩</option><option value="캔">캔</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-field">
+              <label for="grocery-item-price" class="form-field__label">예상 금액 <span class="optional">(선택)</span></label>
+              <input type="number" id="grocery-item-price" class="form-field__input" min="0" step="0.01" inputmode="decimal" placeholder="예: 4.50">
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn--ghost" data-close-modal="grocery-item">취소</button>
+              <button type="submit" class="btn btn--primary">추가하기</button>
             </div>
           </form>
         </div>
@@ -754,6 +762,19 @@
     </div>
 
     <!-- 프로필 메뉴 -->
+    <!-- 식사 달력: 날짜 상세 Bottom Sheet -->
+    <div id="calendar-day-sheet" class="modal modal--sheet" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="calendar-day"></div>
+      <div class="modal__panel planner-sheet calendar-day-sheet" role="dialog" aria-modal="true" aria-labelledby="calendar-day-sheet-title">
+        <div class="planner-sheet__handle" aria-hidden="true"></div>
+        <h3 id="calendar-day-sheet-title" class="planner-sheet__title">7월 8일 기록</h3>
+        <div id="calendar-day-list" class="meal-day-list calendar-day-sheet__list"></div>
+        <div id="calendar-day-empty" class="empty-state empty-state--compact calendar-day-sheet__empty" hidden>
+          <p class="empty-state__text">이 날짜에 기록된 식사가 없어요</p>
+        </div>
+      </div>
+    </div>
+
     <!-- 식단 플래너: 식사 슬롯 선택 -->
     <div id="planner-slot-sheet" class="modal modal--sheet" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="planner-slot"></div>
@@ -776,7 +797,7 @@
         <div id="planner-recipe-tabs" class="planner-recipe-tabs" role="tablist">
           <button type="button" class="planner-recipe-tabs__btn planner-recipe-tabs__btn--active" data-planner-tab="recommend" role="tab">추천 레시피</button>
           <button type="button" class="planner-recipe-tabs__btn" data-planner-tab="mine" role="tab">내 레시피</button>
-          <button type="button" class="planner-recipe-tabs__btn" data-planner-tab="community" role="tab">커뮤니티</button>
+          <button type="button" class="planner-recipe-tabs__btn" data-planner-tab="public" role="tab">공개 레시피</button>
         </div>
         <div id="planner-recipe-list" class="planner-recipe-list"></div>
         <p id="planner-recipe-empty" class="planner-recipe-empty" hidden>검색 결과가 없습니다.</p>
@@ -838,10 +859,6 @@
       <span class="tab-bar__icon" aria-hidden="true"></span>
       <span class="tab-bar__label">내 레시피</span>
     </button>
-    <button type="button" class="tab-bar__item" data-view="community">
-      <span class="tab-bar__icon" aria-hidden="true"></span>
-      <span class="tab-bar__label">커뮤니티</span>
-    </button>
     <button type="button" class="tab-bar__item" data-view="planner">
       <span class="tab-bar__icon" aria-hidden="true"></span>
       <span class="tab-bar__label">식단</span>
@@ -893,6 +910,6 @@
   <script src="recipes-builtin.js?v=47"></script>
   <script src="js/login-required-modal.js?v=65"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=75" defer></script>
+  <script src="script.js?v=81" defer></script>
 </body>
 </html>
