@@ -1,6 +1,4 @@
-/**
- * 영상 레시피 추출 디버그 로그 · 실패 원인 분류
- */
+import { VIDEO_EXTRACT_UI } from './video-pipeline/constants.js';
 
 const LOG_PREFIX = '[VideoExtract]';
 
@@ -33,12 +31,12 @@ export const EXTRACT_FAILURE = {
   OPENAI_NOT_A_RECIPE: {
     code: 'OPENAI_NOT_A_RECIPE',
     label: '레시피 정보 부족',
-    userMessage: '자동 추출이 어려운 영상이에요. 영상 설명글, 자막, 고정 댓글을 붙여넣으면 정리해드릴게요.',
+    userMessage: VIDEO_EXTRACT_UI.INSUFFICIENT_MSG,
   },
   INCOMPLETE_RECIPE: {
     code: 'INCOMPLETE_RECIPE',
-    label: '레시피 정보 불완전',
-    userMessage: '레시피 재료나 조리 순서를 추출하지 못했습니다. 더 자세한 설명글을 붙여넣어 주세요.',
+    label: '레시피 정보 부족',
+    userMessage: VIDEO_EXTRACT_UI.INSUFFICIENT_MSG,
   },
 };
 

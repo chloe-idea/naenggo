@@ -7,6 +7,7 @@
   function isLoggedIn() {
     const authSvc = global.FirebaseServices?.AuthService;
     if (authSvc?.isLoggedIn?.()) return true;
+    if (global.__authGateState?.user?.uid) return true;
     return Boolean(global.FirebaseServices?.auth?.currentUser?.uid);
   }
 

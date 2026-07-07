@@ -18,7 +18,9 @@ export const PLATFORM_LABELS = {
 
 export const VIDEO_EXTRACT_UI = {
   FALLBACK_MSG:
-    '자동 추출이 어려운 영상이에요. 영상 설명글, 자막, 고정 댓글을 붙여넣으면 정리해드릴게요.',
+    '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.',
+  INSUFFICIENT_MSG:
+    '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.',
   YOUTUBE_AUTO_HINT: 'YouTube·Shorts는 링크만으로 자동 추출을 시도합니다.',
   INSTAGRAM_HINT:
     'Instagram Reels는 링크만으로는 캡션을 가져오기 어려울 수 있어요. 캡션을 함께 붙여넣으면 정확합니다.',

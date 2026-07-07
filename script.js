@@ -64,6 +64,24 @@ const FILTERS = [
   { id: 'quick', label: '⏱️ 15분 이하' },
 ];
 
+const INGREDIENT_EMOJI = {
+  계란: '🥚', 달걀: '🥚', 양파: '🧅', 마늘: '🧄', 대파: '🧅', 파: '🧅', 쪽파: '🧅',
+  토마토: '🍅', 감자: '🥔', 당근: '🥕', 버터: '🧈', 치즈: '🧀', 우유: '🥛', 베이컨: '🥓',
+  닭고기: '🍗', 돼지고기: '🥩', 소고기: '🥩', 새우: '🦐', 연어: '🐟', 참치: '🐟',
+  밥: '🍚', 쌀: '🍚', 면: '🍜', 라면: '🍜', 파스타: '🍝', 빵: '🍞', 두부: '🧈',
+  김치: '🥬', 상추: '🥬', 양배추: '🥬', 브로콜리: '🥦', 버섯: '🍄', 고추: '🌶️',
+  사과: '🍎', 바나나: '🍌', 레몬: '🍋', 설탕: '🍬', 소금: '🧂', 간장: '🫙', 식용유: '🫒',
+};
+
+function pantryItemEmoji(name) {
+  const n = (name || '').trim();
+  if (INGREDIENT_EMOJI[n]) return INGREDIENT_EMOJI[n];
+  for (const [key, emoji] of Object.entries(INGREDIENT_EMOJI)) {
+    if (n.includes(key) || key.includes(n)) return emoji;
+  }
+  return '🥬';
+}
+
 const VIEW_TITLES = {
   main: '집에 있는 재료로 만들 수 있는 요리를 찾아보세요',
   'my-recipes': '나만의 레시피를 관리하세요',
@@ -81,10 +99,10 @@ const MEAL_TYPES = [
 ];
 
 const PLANNER_SLOTS = [
-  { id: 'breakfast', label: '아침' },
-  { id: 'lunch', label: '점심' },
-  { id: 'dinner', label: '저녁' },
-  { id: 'snack', label: '간식' },
+  { id: 'breakfast', label: '아침', emoji: '🍳', menuEmoji: '🍳' },
+  { id: 'lunch', label: '점심', emoji: '🍱', menuEmoji: '🍱' },
+  { id: 'dinner', label: '저녁', emoji: '🍜', menuEmoji: '🌙' },
+  { id: 'snack', label: '간식', emoji: '🍪', menuEmoji: '🍪' },
 ];
 
 function normalizeMealType(type) {
@@ -368,7 +386,7 @@ const AffiliateService = {
 
 // ===== 영상 레시피 추출 (Recime-style pipeline — js/video-extract-platform.js) =====
 const VEP = () => window.VideoExtractPlatform || {};
-const VIDEO_EXTRACT_FALLBACK_MSG = '자동 추출이 어려운 영상이에요. 영상 설명글, 자막, 고정 댓글을 붙여넣으면 정리해드릴게요.';
+const VIDEO_EXTRACT_FALLBACK_MSG = '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.';
 const VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG = VIDEO_EXTRACT_FALLBACK_MSG;
 const VIDEO_EXTRACT_PARTIAL_WARNING = '영상 설명글, 자막, 고정 댓글을 함께 붙여넣으면 더 정확합니다';
 const INSTAGRAM_REELS_EXTRACT_HINT = 'Instagram Reels는 링크만으로는 캡션을 가져오기 어려울 수 있어요. 캡션을 함께 붙여넣으면 정확합니다.';
@@ -380,6 +398,132 @@ class VideoExtractFallbackError extends Error {
     super(message);
     this.code = 'FALLBACK';
   }
+}
+
+function logVideoExtractDebug(phase, data = {}) {
+  console.log('[VideoExtract]', phase, data);
+}
+
+function normalizeDishNameToken(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^\w\uac00-\ud7a3]/g, '')
+    .replace(/레시피|만들기|요리|조리법|먹방|mukbang|asmr|shorts|쇼츠/gi, '');
+}
+
+/** 출처 음식명과 AI 결과명이 현저히 다르면 true */
+function dishNamesLikelyMismatch(sourceDish, recipeName) {
+  const a = normalizeDishNameToken(sourceDish);
+  const b = normalizeDishNameToken(recipeName);
+  if (!a || !b || a.length < 2 || b.length < 2) return false;
+  if (a.includes(b) || b.includes(a)) return false;
+  let maxCommon = 0;
+  for (let len = Math.min(a.length, b.length); len >= 2; len -= 1) {
+    for (let i = 0; i <= a.length - len; i += 1) {
+      const sub = a.slice(i, i + len);
+      if (b.includes(sub)) {
+        maxCommon = len;
+        break;
+      }
+    }
+    if (maxCommon >= 2) break;
+  }
+  return maxCommon < 2;
+}
+
+function clearVideoExtractResultState() {
+  state.videoReviewDraft = null;
+  state.videoDishMismatchAcknowledged = false;
+  if (dom.videoReviewError) dom.videoReviewError.hidden = true;
+  if (dom.videoReviewMockNotice) dom.videoReviewMockNotice.hidden = true;
+  if (dom.videoReviewPartialNotice) dom.videoReviewPartialNotice.hidden = true;
+  if (dom.videoReviewName) dom.videoReviewName.value = '';
+  if (dom.videoReviewIngredients) dom.videoReviewIngredients.value = '';
+  if (dom.videoReviewOptional) dom.videoReviewOptional.value = '';
+  if (dom.videoReviewSubstitutes) dom.videoReviewSubstitutes.value = '';
+  if (dom.videoReviewSteps) dom.videoReviewSteps.value = '';
+}
+
+function clearVideoExtractStateBeforeExtract(sourceUrl) {
+  clearVideoExtractResultState();
+  state.videoExtractNeedsFallback = false;
+  if (dom.videoFormError) dom.videoFormError.hidden = true;
+  state.videoExtractSessionUrl = sourceUrl;
+  logVideoExtractDebug('state-cleared', { inputUrl: sourceUrl });
+}
+
+function syncVideoUrlSession(rawUrl) {
+  const normalized = String(rawUrl || '').trim();
+  const prev = state.videoExtractSessionUrl;
+  if (prev && normalized && prev !== normalized) {
+    if (dom.videoUserText) dom.videoUserText.value = '';
+    if (dom.videoPasteText) dom.videoPasteText.value = '';
+    clearVideoExtractResultState();
+    hideVideoFallback();
+    logVideoExtractDebug('url-changed', { previousUrl: prev, newUrl: normalized });
+  }
+  state.videoExtractSessionUrl = normalized || null;
+}
+
+function logVideoExtractResult(result, sourceUrl, textPayload = {}) {
+  logVideoExtractDebug('extract-result', {
+    inputUrl: sourceUrl,
+    sourceTitle: result.sourceTitle || result.videoTitle || '',
+    sourceCaption: String(textPayload.caption || textPayload.pastedText || '').slice(0, 300),
+    transcriptLength: result._transcriptLength ?? null,
+    detectedDishName: result.sourceDetectedDishName || result.detectedDishName || result.videoTitle || '',
+    aiRecipeName: result.name,
+    confidence: result.confidence,
+    sourceValidation: result.sourceValidation,
+    dishNameMismatch: result.dishNameMismatch,
+  });
+}
+
+function resolveVideoDishMismatch(result) {
+  const detected = result.sourceDetectedDishName
+    || result.detectedDishName
+    || result.videoTitle
+    || state.videoLinkMeta?.title
+    || '';
+  const recipeName = result.name || '';
+  const mismatch = result.dishNameMismatch || dishNamesLikelyMismatch(detected, recipeName);
+  if (!mismatch) return { retry: false };
+
+  const detectedLabel = String(detected).replace(/\s*[-|｜].*$/, '').trim().slice(0, 40) || '다른 요리';
+  const recipeLabel = String(recipeName).slice(0, 40) || '다른 레시피';
+  const retry = window.confirm(
+    `영상은 "${detectedLabel}"(으)로 보이는데, 추출 결과는 "${recipeLabel}" 레시피입니다. 다시 추출할까요?`
+  );
+  if (retry) return { retry: true };
+
+  result._dishMismatchAcknowledged = true;
+  result.dishNameMismatch = true;
+  return {
+    retry: false,
+    warning: result.extractionWarning
+      || `영상(${detectedLabel})과 추출 결과(${recipeLabel})가 다를 수 있어요. 저장 전에 내용을 확인해 주세요.`,
+  };
+}
+
+async function proceedWithVideoExtractResult(result, sourceUrl, textPayload) {
+  logVideoExtractResult(result, sourceUrl, textPayload);
+
+  const mismatchCheck = resolveVideoDishMismatch(result);
+  if (mismatchCheck.retry) return false;
+
+  fillVideoReviewForm(result);
+  const warning = result._warning || mismatchCheck.warning;
+  if (warning) showRecipeWarning(warning);
+  setRecipeFormTab('review');
+  if (result._isMockData) {
+    showToast('현재는 테스트 데이터입니다. 내용을 확인해 주세요.');
+  } else if (warning) {
+    showToast('레시피를 정리했어요. 안내 문구를 확인해 주세요.');
+  } else {
+    showToast('레시피 추출이 완료됐어요. 내용을 확인해 주세요.');
+  }
+  return true;
 }
 
 function logVideoExtractError(phase, err, extra = {}) {
@@ -471,7 +615,7 @@ function mapVideoExtractUserError(err, apiData = null) {
   }
   if (contentFailureCodes.has(code)) {
     return {
-      message: VIDEO_EXTRACT_FALLBACK_MSG,
+      message: apiData?.message || VIDEO_EXTRACT_FALLBACK_MSG,
       showFallback: true,
       failureReason: code,
       failureReasonLabel: apiData?.failureReasonLabel || null,
@@ -728,7 +872,7 @@ const VideoRecipeAnalysisService = {
       sourceUrl: data.sourceUrl || fallbackUrl,
       sourcePlatform: data.sourcePlatform || 'youtube',
       thumbnailUrl: data.thumbnailUrl || null,
-      videoTitle: data.title || '',
+      videoTitle: data.sourceTitle || data.title || '',
       name: String(data.title || '영상 레시피').trim().slice(0, 60),
       ingredients: (data.ingredients || []).map((s) => String(s).trim()).filter(Boolean),
       optionalIngredients: (data.optionalIngredients || []).map((s) => String(s).trim()).filter(Boolean),
@@ -737,10 +881,30 @@ const VideoRecipeAnalysisService = {
       cookTime: Math.max(1, Number(data.cookingTime) || 20),
       difficulty: ['쉬움', '보통', '어려움'].includes(data.difficulty) ? data.difficulty : '보통',
       category,
+      sourceTitle: data.sourceTitle || data.title || '',
+      detectedDishName: data.detectedDishName || '',
+      sourceDetectedDishName: data.sourceDetectedDishName || data.detectedDishName || '',
+      confidence: typeof data.confidence === 'number' ? data.confidence : (Number(data.confidence) || null),
+      sourceValidation: data.sourceValidation || '',
+      sourceValidationReason: data.sourceValidationReason || data.reason || '',
+      dishNameMismatch: Boolean(data.dishNameMismatch),
+      extractionWarning: data.extractionWarning || null,
     };
   },
 
-  collectVideoTextPayload() {
+  collectVideoTextPayload(sourceUrl) {
+    const currentUrl = String(sourceUrl || dom.videoSourceUrl?.value || '').trim();
+    const sessionUrl = String(state.videoExtractSessionUrl || currentUrl).trim();
+    if (currentUrl && sessionUrl && currentUrl !== sessionUrl) {
+      logVideoExtractDebug('text-payload-skipped', { currentUrl, sessionUrl });
+      return {
+        userText: '',
+        caption: '',
+        description: '',
+        pastedText: '',
+        hasUserText: false,
+      };
+    }
     const userText = dom.videoUserText?.value?.trim() || '';
     const pastedText = dom.videoPasteText?.value?.trim() || '';
     const primaryText = pastedText || userText;
@@ -775,6 +939,12 @@ const VideoRecipeAnalysisService = {
       description: textPayload.description || '',
       pastedText: textPayload.pastedText || '',
     };
+
+    logVideoExtractDebug('api-request', {
+      inputUrl: url,
+      userTextLength: payload.userText.length,
+      captionLength: payload.caption.length,
+    });
 
     const headers = { 'Content-Type': 'application/json' };
     const idToken = await window.FirebaseServices?.AnalysisQuotaService?.getIdTokenForApi?.();
@@ -932,7 +1102,7 @@ const VideoRecipeAnalysisService = {
     const urlCheck = this.validateUrl(sourceUrl);
     if (!urlCheck.ok) throw new Error(urlCheck.error);
 
-    const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload();
+    const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload(urlCheck.url);
     const apiUrl = this.getRecipeApiUrl(urlCheck.platform);
     if (apiUrl) {
       return this.extractViaApi(urlCheck.url, textPayload);
@@ -994,8 +1164,8 @@ const VideoRecipeAnalysisService = {
   async analyzeWithOpenAI(sourceUrl, text) {
     const cfg = this.getOpenAIConfig();
     const systemPrompt = `당신은 요리 레시피 추출 전문가입니다. 영상 설명/자막 텍스트에서 레시피만 추출하세요.
-반드시 JSON 객체 하나만 반환하세요. 키: name, ingredients(배열), optionalIngredients(배열), substitutes(배열, "재료 → 대체" 형식), steps(배열), cookTime(숫자, 분), difficulty(쉬움|보통|어려움), category(korean|western|japanese|chinese|diet|high-protein).
-원문 전체를 저장하지 말고 요약된 레시피 정보만 추출하세요.`;
+반드시 JSON 객체 하나만 반환하세요. 키: name, ingredients(배열), optionalIngredients(배열), substitutes(배열, "재료 → 대체" 형식), steps(배열), cookTime(숫자, 분), difficulty(쉬움|보통|어려움), category(korean|western|japanese|chinese|diet|high-protein), sourceValidation("passed"|"failed"), detectedDishName, confidence(0~1), reason.
+확인된 정보만 사용하고, 추측하거나 예시 레시피를 반환하지 마세요. 정보가 부족하면 sourceValidation을 "failed"로 하세요.`;
 
     const response = await fetch(cfg.endpoint || 'https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1392,14 +1562,18 @@ const DishTypeService = {
 
 // ===== Seed Recipes =====
 function resolveRecipeImage(data) {
-  const raw = data.image;
-  if (raw && raw !== '' && raw !== DEFAULT_IMAGE) {
-    if (typeof raw === 'string' && raw.includes('images.unsplash.com')) return DEFAULT_IMAGE;
-    if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
-    return raw.startsWith('images/') ? raw : `images/recipes/${raw}`;
+  if (typeof RecipeImageService !== 'undefined') {
+    return RecipeImageService.resolveForStorage({
+      name: data.name,
+      title: data.title,
+      category: data.category,
+      dishType: data.dishType || DishTypeService.infer(data.name),
+      image: data.image,
+      imageUrl: data.imageUrl,
+      thumbnailUrl: data.thumbnailUrl,
+    });
   }
-  const map = typeof RECIPE_IMAGE_MAP !== 'undefined' ? RECIPE_IMAGE_MAP : {};
-  return map[data.name] || DEFAULT_IMAGE;
+  return DEFAULT_IMAGE;
 }
 
 function seed(id, data) {
@@ -2048,6 +2222,7 @@ const PantryIngredientService = {
 function isLoggedInAppUser() {
   const authSvc = window.FirebaseServices?.AuthService;
   if (authSvc?.isLoggedIn?.()) return true;
+  if (window.__authGateState?.user?.uid) return true;
   return Boolean(window.FirebaseServices?.auth?.currentUser?.uid);
 }
 
@@ -2261,7 +2436,18 @@ async function persistMealPlans() {
     notifyGuestPersonalDataNotPersisted('식단');
     return;
   }
-  await getFirestoreUserDataSync().mealPlans.savePlans(MealPlanRepository._plans);
+  const sync = getFirestoreUserDataSync();
+  if (!sync?.mealPlans?.savePlans) {
+    throw new Error('Firestore 동기화를 사용할 수 없습니다.');
+  }
+  await sync.mealPlans.savePlans(MealPlanRepository._plans);
+}
+
+/** 로컬 식단 변경 직후 Firestore snapshot이 이전 데이터로 덮어쓰는 것을 방지 */
+let mealPlanLocalMutatedAt = 0;
+
+function markMealPlanLocalMutation() {
+  mealPlanLocalMutatedAt = Date.now();
 }
 
 async function persistGroceryState() {
@@ -2689,8 +2875,12 @@ const state = {
   videoReviewDraft: null,
   videoLinkMeta: null,
   videoExtractNeedsFallback: false,
+  videoExtractSessionUrl: null,
+  videoDishMismatchAcknowledged: false,
   aiUsageRemaining: null,
   plannerRange: 'week',
+  plannerAnimate: null,
+  plannerSheet: { date: null, slot: null, action: 'add', tab: 'recommend', search: '' },
   martMode: false,
 };
 
@@ -2706,6 +2896,11 @@ const dom = {
   },
   plannerRange: $('#planner-range'), plannerAutoBtn: $('#planner-auto-btn'), plannerGrid: $('#planner-grid'),
   plannerGuestHint: $('#planner-guest-hint'),
+  plannerSlotSheet: $('#planner-slot-sheet'), plannerSlotSheetTitle: $('#planner-slot-sheet-title'),
+  plannerSlotMenu: $('#planner-slot-menu'),
+  plannerRecipeSheet: $('#planner-recipe-sheet'), plannerRecipeSheetTitle: $('#planner-recipe-sheet-title'),
+  plannerRecipeSearch: $('#planner-recipe-search'), plannerRecipeTabs: $('#planner-recipe-tabs'),
+  plannerRecipeList: $('#planner-recipe-list'), plannerRecipeEmpty: $('#planner-recipe-empty'),
   martModeToggle: $('#mart-mode-toggle'), groceryCompleteBtn: $('#grocery-complete-btn'),
   groceryBudget: $('#grocery-budget'), groceryBudgetSummary: $('#grocery-budget-summary'),
   groceryList: $('#grocery-list'), groceryEmpty: $('#grocery-empty'),
@@ -2713,7 +2908,14 @@ const dom = {
   openPantryManageBtn: $('#open-pantry-manage-btn'),
   quickForm: $('#quick-ingredient-form'), quickInput: $('#quick-ingredient-input'),
   pantryChips: $('#pantry-chips'),
+  pantryChipsCount: $('#pantry-chips-count'),
   menuSearchInput: $('#menu-search-input'),
+  homeTodayHero: $('#home-today-hero'),
+  homeRecipesSeeAll: $('#home-recipes-see-all'),
+  homeFilterBtn: $('#home-filter-btn'),
+  homeFilterPanel: $('#home-filter-panel'),
+  homeFilterChips: $('#home-filter-chips'),
+  headerNotifyBtn: $('#header-notify-btn'),
   recipeList: $('#recipe-list'), resultsCount: $('#results-count'),
   emptyState: $('#empty-state'), noResults: $('#no-results'),
   myRecipesList: $('#my-recipes-list'), myRecipesCount: $('#my-recipes-count'), myRecipesEmpty: $('#my-recipes-empty'),
@@ -2725,6 +2927,7 @@ const dom = {
   communityFilterChips: $('#community-filter-chips'),
   pantryList: $('#pantry-list'), pantryCount: $('#pantry-manage-count'), pantryEmpty: $('#pantry-empty'),
   openPantryAdd: $('#open-pantry-add-btn'), openRecipeForm: $('#open-recipe-form-btn'),
+  openVideoRecipeFormBtn: $('#open-video-recipe-form-btn'),
   mealStats: $('#meal-stats'), currencySelect: $('#currency-select'), calendarLabel: $('#calendar-label'),
   calendarGuestHint: $('#calendar-guest-hint'),
   calendarPrev: $('#calendar-prev'), calendarNext: $('#calendar-next'),
@@ -2779,6 +2982,12 @@ const dom = {
   videoUserTextHint: $('#video-user-text-hint'),
   videoPasteText: $('#video-paste-text'),
   videoFormError: $('#video-form-error'),
+  videoPasteBtn: $('#video-paste-btn'),
+  videoFlowStepBar: $('#video-flow-step-bar'),
+  videoExtractLoading: $('#video-extract-loading'),
+  videoExtractLoadingText: $('#video-extract-loading-text'),
+  videoFormErrorText: $('#video-form-error')?.querySelector('.video-form-error-card__text'),
+  videoReviewErrorText: $('#video-review-error')?.querySelector('.video-form-error-card__text'),
   videoAnalyzeBtn: $('#video-analyze-btn'),
   loginPromptModal: $('#login-prompt-modal'),
   loginPromptGoogleBtn: $('#login-prompt-google-btn'),
@@ -2845,6 +3054,12 @@ function parseStepList(t) {
 /** @deprecated use parseIngredientList or parseStepList */
 function parseList(t) { return parseIngredientList(t); }
 function hasPhoto(img) { return img && img !== DEFAULT_IMAGE && !String(img).includes('images.unsplash.com'); }
+
+function getRecipeDisplayImage(recipe) {
+  if (typeof RecipeImageService !== 'undefined') return RecipeImageService.resolveSrc(recipe);
+  if (hasPhoto(recipe?.image)) return recipe.image;
+  return null;
+}
 function formatMoney(value, currencyCode = null) {
   const amount = Number(value) || 0;
   const code = currencyCode || state.currency || DEFAULT_CURRENCY;
@@ -2879,19 +3094,15 @@ function recipePlaceholderHTML(recipe, variant = 'card') {
 }
 
 function recipeCardImageHTML(recipe) {
-  if (hasPhoto(recipe.image)) {
-    return `<button type="button" class="recipe-card__image-btn" data-zoom-src="${esc(recipe.image)}" aria-label="${esc(recipe.name)} 사진 크게 보기">
-      <img class="recipe-card__image" src="${recipe.image}" alt="${esc(recipe.name)}" loading="lazy">
-    </button>`;
+  if (typeof RecipeImageService !== 'undefined') {
+    return RecipeImageService.renderImg(recipe, { variant: 'card', zoomable: true });
   }
   return recipePlaceholderHTML(recipe, 'card');
 }
 
 function recipeHeroHTML(recipe) {
-  if (hasPhoto(recipe.image)) {
-    return `<button type="button" class="recipe-detail__hero-btn" data-zoom-src="${esc(recipe.image)}" aria-label="${esc(recipe.name)} 사진 크게 보기">
-      <img src="${recipe.image}" alt="${esc(recipe.name)}">
-    </button>`;
+  if (typeof RecipeImageService !== 'undefined') {
+    return RecipeImageService.renderImg(recipe, { variant: 'hero', zoomable: true });
   }
   return recipePlaceholderHTML(recipe, 'hero');
 }
@@ -2970,6 +3181,7 @@ function switchView(view) {
   Object.entries(dom.views).forEach(([k, el]) => { el.hidden = k !== view; });
   dom.tabItems.forEach((tab) => tab.classList.toggle('tab-bar__item--active', tab.dataset.view === view));
   document.body.classList.toggle('view--community', view === 'community');
+  document.body.classList.toggle('view--main', view === 'main');
   if (dom.headerCommunityTitle) dom.headerCommunityTitle.hidden = view !== 'community';
   if (dom.headerSubtitle) {
     if (view === 'community') {
@@ -3026,12 +3238,19 @@ function pantryChipBadge(item) {
 
 function renderPantryChips() {
   const items = getPantryItemsForUi();
+  if (dom.pantryChipsCount) {
+    const count = items.length;
+    dom.pantryChipsCount.textContent = count > 0 ? ` (${count})` : '';
+    dom.pantryChipsCount.hidden = count === 0;
+  }
   if (!items.length) {
     dom.pantryChips.innerHTML = '<p class="hint hint--inline">재료를 추가하면 맞춤 레시피를 추천해 드려요.</p>';
     return;
   }
   dom.pantryChips.innerHTML = items.map((item) => `
-    <span class="tag" role="listitem">${esc(item.name)}${pantryChipBadge(item)}
+    <span class="tag" role="listitem">
+      <span class="tag__emoji" aria-hidden="true">${pantryItemEmoji(item.name)}</span>
+      <span class="tag__name">${esc(item.name)}</span>${pantryChipBadge(item)}
       <button type="button" class="tag__remove" data-rm="${esc(item.id)}" aria-label="삭제">&times;</button>
     </span>`).join('');
   dom.pantryChips.querySelectorAll('[data-rm]').forEach((btn) => {
@@ -3182,19 +3401,100 @@ function bindRecipeCards(container, results) {
 }
 
 // ===== Render: Home =====
+function homeHeroImageHTML(recipe) {
+  if (typeof RecipeImageService !== 'undefined') {
+    return RecipeImageService.renderImg(recipe, { variant: 'home-hero', alt: '' });
+  }
+  return `<div class="home-today-hero__img home-today-hero__img--placeholder" aria-hidden="true">${DishTypeService.placeholderSVG(recipe)}</div>`;
+}
+
+function homeMatchLevel(matchPercent) {
+  if (matchPercent == null) return 'low';
+  if (matchPercent >= 70) return 'high';
+  if (matchPercent >= 40) return 'mid';
+  return 'low';
+}
+
+function homeTodayHeroHTML(result) {
+  if (!result) return '';
+  const { recipe, matchPercent } = result;
+  const level = homeMatchLevel(matchPercent);
+  return `
+    <section class="home-today-hero" aria-label="오늘의 추천">
+      <div class="home-today-hero__content">
+        <p class="home-today-hero__label">오늘의 추천</p>
+        <h3 class="home-today-hero__name">${esc(recipe.name)}</h3>
+        <p class="home-today-hero__tagline">지금 가진 재료로 만들 수 있어요!</p>
+        <div class="home-today-hero__stats">
+          ${matchPercent != null ? `<span class="home-today-hero__match home-today-hero__match--${level}">${matchPercent}% 재료 일치</span>` : ''}
+          <span>${recipe.cookTime}분</span>
+          <span>${esc(recipe.difficulty)}</span>
+        </div>
+        <button type="button" class="home-today-hero__cta" data-hero-rid="${esc(recipe.id)}">레시피 보기 →</button>
+      </div>
+      <div class="home-today-hero__image">${homeHeroImageHTML(recipe)}</div>
+    </section>`;
+}
+
+function bindHomeTodayHero(container, topResult) {
+  const btn = container.querySelector('[data-hero-rid]');
+  if (!btn) return;
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    openRecipeDetail(topResult);
+  };
+}
+
+function renderHomeFilters() {
+  if (!dom.homeFilterChips) return;
+  dom.homeFilterChips.innerHTML = FILTERS.map((f) => `
+    <button type="button" class="filter-chip${state.filters.has(f.id) ? ' filter-chip--active' : ''}" data-home-f="${f.id}">${f.label}</button>
+  `).join('');
+  dom.homeFilterChips.querySelectorAll('[data-home-f]').forEach((chip) => {
+    chip.onclick = () => {
+      if (state.filters.has(chip.dataset.homeF)) state.filters.delete(chip.dataset.homeF);
+      else state.filters.add(chip.dataset.homeF);
+      renderHomeFilters();
+      renderHome();
+    };
+  });
+}
+
+function toggleHomeFilterPanel(force) {
+  if (!dom.homeFilterPanel || !dom.homeFilterBtn) return;
+  const open = typeof force === 'boolean' ? force : dom.homeFilterPanel.hidden;
+  dom.homeFilterPanel.hidden = !open;
+  dom.homeFilterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
 function renderHome() {
+  renderHomeFilters();
   const names = RecommendationService.getPantryNames();
   const query = state.menuSearch.trim();
   const hasSearchMode = Boolean(query || state.filters.size);
   dom.emptyState.hidden = names.length > 0 || hasSearchMode;
   dom.noResults.hidden = true;
   dom.recipeList.innerHTML = '';
-  if (!names.length && !hasSearchMode) { dom.resultsCount.textContent = ''; return; }
+  if (dom.homeTodayHero) {
+    dom.homeTodayHero.hidden = true;
+    dom.homeTodayHero.innerHTML = '';
+  }
+  if (!names.length && !hasSearchMode) {
+    dom.resultsCount.textContent = '';
+    return;
+  }
 
   const results = RecommendationService.recommend(RecipeRepository.getRecommendableRecipes(), { activeFilters: state.filters, query });
   dom.noResults.hidden = results.length > 0;
-  dom.resultsCount.textContent = `${results.length}개`;
-  dom.recipeList.innerHTML = results.map((r) => recipeCardHTML({ ...r, showCardSave: true, showCardFork: true })).join('');
+  dom.resultsCount.textContent = results.length ? `${results.length}개` : '';
+
+  if (results.length && dom.homeTodayHero) {
+    dom.homeTodayHero.hidden = false;
+    dom.homeTodayHero.innerHTML = homeTodayHeroHTML(results[0]);
+    bindHomeTodayHero(dom.homeTodayHero, results[0]);
+  }
+
+  dom.recipeList.innerHTML = results.map((r) => recipeCardHTML({ ...r })).join('');
   bindRecipeCards(dom.recipeList, results);
   syncAuthGateUi();
 }
@@ -3881,44 +4181,365 @@ const PLANNER_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 function formatPlannerDayLabel(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`);
-  return `${PLANNER_WEEKDAYS[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`;
+  return `${PLANNER_WEEKDAYS[d.getDay()]}요일 ${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function getPlannerRecipeOptionsHTML() {
-  return RecipeRepository.getRecommendableRecipes()
-    .map((r) => `<option value="${esc(r.name)}"></option>`)
-    .join('');
+function plannerSlotInfo(slotId) {
+  return PLANNER_SLOTS.find((s) => s.id === slotId) || { id: slotId, label: slotId, emoji: '🍽️', menuEmoji: '🍽️' };
 }
 
-function applyPlannerSlotChange(input) {
-  const data = GroceryListService.resolveEntry(input.value);
-  MealPlanRepository.set(input.dataset.date, input.dataset.slot, data);
-  if (data.name && data.name !== input.value.trim()) input.value = data.name;
-  persistMealPlans().catch(() => undefined);
+function plannerSlotHasEntry(date, slotId) {
+  const entry = MealPlanRepository.get(date, slotId);
+  return Boolean(entry.recipeId || entry.name);
+}
+
+function getPlannerMealDisplay(entry) {
+  if (entry.recipeId) {
+    const recipe = RecipeRepository.getById(entry.recipeId);
+    if (recipe) return recipe;
+  }
+  if (entry.name) {
+    return { id: '', name: entry.name, cookTime: null, difficulty: null, ingredients: [] };
+  }
+  return null;
+}
+
+function plannerMealThumbHTML(recipe) {
+  if (recipe?.id && typeof RecipeImageService !== 'undefined') {
+    return `<div class="planner-meal__thumb">${RecipeImageService.renderImg(recipe, { variant: 'thumb', alt: '' })}</div>`;
+  }
+  return '<div class="planner-meal__thumb planner-meal__thumb--empty" aria-hidden="true">📷</div>';
+}
+
+function plannerMealCardHTML(date, slot, animate = false) {
+  const entry = MealPlanRepository.get(date, slot.id);
+  const recipe = getPlannerMealDisplay(entry);
+  if (!recipe) return '';
+  const names = RecommendationService.getPantryNames();
+  const matchPercent = recipe.ingredients?.length && names.length
+    ? MatchService.analyze(names, recipe.ingredients).matchPercent
+    : null;
+  const metaParts = [];
+  if (recipe.cookTime != null) metaParts.push(`${recipe.cookTime}분`);
+  if (recipe.difficulty) metaParts.push(recipe.difficulty);
+  const meta = metaParts.join(' · ');
+  const matchLine = matchPercent != null
+    ? `<p class="planner-meal__match">${matchPercent}% 재료 일치</p>`
+    : '';
+  const animClass = animate ? ' planner-meal--enter' : '';
+  return `
+    <article class="planner-meal${animClass}" data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}">
+      <div class="planner-meal__head">
+        <p class="planner-meal__slot">${slot.emoji} ${esc(slot.label)}</p>
+        <button type="button" class="planner-meal__remove" data-planner-remove data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" aria-label="${esc(slot.label)} ${esc(recipe.name)} 삭제">×</button>
+      </div>
+      <button type="button" class="planner-meal__body" data-planner-edit data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" aria-label="${esc(slot.label)} ${esc(recipe.name)} 수정">
+        <div class="planner-meal__row">
+          ${plannerMealThumbHTML(recipe)}
+          <div class="planner-meal__info">
+            <p class="planner-meal__name">${esc(recipe.name)}</p>
+            ${meta ? `<p class="planner-meal__meta">${esc(meta)}</p>` : ''}
+            ${matchLine}
+          </div>
+        </div>
+      </button>
+    </article>`;
+}
+
+function plannerDayCardHTML(date) {
+  const filled = PLANNER_SLOTS.filter((slot) => plannerSlotHasEntry(date, slot.id));
+  const mealsHTML = filled.map((slot) => {
+    const animate = state.plannerAnimate?.date === date && state.plannerAnimate?.slot === slot.id;
+    return plannerMealCardHTML(date, slot, animate);
+  }).join('');
+  const todayMark = date === todayStr() ? ' planner-day--today' : '';
+  const body = filled.length
+    ? `<div class="planner-day__meals">${mealsHTML}</div>`
+    : `<div class="planner-day__empty">
+        <p class="planner-day__empty-text">아직 추가된 식단이 없어요.</p>
+        <p class="planner-day__empty-hint">+ 버튼으로 아침·점심·저녁·간식을 추가해보세요.</p>
+      </div>`;
+  return `
+    <article class="planner-day${todayMark}">
+      <div class="planner-day__header">
+        <h3 class="planner-day__title">${formatPlannerDayLabel(date)}</h3>
+        <button type="button" class="planner-day__add" data-planner-date="${esc(date)}" aria-label="${formatPlannerDayLabel(date)} 식단 추가">＋</button>
+      </div>
+      ${body}
+    </article>`;
+}
+
+function setPlannerMeal(date, slotId, data, { animate = false } = {}) {
+  markMealPlanLocalMutation();
+  MealPlanRepository.set(date, slotId, data);
+  if (animate) state.plannerAnimate = { date, slot: slotId };
+  persistMealPlans().catch((err) => {
+    console.error('[MealPlanner] persist failed after set', { date, slotId, err });
+  });
+  renderPlanner();
   renderGroceryList();
 }
 
-function handlePlannerSlotInputChange(input) {
-  const pendingValue = input.value;
-  const date = input.dataset.date;
-  const slot = input.dataset.slot;
+function applyMealPlanSlotRemoval(dateKey, mealType) {
+  MealPlanRepository.set(dateKey, mealType, { recipeId: '', name: '' });
+  renderPlanner();
+  renderGroceryList();
+}
+
+async function deleteMealPlanItem(dateKey, mealType) {
+  const normalizedDate = String(dateKey || '').trim();
+  const normalizedSlot = String(mealType || '').trim();
+  if (!normalizedDate || !normalizedSlot) {
+    const err = new Error('삭제할 식단 정보가 없습니다.');
+    console.error('[MealPlanner] deleteMealPlanItem invalid params', { dateKey, mealType });
+    throw err;
+  }
+  markMealPlanLocalMutation();
+  applyMealPlanSlotRemoval(normalizedDate, normalizedSlot);
+  await persistMealPlans();
+  return true;
+}
+
+function readPlannerMealDataset(el) {
+  if (!el) return { dateKey: '', mealType: '' };
+  return {
+    dateKey: el.getAttribute('data-meal-date') || el.getAttribute('data-date') || '',
+    mealType: el.getAttribute('data-meal-slot') || el.getAttribute('data-slot') || '',
+  };
+}
+
+function handlePlannerMealRemove(dateKey, mealType) {
+  const normalizedDate = String(dateKey || '').trim();
+  const normalizedSlot = String(mealType || '').trim();
+  if (!normalizedDate || !normalizedSlot) {
+    console.error('[MealPlanner] handlePlannerMealRemove invalid params', { dateKey, mealType });
+    showToast('식단을 삭제하지 못했어요.');
+    return;
+  }
   if (isGuestUser()) {
-    const entry = MealPlanRepository.get(date, slot);
-    input.value = entry?.name || '';
     requireAppLogin({
-      redirectAfterLogin: () => {
-        const el = dom.plannerGrid?.querySelector(
-          `.planner-slot__input[data-date="${date}"][data-slot="${slot}"]`,
-        );
-        if (el) {
-          el.value = pendingValue;
-          applyPlannerSlotChange(el);
-        }
-      },
+      redirectAfterLogin: () => removePlannerMeal(normalizedDate, normalizedSlot),
     });
     return;
   }
-  applyPlannerSlotChange(input);
+  removePlannerMeal(normalizedDate, normalizedSlot);
+}
+
+async function removePlannerMeal(dateKey, mealType) {
+  const normalizedDate = String(dateKey || '').trim();
+  const normalizedSlot = String(mealType || '').trim();
+  if (!normalizedDate || !normalizedSlot) {
+    console.error('[MealPlanner] removePlannerMeal invalid params', { dateKey, mealType });
+    showToast('식단을 삭제하지 못했어요.');
+    return;
+  }
+
+  const selector = `.planner-meal[data-meal-date="${normalizedDate}"][data-meal-slot="${normalizedSlot}"]`;
+  const el = dom.plannerGrid?.querySelector(selector)
+    || dom.plannerGrid?.querySelector(`.planner-meal[data-date="${normalizedDate}"][data-slot="${normalizedSlot}"]`);
+
+  const commitDelete = async () => {
+    try {
+      await deleteMealPlanItem(normalizedDate, normalizedSlot);
+      showToast(`${plannerSlotInfo(normalizedSlot).label} 식단을 삭제했어요`);
+    } catch (err) {
+      console.error('[MealPlanner] removePlannerMeal failed', {
+        dateKey: normalizedDate,
+        mealType: normalizedSlot,
+        err,
+      });
+      showToast(err?.message || '식단 삭제에 실패했어요. 다시 시도해 주세요.');
+    }
+  };
+
+  if (el) {
+    el.classList.add('planner-meal--exit');
+    window.setTimeout(() => { commitDelete(); }, 240);
+    return;
+  }
+  await commitDelete();
+}
+
+function closePlannerSheets() {
+  [dom.plannerSlotSheet, dom.plannerRecipeSheet].forEach((sheet) => {
+    if (!sheet) return;
+    sheet.hidden = true;
+    sheet.setAttribute('aria-hidden', 'true');
+  });
+  updateBodyScrollLock();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function openPlannerSlotSheet(date) {
+  if (isGuestUser()) {
+    requireAppLogin({ redirectAfterLogin: () => openPlannerSlotSheet(date) });
+    return;
+  }
+  state.plannerSheet.date = date;
+  if (dom.plannerSlotSheetTitle) dom.plannerSlotSheetTitle.textContent = formatPlannerDayLabel(date);
+  renderPlannerSlotMenu(date);
+  if (!dom.plannerSlotSheet) return;
+  dom.plannerSlotSheet.hidden = false;
+  dom.plannerSlotSheet.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function renderPlannerSlotMenu(date) {
+  if (!dom.plannerSlotMenu) return;
+  dom.plannerSlotMenu.innerHTML = PLANNER_SLOTS.flatMap((slot) => {
+    const has = plannerSlotHasEntry(date, slot.id);
+    if (has) {
+      return [
+        `<button type="button" class="planner-slot-menu__item" data-action="edit" data-slot="${esc(slot.id)}">${slot.menuEmoji} ${esc(slot.label)} 수정</button>`,
+        `<button type="button" class="planner-slot-menu__item planner-slot-menu__item--danger" data-action="delete" data-slot="${esc(slot.id)}">${slot.menuEmoji} ${esc(slot.label)} 삭제</button>`,
+      ];
+    }
+    return [`<button type="button" class="planner-slot-menu__item" data-action="add" data-slot="${esc(slot.id)}">${slot.menuEmoji} ${esc(slot.label)} 추가</button>`];
+  }).join('');
+  dom.plannerSlotMenu.querySelectorAll('[data-action]').forEach((btn) => {
+    btn.onclick = () => {
+      const slotId = btn.dataset.slot;
+      const action = btn.dataset.action;
+      if (action === 'delete') {
+        closePlannerSheets();
+        handlePlannerMealRemove(date, slotId);
+        return;
+      }
+      openPlannerRecipeSheet(date, slotId, action === 'edit' ? 'edit' : 'add');
+    };
+  });
+}
+
+function getPlannerRecipePickerItems(tab, query) {
+  const q = normalizeIngredient(query || '');
+  const names = RecommendationService.getPantryNames();
+  let items = [];
+  if (tab === 'mine') {
+    items = RecipeRepository.getUserRecipes().map((recipe) => ({ recipe, matchPercent: null }));
+  } else if (tab === 'community') {
+    items = RecipeRepository.getPublicRecipes().map((recipe) => {
+      const a = names.length
+        ? MatchService.analyze(names, recipe.ingredients)
+        : { matchPercent: null };
+      return { recipe, matchPercent: a.matchPercent };
+    });
+  } else {
+    items = RecommendationService.recommend(RecipeRepository.getRecommendableRecipes())
+      .map(({ recipe, matchPercent }) => ({ recipe, matchPercent }));
+  }
+  if (q) {
+    items = items.filter(({ recipe }) => normalizeIngredient(recipe.name).includes(q));
+  }
+  return items;
+}
+
+function plannerRecipePickRowHTML({ recipe, matchPercent }) {
+  const thumb = recipe?.id && typeof RecipeImageService !== 'undefined'
+    ? RecipeImageService.renderImg(recipe, { variant: 'thumb', alt: '' })
+    : '';
+  const metaParts = [];
+  if (recipe.cookTime != null) metaParts.push(`${recipe.cookTime}분`);
+  if (recipe.difficulty) metaParts.push(recipe.difficulty);
+  if (matchPercent != null) metaParts.push(`${matchPercent}% 일치`);
+  return `
+    <button type="button" class="planner-recipe-pick" data-recipe-id="${esc(recipe.id)}">
+      <div class="planner-recipe-pick__thumb">${thumb}</div>
+      <div class="planner-recipe-pick__body">
+        <span class="planner-recipe-pick__name">${esc(recipe.name)}</span>
+        ${metaParts.length ? `<span class="planner-recipe-pick__meta">${esc(metaParts.join(' · '))}</span>` : ''}
+      </div>
+    </button>`;
+}
+
+function renderPlannerRecipePicker() {
+  if (!dom.plannerRecipeList || !dom.plannerRecipeTabs) return;
+  const { tab, search } = state.plannerSheet;
+  dom.plannerRecipeTabs.querySelectorAll('[data-planner-tab]').forEach((btn) => {
+    btn.classList.toggle('planner-recipe-tabs__btn--active', btn.dataset.plannerTab === tab);
+  });
+  const items = getPlannerRecipePickerItems(tab, search);
+  if (dom.plannerRecipeEmpty) dom.plannerRecipeEmpty.hidden = items.length > 0;
+  dom.plannerRecipeList.hidden = items.length === 0;
+  dom.plannerRecipeList.innerHTML = items.map(plannerRecipePickRowHTML).join('');
+  dom.plannerRecipeList.querySelectorAll('.planner-recipe-pick').forEach((btn) => {
+    btn.onclick = () => {
+      const recipe = RecipeRepository.getById(btn.dataset.recipeId);
+      if (!recipe) return;
+      confirmPlannerRecipe(recipe);
+    };
+  });
+}
+
+function openPlannerRecipeSheet(date, slotId, action) {
+  state.plannerSheet.date = date;
+  state.plannerSheet.slot = slotId;
+  state.plannerSheet.action = action;
+  state.plannerSheet.tab = 'recommend';
+  state.plannerSheet.search = '';
+  const slot = plannerSlotInfo(slotId);
+  if (dom.plannerRecipeSheetTitle) {
+    dom.plannerRecipeSheetTitle.textContent = `${slot.label} ${action === 'edit' ? '수정' : '추가'}`;
+  }
+  if (dom.plannerRecipeSearch) dom.plannerRecipeSearch.value = '';
+  renderPlannerRecipePicker();
+  if (dom.plannerSlotSheet) {
+    dom.plannerSlotSheet.hidden = true;
+    dom.plannerSlotSheet.setAttribute('aria-hidden', 'true');
+  }
+  if (!dom.plannerRecipeSheet) return;
+  dom.plannerRecipeSheet.hidden = false;
+  dom.plannerRecipeSheet.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  dom.plannerRecipeSearch?.focus();
+}
+
+function confirmPlannerRecipe(recipe) {
+  const { date, slot, action } = state.plannerSheet;
+  if (!date || !slot || !recipe) return;
+  setPlannerMeal(date, slot, { recipeId: recipe.id, name: recipe.name }, { animate: true });
+  closePlannerSheets();
+  const slotLabel = plannerSlotInfo(slot).label;
+  showToast(action === 'edit' ? `${slotLabel} 식단을 수정했어요` : `${slotLabel}에 ${recipe.name}을(를) 추가했어요`);
+}
+
+function initPlannerGridDelegation() {
+  if (!dom.plannerGrid || dom.plannerGrid._plannerDelegationBound) return;
+  dom.plannerGrid._plannerDelegationBound = true;
+
+  dom.plannerGrid.addEventListener('click', (e) => {
+    const removeBtn = e.target.closest('[data-planner-remove]');
+    if (removeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const { dateKey, mealType } = readPlannerMealDataset(removeBtn);
+      handlePlannerMealRemove(dateKey, mealType);
+      return;
+    }
+
+    const editBtn = e.target.closest('[data-planner-edit]');
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const { dateKey, mealType } = readPlannerMealDataset(editBtn);
+      if (!dateKey || !mealType) return;
+      if (isGuestUser()) {
+        requireAppLogin({
+          redirectAfterLogin: () => openPlannerRecipeSheet(dateKey, mealType, 'edit'),
+        });
+        return;
+      }
+      openPlannerRecipeSheet(dateKey, mealType, 'edit');
+      return;
+    }
+
+    const addBtn = e.target.closest('[data-planner-date]');
+    if (addBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      openPlannerSlotSheet(addBtn.getAttribute('data-planner-date'));
+    }
+  });
 }
 
 function renderPlanner() {
@@ -3931,33 +4552,29 @@ function renderPlanner() {
   dom.plannerGrid.classList.toggle('planner-grid--month', isMonth);
   dom.plannerAutoBtn.hidden = isMonth;
 
-  dom.plannerGrid.innerHTML = dates.map((date) => {
-    const slots = PLANNER_SLOTS.map((slot) => {
-      const entry = MealPlanRepository.get(date, slot.id);
-      const value = entry.name || '';
-      return `
-        <label class="planner-slot">
-          <span class="planner-slot__label">${slot.label}</span>
-          <input type="text" class="planner-slot__input" list="planner-recipe-options"
-            data-date="${esc(date)}" data-slot="${slot.id}" value="${esc(value)}"
-            placeholder="메뉴 또는 레시피명" autocomplete="off">
-        </label>`;
-    }).join('');
-    const todayMark = date === todayStr() ? ' planner-day--today' : '';
-    return `
-      <article class="planner-day${todayMark}">
-        <h3 class="planner-day__title">${formatPlannerDayLabel(date)}</h3>
-        <div class="planner-day__slots">${slots}</div>
-      </article>`;
-  }).join('') + `<datalist id="planner-recipe-options">${getPlannerRecipeOptionsHTML()}</datalist>`;
-
-  dom.plannerGrid.querySelectorAll('.planner-slot__input').forEach((input) => {
-    input.addEventListener('change', () => handlePlannerSlotInputChange(input));
-  });
+  dom.plannerGrid.innerHTML = dates.map((date) => plannerDayCardHTML(date)).join('');
+  state.plannerAnimate = null;
 
   if (dom.plannerRange) dom.plannerRange.value = state.plannerRange;
   if (dom.groceryBudget) dom.groceryBudget.value = GroceryRepository.getBudget();
   renderGroceryList();
+}
+
+function initPlannerSheets() {
+  initPlannerGridDelegation();
+  dom.plannerRecipeTabs?.querySelectorAll('[data-planner-tab]').forEach((btn) => {
+    btn.onclick = () => {
+      state.plannerSheet.tab = btn.dataset.plannerTab;
+      renderPlannerRecipePicker();
+    };
+  });
+  dom.plannerRecipeSearch?.addEventListener('input', () => {
+    state.plannerSheet.search = dom.plannerRecipeSearch.value;
+    renderPlannerRecipePicker();
+  });
+  document.querySelectorAll('[data-close-modal="planner-slot"], [data-close-modal="planner-recipe"]').forEach((el) => {
+    el.onclick = () => closePlannerSheets();
+  });
 }
 
 function renderGroceryBudgetSummary(total) {
@@ -4089,7 +4706,10 @@ function autoGenerateWeeklyPlan() {
       usedIds.add(pick.recipe.id);
     }
   }
-  persistMealPlans().catch(() => undefined);
+  markMealPlanLocalMutation();
+  persistMealPlans().catch((err) => {
+    console.error('[MealPlanner] autoGenerate persist failed', err);
+  });
   renderPlanner();
   showToast('이번 주 식단을 자동으로 채웠어요');
 }
@@ -4226,6 +4846,22 @@ function openRecipeDetail(result) {
   syncAuthGateUi();
 }
 
+function updateVideoFlowStep(step) {
+  if (!dom.videoFlowStepBar) return;
+  dom.videoFlowStepBar.querySelectorAll('[data-video-step]').forEach((el) => {
+    const n = Number(el.dataset.videoStep);
+    el.classList.toggle('video-step-bar__item--active', n === step);
+    el.classList.toggle('video-step-bar__item--done', n < step);
+  });
+}
+
+function updateVideoFormModalTitle(tab) {
+  if (!dom.formModalTitle || state.editingRecipeId) return;
+  if (tab === 'review') dom.formModalTitle.textContent = '추출 결과 확인';
+  else if (tab === 'video') dom.formModalTitle.textContent = '영상에서 레시피 가져오기';
+  else dom.formModalTitle.textContent = '내 레시피 추가';
+}
+
 function applyRecipeFormTab(tab) {
   state.recipeFormTab = tab;
   const panels = { manual: dom.recipeFormPanelManual, video: dom.recipeFormPanelVideo, review: dom.recipeFormPanelReview };
@@ -4239,6 +4875,13 @@ function applyRecipeFormTab(tab) {
     btn.setAttribute('aria-selected', active ? 'true' : 'false');
   });
   if (dom.recipeFormTabs) dom.recipeFormTabs.hidden = tab === 'review' || Boolean(state.editingRecipeId);
+  if (dom.videoFlowStepBar) {
+    const showFlow = tab === 'video' || tab === 'review';
+    dom.videoFlowStepBar.hidden = !showFlow;
+    dom.videoFlowStepBar.setAttribute('aria-hidden', showFlow ? 'false' : 'true');
+    updateVideoFlowStep(tab === 'review' ? 2 : tab === 'video' ? 1 : 0);
+  }
+  updateVideoFormModalTitle(tab);
   if (tab === 'video') AiUsageService.refreshDisplay();
 }
 
@@ -4251,6 +4894,8 @@ function resetVideoRecipeForm() {
   state.videoReviewDraft = null;
   state.videoLinkMeta = null;
   state.videoExtractNeedsFallback = false;
+  state.videoExtractSessionUrl = null;
+  state.videoDishMismatchAcknowledged = false;
   if (dom.videoSourceUrl) dom.videoSourceUrl.value = '';
   if (dom.videoUserText) dom.videoUserText.value = '';
   if (dom.videoPasteText) dom.videoPasteText.value = '';
@@ -4305,7 +4950,10 @@ function showAiDailyLimitAlert(message) {
   alert(message || '무료 AI 분석 횟수를 모두 사용했어요.');
 }
 
-function setVideoExtractLoading(loading) {
+function setVideoExtractLoading(loading, message = '레시피를 분석하고 있어요…') {
+  if (dom.videoExtractLoading) dom.videoExtractLoading.hidden = !loading;
+  if (dom.videoExtractLoadingText) dom.videoExtractLoadingText.textContent = message;
+  dom.recipeFormPanelVideo?.classList.toggle('video-extract-panel--loading', loading);
   if (dom.videoAnalyzeBtn) {
     const limitReached = state.aiUsageRemaining === 0;
     dom.videoAnalyzeBtn.disabled = loading || limitReached;
@@ -4317,6 +4965,7 @@ function setVideoExtractLoading(loading) {
     dom.videoFallbackAnalyzeBtn.classList.toggle('btn--loading', loading);
     dom.videoFallbackAnalyzeBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
   }
+  if (dom.videoPasteBtn) dom.videoPasteBtn.disabled = loading;
 }
 
 function renderVideoLinkPreview(meta) {
@@ -4347,6 +4996,7 @@ function renderVideoLinkPreview(meta) {
 
 async function updateVideoLinkPreview() {
   const raw = dom.videoSourceUrl?.value.trim();
+  syncVideoUrlSession(raw);
   hideVideoFallback();
   state.videoExtractNeedsFallback = false;
   if (!raw) {
@@ -4405,13 +5055,21 @@ async function updateVideoLinkPreview() {
 }
 
 function showVideoFormError(msg) {
-  dom.videoFormError.textContent = msg;
-  dom.videoFormError.hidden = false;
+  const textEl = dom.videoFormErrorText || dom.videoFormError;
+  if (textEl) textEl.textContent = msg;
+  if (dom.videoFormError) {
+    dom.videoFormError.hidden = false;
+    dom.videoFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function showVideoReviewError(msg) {
-  dom.videoReviewError.textContent = msg;
-  dom.videoReviewError.hidden = false;
+  const textEl = dom.videoReviewErrorText || dom.videoReviewError;
+  if (textEl) textEl.textContent = msg;
+  if (dom.videoReviewError) {
+    dom.videoReviewError.hidden = false;
+    dom.videoReviewError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function fillVideoReviewForm(draft) {
@@ -4471,23 +5129,24 @@ async function handleVideoExtract() {
   const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
   if (!check.ok) return showVideoFormError(check.error);
 
-  setVideoExtractLoading(true);
+  clearVideoExtractStateBeforeExtract(sourceUrl);
+  setVideoExtractLoading(true, '영상 정보를 확인하고 있어요…');
 
   try {
-    const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload();
-    const result = await VideoRecipeAnalysisService.extractViaApi(sourceUrl, textPayload);
+    const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload(sourceUrl);
+    setVideoExtractLoading(true, 'AI가 레시피를 정리하고 있어요…');
+    let result = await VideoRecipeAnalysisService.extractViaApi(sourceUrl, textPayload);
     if (!result) {
       throw new Error('레시피 추출 결과가 비어 있습니다.');
     }
-    fillVideoReviewForm(result);
-    if (result._warning) showRecipeWarning(result._warning);
-    setRecipeFormTab('review');
-    if (result._isMockData) {
-      showToast('현재는 테스트 데이터입니다. 내용을 확인해 주세요.');
-    } else if (result._warning) {
-      showToast('레시피를 정리했어요. 안내 문구를 확인해 주세요.');
-    } else {
-      showToast('레시피 추출이 완료됐어요. 내용을 확인해 주세요.');
+    let proceed = await proceedWithVideoExtractResult(result, sourceUrl, textPayload);
+    if (!proceed) {
+      clearVideoExtractStateBeforeExtract(sourceUrl);
+      setVideoExtractLoading(true, 'AI가 레시피를 다시 정리하고 있어요…');
+      result = await VideoRecipeAnalysisService.extractViaApi(sourceUrl, textPayload);
+      if (!result) throw new Error('레시피 추출 결과가 비어 있습니다.');
+      proceed = await proceedWithVideoExtractResult(result, sourceUrl, textPayload);
+      if (!proceed) showToast('추출을 취소했어요. 링크나 캡션을 확인해 주세요.');
     }
   } catch (err) {
     logVideoExtractError('handleVideoExtract', err, { sourceUrl });
@@ -4519,28 +5178,29 @@ async function handleVideoFallbackAnalyze() {
   }
   dom.videoFormError.hidden = true;
   const sourceUrl = dom.videoSourceUrl.value.trim();
-  const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload();
+  clearVideoExtractStateBeforeExtract(sourceUrl);
+  const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload(sourceUrl);
 
   if (!textPayload.pastedText || textPayload.pastedText.length < 20) {
     return showVideoFormError('영상 설명글이나 캡션을 20자 이상 붙여넣어 주세요.');
   }
 
-  setVideoExtractLoading(true);
+  setVideoExtractLoading(true, '붙여넣은 텍스트를 분석하고 있어요…');
 
   try {
     const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
     if (!check.ok) return showVideoFormError(check.error);
+    setVideoExtractLoading(true, 'AI가 레시피를 정리하고 있어요…');
     const result = await VideoRecipeAnalysisService.extractViaApi(sourceUrl, textPayload);
     if (!result) throw new Error('레시피 추출 결과가 비어 있습니다.');
-    fillVideoReviewForm(result);
+    const proceed = await proceedWithVideoExtractResult(result, sourceUrl, textPayload);
+    if (!proceed) {
+      showToast('추출을 취소했어요. 캡션을 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
     hideVideoFallback();
     hideVideoExtractWarning();
-    if (result._warning) showRecipeWarning(result._warning);
     dom.videoPasteText.value = '';
-    setRecipeFormTab('review');
-    showToast(result._warning
-      ? '레시피를 정리했어요. 안내 문구를 확인해 주세요.'
-      : '레시피 정리가 완료됐어요. 내용을 확인해 주세요.');
   } catch (err) {
     logVideoExtractError('handleVideoFallbackAnalyze', err, { sourceUrl });
     if (err.code === 'DAILY_LIMIT_EXCEEDED' || err.code === 'ANALYSIS_LIMIT_EXCEEDED') {
@@ -4584,6 +5244,18 @@ function handleVideoRecipeSave() {
   if (!name) return showVideoReviewError('레시피 이름을 입력해 주세요.');
   if (!requiredIngredients.length) return showVideoReviewError('재료를 입력해 주세요.');
   if (!steps.length) return showVideoReviewError('조리 순서를 입력해 주세요.');
+
+  if (draft.dishNameMismatch && !draft._dishMismatchAcknowledged) {
+    const detected = draft.sourceDetectedDishName || draft.detectedDishName || draft.videoTitle || '';
+    const detectedLabel = String(detected).replace(/\s*[-|｜].*$/, '').trim().slice(0, 40) || '영상 요리';
+    const saveAnyway = window.confirm(
+      `영상은 "${detectedLabel}"(으)로 보이는데, 저장하려는 레시피는 "${name}"입니다. 그래도 저장할까요?`
+    );
+    if (!saveAnyway) {
+      return showVideoReviewError('영상 내용과 추출 결과가 달라 보여요. 레시피 이름을 확인하거나 다시 추출해 주세요.');
+    }
+    draft._dishMismatchAcknowledged = true;
+  }
 
   const uid = window.FirebaseServices?.auth?.currentUser?.uid || null;
   console.log('[handleVideoRecipeSave] 영상 레시피 Firestore 저장', {
@@ -4860,6 +5532,33 @@ async function handlePantryModalSubmit(e) {
   }
 }
 
+function initVideoExtractUi() {
+  dom.videoPasteBtn?.addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text?.trim()) {
+        showToast('클립보드에 링크가 없어요.');
+        return;
+      }
+      if (dom.videoSourceUrl) {
+        dom.videoSourceUrl.value = text.trim();
+        updateVideoLinkPreview();
+        dom.videoSourceUrl.focus();
+      }
+    } catch {
+      showToast('붙여넣기 권한이 필요해요. 입력칸에 직접 붙여넣어 주세요.');
+      dom.videoSourceUrl?.focus();
+    }
+  });
+  dom.videoSourceUrl?.addEventListener('paste', () => {
+    window.setTimeout(updateVideoLinkPreview, 0);
+  });
+  dom.openVideoRecipeFormBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openVideoRecipeForm();
+  });
+}
+
 function initRecipePickers() {
   state.shoppingRecipePicker = RecipePickerService.init({
     inputEl: dom.shoppingRecipeInput,
@@ -4914,6 +5613,8 @@ function updateBodyScrollLock() {
     || !dom.pantryModal.hidden
     || !dom.mealModal.hidden
     || !dom.shoppingModal.hidden
+    || (dom.plannerSlotSheet && !dom.plannerSlotSheet.hidden)
+    || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
     || (dom.loginPromptModal && !dom.loginPromptModal.hidden);
   document.body.style.overflow = anyOpen ? 'hidden' : '';
 }
@@ -4935,6 +5636,7 @@ function closeModal(type) {
 }
 function closeAllModals() {
   ['recipe', 'form', 'pantry', 'meal', 'shopping'].forEach(closeModal);
+  closePlannerSheets();
   if (window.LoginRequiredModal?.isOpen()) window.LoginRequiredModal.close(true);
   closeImageLightbox();
 }
@@ -4994,7 +5696,7 @@ async function registerServiceWorker() {
   };
 
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js?v=50');
+    const reg = await navigator.serviceWorker.register('./sw.js?v=56');
     reg.update();
     activateWaitingWorker(reg);
     reg.addEventListener('updatefound', () => {
@@ -5029,6 +5731,8 @@ function init() {
   GroceryRepository.load();
   dom.currencySelect.value = state.currency;
   initRecipePickers();
+  initVideoExtractUi();
+  initPlannerSheets();
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
@@ -5039,6 +5743,11 @@ function init() {
     state.menuSearch = dom.menuSearchInput.value;
     renderHome();
   });
+  dom.homeFilterBtn?.addEventListener('click', () => toggleHomeFilterPanel());
+  dom.homeRecipesSeeAll?.addEventListener('click', () => {
+    dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  dom.headerNotifyBtn?.addEventListener('click', () => showToast('알림 기능은 준비 중이에요'));
   dom.communitySearchInput.addEventListener('input', () => {
     state.communitySearch = dom.communitySearchInput.value;
     renderCommunity();
@@ -5175,6 +5884,7 @@ function startApp() {
   });
   window.addEventListener('meal-plans-firestore-sync', (e) => {
     if (!isLoggedInAppUser()) return;
+    if (Date.now() - mealPlanLocalMutatedAt < 2000) return;
     MealPlanRepository.replaceAll(e.detail?.plans || {});
     refreshAll();
   });

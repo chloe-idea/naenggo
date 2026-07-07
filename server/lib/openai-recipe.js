@@ -10,7 +10,8 @@ import {
   looksLikeRecipeText,
   logExtractTextPreview,
   buildFullCombinedText,
-  shouldRetryRecipeExtraction,
+  detectDishNameFromSource,
+  dishNamesLikelyMismatch,
 } from './video-text-priority.js';
 import { VIDEO_EXTRACT_UI } from './video-pipeline/constants.js';
 import { logVideoExtractPipeline } from './video-pipeline/debug.js';
@@ -26,26 +27,32 @@ const PLATFORM_LABELS = {
   tiktok: 'TikTok',
 };
 
-function buildSystemPrompt(platform = 'youtube', { strict = true } = {}) {
+function buildSystemPrompt(platform = 'youtube') {
   const label = PLATFORM_LABELS[platform] || '영상';
-  const notARecipeRule = strict
-    ? '음악·예능·브이로그 등 요리와 전혀 무관한 영상일 때만 error 필드에 "NOT_A_RECIPE"를 넣으세요.'
-    : 'error 필드를 사용하지 마세요. 요리/레시피 영상으로 보이면 재료·조리 순서를 최대한 추출하세요.';
   return `당신은 요리 레시피 추출 전문가입니다. ${label} URL, 제목, 설명글, 자막/캡션, 사용자 입력 텍스트에서 레시피를 추출하세요.
-반드시 JSON 객체 하나만 반환하세요. 키:
-- title (문자열, 레시피 이름)
-- ingredients (문자열 배열, 필수 재료)
-- optionalIngredients (문자열 배열, 선택 재료)
-- substituteIngredients (문자열 배열, "재료 → 대체" 형식)
-- steps (문자열 배열, 조리 순서)
-- cookingTime (숫자, 분)
-- difficulty ("쉬움"|"보통"|"어려움")
-- category ("korean"|"western"|"japanese"|"chinese"|"diet"|"high-protein")
 
-원문 전체를 저장하지 말고 요약된 레시피 정보만 추출하세요.
-설명/자막이 구조화되어 있지 않아도 요리 관련 내용이면 재료·조리 순서를 추론해 채우세요.
-제목만 요리명이어도 일반적인 재료·조리 순서를 합리적으로 추정할 수 있습니다.
-${notARecipeRule}`;
+반드시 JSON 객체 하나만 반환하세요. 키:
+- title (문자열, 레시피 이름 — 반드시 출처에서 확인된 요리명)
+- ingredients (문자열 배열, 필수 재료 — 출처에 명시된 것만)
+- optionalIngredients (문자열 배열, 선택 재료 — 출처에 명시된 것만)
+- substituteIngredients (문자열 배열, "재료 → 대체" 형식)
+- steps (문자열 배열, 조리 순서 — 출처에 명시된 것만)
+- cookingTime (숫자, 분 — 출처에 없으면 0)
+- difficulty ("쉬움"|"보통"|"어려움" — 판단 불가 시 "보통")
+- category ("korean"|"western"|"japanese"|"chinese"|"diet"|"high-protein")
+- sourceTitle (문자열, 영상/게시물 제목 그대로)
+- detectedDishName (문자열, 제목·캡션·자막에서 확인한 요리명)
+- confidence (0~1 숫자, 출처 근거 확실성)
+- sourceValidation ("passed" | "failed")
+- reason (문자열, sourceValidation 판단 근거)
+
+중요 규칙:
+- 영상/캡션/자막/제목에서 확인된 정보만 사용하세요.
+- 확인되지 않은 재료·조리순서는 추측하거나 일반적인 레시피로 채우지 마세요.
+- 제목만 있고 재료·조리 정보가 없으면 sourceValidation을 "failed"로 하고 error에 "NOT_A_RECIPE"를 넣으세요.
+- 다른 요리의 예시 레시피를 반환하지 마세요.
+- 음악·예능·브이로그 등 요리와 무관한 영상이면 error에 "NOT_A_RECIPE"를 넣으세요.
+- title은 detectedDishName과 일치하거나 포함 관계여야 합니다.`;
 }
 
 function cleanStringArray(value) {
@@ -57,6 +64,7 @@ function normalizeRecipe(raw, meta) {
   const title = String(raw.title || meta.title || '영상 레시피').trim().slice(0, 80);
   const category = VALID_CATEGORIES.has(raw.category) ? raw.category : 'korean';
   const platform = meta.sourcePlatform || 'youtube';
+  const confidence = Math.max(0, Math.min(1, Number(raw.confidence) || 0));
 
   return {
     title,
@@ -67,10 +75,26 @@ function normalizeRecipe(raw, meta) {
     optionalIngredients: cleanStringArray(raw.optionalIngredients),
     substituteIngredients: cleanStringArray(raw.substituteIngredients),
     steps: cleanStringArray(raw.steps),
-    cookingTime: Math.max(1, Number(raw.cookingTime) || 20),
+    cookingTime: Math.max(0, Number(raw.cookingTime) || 0),
     difficulty: VALID_DIFFICULTIES.has(raw.difficulty) ? raw.difficulty : '보통',
     category,
+    sourceTitle: String(raw.sourceTitle || meta.title || '').trim().slice(0, 120),
+    detectedDishName: String(raw.detectedDishName || '').trim().slice(0, 80),
+    confidence,
+    sourceValidation: raw.sourceValidation === 'passed' ? 'passed' : raw.sourceValidation === 'failed' ? 'failed' : '',
+    sourceValidationReason: String(raw.reason || '').trim().slice(0, 300),
   };
+}
+
+function throwInsufficientRecipeError({ userContent, content, parsed, reason }) {
+  const err = new Error(VIDEO_EXTRACT_UI.INSUFFICIENT_MSG);
+  err.code = 'INCOMPLETE_RECIPE';
+  err.failureReason = 'INCOMPLETE_RECIPE';
+  err.failureReasonLabel = reason || '레시피 정보 부족';
+  err.openaiPromptPreview = userContent.slice(0, 500);
+  err.openaiResponsePreview = content.slice(0, 500);
+  err.fallback = true;
+  throw err;
 }
 
 function buildPromptContent(context) {
@@ -209,11 +233,43 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
     throwNotARecipeError({ userContent, content, parsed });
   }
 
+  if (parsed.sourceValidation === 'failed') {
+    throwInsufficientRecipeError({
+      userContent,
+      content,
+      parsed,
+      reason: parsed.reason || '출처에서 레시피 확인 불가',
+    });
+  }
+
   const recipe = normalizeRecipe(parsed, {
     sourceUrl,
     thumbnailUrl,
     title,
     sourcePlatform: platform,
+  });
+
+  const sourceDetectedDish = detectDishNameFromSource({
+    title: context.title || context.rawTitle,
+    description: context.extractedDescription,
+    caption: context.extractedCaption,
+    transcript: context.extractedTranscript,
+    userText: context.userText,
+  });
+  const detectedDish = recipe.detectedDishName || sourceDetectedDish || context.title || title || '';
+  const transcriptLen = String(context.extractedTranscript || '').length;
+
+  console.log('[VideoExtract] validation log', {
+    inputUrl: sourceUrl,
+    sourceTitle: recipe.sourceTitle || context.title || title || '',
+    sourceCaptionLength: String(context.extractedCaption || '').length,
+    sourceDescriptionLength: String(context.extractedDescription || '').length,
+    transcriptLength: transcriptLen,
+    detectedDishName: detectedDish,
+    aiRecipeName: recipe.title,
+    confidence: recipe.confidence,
+    sourceValidation: recipe.sourceValidation,
+    reason: recipe.sourceValidationReason,
   });
 
   const parsedIngredientsCount = recipe.ingredients.length;
@@ -224,7 +280,7 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
     apiStatus: context.apiStatus || null,
     titleLength: String(context.title || title || '').length,
     descriptionLength: String(context.extractedDescription || '').length,
-    transcriptLength: String(context.extractedTranscript || '').length,
+    transcriptLength: transcriptLen,
     combinedTextLength: String(context.combinedText || '').length,
     parsedIngredientsCount,
     parsedStepsCount,
@@ -246,14 +302,18 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
   });
 
   if (parsedIngredientsCount === 0 && parsedStepsCount === 0) {
-    const err = new Error(VIDEO_EXTRACT_UI.FALLBACK_MSG);
-    err.code = 'INCOMPLETE_RECIPE';
-    err.failureReason = 'INCOMPLETE_RECIPE';
-    err.failureReasonLabel = '레시피 정보 불완전';
-    err.openaiPromptPreview = userContent.slice(0, 500);
-    err.openaiResponsePreview = content.slice(0, 500);
-    err.fallback = true;
-    throw err;
+    throwInsufficientRecipeError({
+      userContent,
+      content,
+      parsed,
+      reason: '재료·조리순서 없음',
+    });
+  }
+
+  if (detectedDish && dishNamesLikelyMismatch(detectedDish, recipe.title)) {
+    recipe.dishNameMismatch = true;
+    recipe.sourceDetectedDishName = detectedDish;
+    recipe.extractionWarning = `영상(${detectedDish})과 추출 결과(${recipe.title})가 다를 수 있어요. 내용을 확인해 주세요.`;
   }
 
   if (parsedIngredientsCount === 0 || parsedStepsCount === 0) {
@@ -261,6 +321,8 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
       ? VIDEO_EXTRACT_UI.PARTIAL_INGREDIENTS
       : VIDEO_EXTRACT_UI.PARTIAL_STEPS;
   }
+
+  if (!recipe.cookingTime) recipe.cookingTime = 20;
 
   return recipe;
 }
@@ -307,7 +369,7 @@ export async function analyzeVideoTextToRecipe(context) {
   });
 
   const userContent = buildPromptContent(context);
-  const systemPrompt = buildSystemPrompt(platform, { strict: true });
+  const systemPrompt = buildSystemPrompt(platform);
 
   logOpenAiPromptDebug(systemPrompt, userContent);
 
@@ -318,25 +380,13 @@ export async function analyzeVideoTextToRecipe(context) {
     endpoint,
   });
 
-  let { content, parsed } = await requestOpenAiRecipe({
+  const { content, parsed } = await requestOpenAiRecipe({
     systemPrompt,
     userContent,
     apiKey,
     model,
     endpoint,
   });
-
-  if (parsed.error === 'NOT_A_RECIPE' && shouldRetryRecipeExtraction(context)) {
-    console.warn('[OpenAI] NOT_A_RECIPE — 요리 신호 감지, 재시도(관대 모드)');
-    const retryPrompt = buildSystemPrompt(platform, { strict: false });
-    ({ content, parsed } = await requestOpenAiRecipe({
-      systemPrompt: retryPrompt,
-      userContent,
-      apiKey,
-      model,
-      endpoint,
-    }));
-  }
 
   return finalizeRecipeFromParsed(parsed, context, userContent, content);
 }

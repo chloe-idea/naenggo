@@ -219,3 +219,59 @@ export function logExtractTextPreview({
     combinedTextLength: String(combinedText || '').length,
   });
 }
+
+function cleanSourceTitle(title) {
+  return String(title || '')
+    .replace(/#[^\s#]+/g, ' ')
+    .replace(/\[.*?\]|\(.*?\)/g, ' ')
+    .replace(/\s*[-|｜]\s*.+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80);
+}
+
+/** 영상 제목·캡션에서 음식명 힌트 추출 (검증용) */
+export function detectDishNameFromSource({
+  title = '',
+  description = '',
+  caption = '',
+  transcript = '',
+  userText = '',
+} = {}) {
+  const candidates = [
+    cleanSourceTitle(title),
+    cleanSourceTitle(description),
+    cleanSourceTitle(caption),
+    cleanSourceTitle(userText),
+    cleanSourceTitle(transcript),
+  ].filter((s) => s.length >= 2);
+  return candidates[0] || '';
+}
+
+function normalizeDishNameToken(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^\w\uac00-\ud7a3]/g, '')
+    .replace(/레시피|만들기|요리|조리법|먹방|mukbang|asmr|shorts|쇼츠/gi, '');
+}
+
+/** 출처 음식명과 AI 결과명이 현저히 다르면 true */
+export function dishNamesLikelyMismatch(sourceDish, recipeName) {
+  const a = normalizeDishNameToken(sourceDish);
+  const b = normalizeDishNameToken(recipeName);
+  if (!a || !b || a.length < 2 || b.length < 2) return false;
+  if (a.includes(b) || b.includes(a)) return false;
+  let maxCommon = 0;
+  for (let len = Math.min(a.length, b.length); len >= 2; len -= 1) {
+    for (let i = 0; i <= a.length - len; i += 1) {
+      const sub = a.slice(i, i + len);
+      if (b.includes(sub)) {
+        maxCommon = len;
+        break;
+      }
+    }
+    if (maxCommon >= 2) break;
+  }
+  return maxCommon < 2;
+}

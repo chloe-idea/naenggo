@@ -598,6 +598,7 @@ async function signInWithGoogleFlow(event) {
     if (user) {
       patchAuthState({ isLoggingIn: false, authLoading: false, user });
       renderAuthUi(user);
+      window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
       console.log('POPUP_LOGIN_SUCCESS', user.uid);
     }
   } catch (err) {

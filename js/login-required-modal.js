@@ -24,10 +24,15 @@
     return document.getElementById(id);
   }
 
-  function isLoggedIn() {
+  function resolveAuthUser() {
     const authSvc = global.FirebaseServices?.AuthService;
-    if (authSvc?.isLoggedIn?.()) return true;
-    return Boolean(global.FirebaseServices?.auth?.currentUser?.uid);
+    if (authSvc?.getCurrentUser?.()) return authSvc.getCurrentUser();
+    if (global.__authGateState?.user?.uid) return global.__authGateState.user;
+    return global.FirebaseServices?.auth?.currentUser || null;
+  }
+
+  function isLoggedIn() {
+    return Boolean(resolveAuthUser()?.uid);
   }
 
   function normalizeOptions(input) {
@@ -46,6 +51,9 @@
 
     open(options = {}) {
       const normalized = normalizeOptions(options);
+      if (isLoggedIn()) {
+        return normalized.redirectAfterLogin?.();
+      }
       if (normalized.redirectAfterLogin) this.redirectAfterLogin = normalized.redirectAfterLogin;
       this.activePreset = normalized.preset || 'default';
       this.applyPreset(this.activePreset);
@@ -68,6 +76,15 @@
       const options = normalizeOptions(actionOrOptions);
       if (isLoggedIn()) {
         return options.redirectAfterLogin?.();
+      }
+      if (this.isOpen()) {
+        if (options.redirectAfterLogin) this.redirectAfterLogin = options.redirectAfterLogin;
+        if (options.preset) {
+          this.activePreset = options.preset;
+          this.applyPreset(options.preset);
+        }
+        this.syncUi();
+        return undefined;
       }
       this.open(options);
       return undefined;
@@ -147,19 +164,32 @@
       }
       try {
         await global.__authSignInGoogle();
+        this.handleAuthSuccess();
       } catch (err) {
         this.showError(err?.message || '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.');
       }
     },
 
-    resumeRedirectAfterLogin() {
-      if (!this.redirectAfterLogin || !isLoggedIn()) return;
-      const action = this.redirectAfterLogin;
+    /** 로그인 성공 시 모달 즉시 닫기 + pending 작업 재개 */
+    handleAuthSuccess(user) {
+      const authUser = user || resolveAuthUser();
+      if (!authUser?.uid) return;
+
+      this.syncUi();
+
+      const pendingAction = this.redirectAfterLogin;
       this.redirectAfterLogin = null;
-      this.hide();
+
+      if (this.isOpen()) {
+        this.clearError();
+        this.hide();
+      }
+
+      if (!pendingAction) return;
+
       global.setTimeout(() => {
         try {
-          const result = action();
+          const result = pendingAction();
           if (result?.then) {
             result.catch((err) => console.error('[LoginRequiredModal] redirectAfterLogin failed', err));
           }
@@ -169,14 +199,22 @@
       }, 0);
     },
 
+    resumeRedirectAfterLogin() {
+      this.handleAuthSuccess();
+    },
+
     bindEvents() {
       $('login-prompt-google-btn')?.addEventListener('click', () => this.handleGoogleLogin());
       $('login-prompt-dismiss-btn')?.addEventListener('click', () => this.dismiss());
       global.addEventListener('auth-gate-state', () => this.syncGoogleButton());
       global.addEventListener('auth-state-changed', (e) => {
-        if (e.detail?.user) this.resumeRedirectAfterLogin();
+        const user = e.detail?.user;
+        if (user) this.handleAuthSuccess(user);
+        else this.syncUi();
       });
-      global.addEventListener('login-prompt-open', () => this.open());
+      global.addEventListener('login-prompt-open', () => {
+        if (!isLoggedIn()) this.open();
+      });
     },
 
     init() {

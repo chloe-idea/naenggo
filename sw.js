@@ -2,13 +2,13 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v50';
+const CACHE_NAME = 'naengjanggo-v59';
 
 const ASSETS = [
   'index.html',
   'app-config.js?v=47',
-  'style.css?v=47',
-  'script.js?v=50',
+  'style.css?v=78',
+  'script.js?v=75',
   'js/firebase.js',
   'js/firebase-config.js',
   'js/firebase-bootstrap.js?v=50',
@@ -21,13 +21,23 @@ const ASSETS = [
   'js/services/analysis-quota-service.js',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
-  'recipe-images.js?v=30',
+  'recipe-images.js?v=49',
   'recipes-builtin.js?v=30',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-512-maskable.png',
   'icons/icon-180.png',
+  'src/assets/recipe-images/default.png',
+  'src/assets/recipe-images/egg.png',
+  'src/assets/recipe-images/tomato-egg.png',
+  'src/assets/recipe-images/pasta.png',
+  'src/assets/recipe-images/stew.png',
+  'src/assets/recipe-images/rice.png',
+  'src/assets/recipe-images/potato.png',
+  'src/assets/recipe-images/noodle.png',
+  'src/assets/recipe-images/soup.png',
+  'src/assets/recipe-images/stir-fry.png',
 ];
 
 function assetUrl(path) {

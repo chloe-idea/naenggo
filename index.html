@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=64">
+  <link rel="stylesheet" href="style.css?v=78">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -34,6 +34,12 @@
           공개 레시피 커뮤니티
         </h1>
         <div class="header__actions">
+          <button type="button" id="header-notify-btn" class="header-icon-btn" aria-label="알림">
+            <svg class="header-icon-btn__svg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3a5 5 0 00-5 5v2.1c0 .5-.2 1-.5 1.4L5 13.5V14h14v-.5l-1.5-2c-.3-.4-.5-.9-.5-1.4V8a5 5 0 00-5-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M10 17a2 2 0 004 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </button>
           <div id="auth-guest" class="header-auth header-auth--guest">
             <button type="button" id="auth-login-btn" class="header-login-btn" disabled aria-disabled="true">
               <span class="header-login-btn__label">로그인</span>
@@ -55,40 +61,62 @@
     <main class="main">
       <!-- 홈: 재료 입력 + 추천 -->
       <div id="view-main" class="view">
-        <section class="section section--compact">
+        <section class="home-intro" aria-label="홈 안내">
+          <h2 class="home-intro__title">냉장고에 뭐가 있나요?</h2>
+          <p class="home-intro__desc">재료를 입력하면 만들 수 있는 레시피를 추천해드려요 🧡</p>
+        </section>
+
+        <section class="section home-input-section">
+          <form id="quick-ingredient-form" class="home-ingredient-card">
+            <span class="home-ingredient-card__icon" aria-hidden="true">+</span>
+            <input type="text" id="quick-ingredient-input" class="home-ingredient-card__field"
+              placeholder="재료를 입력하세요 (예: 계란, 양파)" autocomplete="off" aria-label="재료명 입력">
+            <button type="submit" class="visually-hidden">추가</button>
+          </form>
+        </section>
+
+        <section class="section home-pantry-section">
           <div class="section__header">
-            <h2 class="section__title">보유 재료</h2>
+            <h2 class="section__title">보유 재료<span id="pantry-chips-count" class="pantry-chips-count" hidden></span></h2>
             <button type="button" id="open-pantry-manage-btn" class="btn btn--ghost btn--sm">재료 관리</button>
           </div>
-          <form id="quick-ingredient-form" class="ingredient-input">
-            <input type="text" id="quick-ingredient-input" class="ingredient-input__field"
-              placeholder="재료 입력 후 Enter (예: 계란, 양파)" autocomplete="off" aria-label="재료명 입력">
-            <button type="submit" class="btn btn--primary">추가</button>
-          </form>
-          <div id="pantry-chips" class="tags" role="list"></div>
+          <div id="pantry-chips" class="tags home-tags" role="list"></div>
         </section>
 
-        <section class="section section--compact section--home-search">
-          <h2 class="section__title">🔍 먹고 싶은 메뉴 찾기</h2>
-          <input type="search" id="menu-search-input" class="menu-search__input"
-            placeholder="오늘 먹고 싶은 메뉴는?" autocomplete="off" aria-label="먹고 싶은 메뉴 검색">
-        </section>
+        <div id="home-today-hero" class="home-today-hero-wrap" hidden></div>
 
-        <section class="section section--home-recipes">
+        <section class="section section--home-recipes home-main-content">
           <div class="section__header">
-            <h2 class="section__title">추천 레시피</h2>
-            <span id="results-count" class="results-count"></span>
+            <h2 class="section__title">지금 만들 수 있는 레시피</h2>
+            <button type="button" id="home-recipes-see-all" class="home-see-all">전체 보기 &gt;</button>
           </div>
+          <span id="results-count" class="results-count visually-hidden" aria-hidden="true"></span>
           <div id="recipe-list" class="recipe-list"></div>
-          <div id="empty-state" class="empty-state" hidden>
+          <div id="empty-state" class="empty-state empty-state--home" hidden>
             <span class="empty-state__icon">🥘</span>
             <p class="empty-state__title">재료를 입력해 주세요</p>
             <p class="empty-state__text">보유한 재료를 추가하면 만들 수 있는 요리를 추천해 드립니다</p>
           </div>
-          <div id="no-results" class="empty-state" hidden>
+          <div id="no-results" class="empty-state empty-state--home" hidden>
             <span class="empty-state__icon">🔍</span>
             <p class="empty-state__title">일치하는 레시피가 없어요</p>
             <p class="empty-state__text">다른 재료를 추가하거나 검색어를 변경해 보세요</p>
+          </div>
+        </section>
+
+        <section class="section section--compact section--home-search home-search-dock" aria-label="먹고 싶은 메뉴 검색">
+          <h2 class="section__title section__title--search home-search-dock__title">먹고 싶은 메뉴 검색</h2>
+          <div class="home-search-bar">
+            <input type="search" id="menu-search-input" class="home-search-bar__input"
+              placeholder="오늘 먹고 싶은 메뉴는?" autocomplete="off" aria-label="먹고 싶은 메뉴 검색">
+            <button type="button" id="home-filter-btn" class="home-filter-btn" aria-label="필터" aria-expanded="false" aria-controls="home-filter-panel">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div id="home-filter-panel" class="home-filter-panel" hidden>
+            <div id="home-filter-chips" class="filter-chips"></div>
           </div>
         </section>
       </div>
@@ -103,7 +131,8 @@
             <h2 class="section__title">내 레시피</h2>
             <span id="my-recipes-count" class="results-count"></span>
           </div>
-          <button type="button" id="open-recipe-form-btn" class="btn btn--outline btn--full">＋ 내 레시피 추가</button>
+          <button type="button" id="open-recipe-form-btn" class="btn btn--outline btn--full">＋ 직접 입력</button>
+          <button type="button" id="open-video-recipe-form-btn" class="btn btn--primary btn--full" data-auth-required>🎬 영상 링크로 추가<span class="auth-gate-badge" hidden aria-hidden="true">🔒</span></button>
           <div id="my-recipes-list" class="recipe-list recipe-list--compact"></div>
           <div id="my-recipes-empty" class="empty-state empty-state--compact" hidden>
             <p class="empty-state__text">아직 등록한 레시피가 없어요</p>
@@ -185,7 +214,7 @@
               <button type="button" id="planner-auto-btn" class="btn btn--ghost btn--sm">이번 주 식단 자동 생성</button>
             </div>
           </div>
-          <p class="hint">아침·점심·저녁·간식에 레시피를 고르거나 직접 메뉴명을 입력하세요.</p>
+          <p class="hint">날짜별 ＋ 버튼으로 아침·점심·저녁·간식을 추가하고 레시피를 골라보세요.</p>
           <div id="planner-grid" class="planner-grid"></div>
         </section>
 
@@ -515,19 +544,34 @@
             </div>
           </form>
 
+          <div id="video-flow-step-bar" class="video-step-bar" hidden aria-hidden="true">
+            <span class="video-step-bar__item video-step-bar__item--active" data-video-step="1">① 링크 입력</span>
+            <span class="video-step-bar__item" data-video-step="2">② 확인·수정</span>
+            <span class="video-step-bar__item" data-video-step="3">③ 저장</span>
+          </div>
+
           <!-- 영상 링크 입력 -->
-          <div id="recipe-form-panel-video" class="recipe-form-panel" data-recipe-panel="video" hidden>
-            <p class="form-field__hint video-form__notice">영상을 다운로드하지 않습니다. 링크에서 확인 가능한 정보만 추출하고, 요약 레시피와 원본 링크만 저장합니다.</p>
+          <div id="recipe-form-panel-video" class="recipe-form-panel video-extract-panel" data-recipe-panel="video" hidden>
+            <div class="video-extract-hero">
+              <p class="video-extract-hero__title">영상 링크를 붙여넣으면 레시피를 정리해 드려요</p>
+              <p class="video-extract-hero__desc">영상 파일은 저장하지 않고, 링크·캡션에서 확인 가능한 정보만 추출합니다.</p>
+              <div class="video-platform-badges" aria-hidden="true">
+                <span class="video-platform-badge">▶ YouTube</span>
+                <span class="video-platform-badge">📷 Reels</span>
+                <span class="video-platform-badge">🎵 TikTok</span>
+              </div>
+            </div>
 
             <p id="video-ai-usage" class="video-ai-usage" hidden>남은 무료 분석 5회</p>
             <p id="video-extract-warning" class="video-extract-warning" hidden></p>
 
             <div class="video-link-card">
-              <div class="form-field video-link-card__field">
-                <label for="video-source-url" class="form-field__label">영상 링크 <span class="required">*</span></label>
-                <input type="url" id="video-source-url" class="form-field__input" placeholder="YouTube, Shorts, Instagram Reels, TikTok URL" inputmode="url" autocomplete="off">
-                <p class="form-field__hint">유튜브 · 인스타그램 · 틱톡 링크만 지원합니다</p>
+              <label for="video-source-url" class="form-field__label">영상 링크 <span class="required">*</span></label>
+              <div class="video-url-row">
+                <input type="url" id="video-source-url" class="form-field__input video-url-row__input" placeholder="https://..." inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <button type="button" id="video-paste-btn" class="btn btn--ghost btn--sm video-paste-btn">붙여넣기</button>
               </div>
+              <p class="form-field__hint">YouTube · Shorts · Instagram Reels · TikTok</p>
 
               <div id="video-link-preview" class="video-link-preview" hidden>
                 <div class="video-link-preview__thumb-wrap">
@@ -541,11 +585,16 @@
               </div>
             </div>
 
-            <div class="form-field video-user-text-field">
-              <label for="video-user-text" class="form-field__label">영상 설명글 / 캡션 (선택)</label>
-              <textarea id="video-user-text" class="form-field__textarea" rows="4" placeholder="릴스·영상 캡션, 설명, 고정 댓글을 붙여넣어 주세요."></textarea>
-              <p id="video-user-text-hint" class="form-field__hint">YouTube·Shorts는 링크만으로 자동 추출을 시도합니다. Instagram·TikTok은 캡션 붙여넣기를 권장합니다.</p>
-            </div>
+            <details class="video-caption-details">
+              <summary class="video-caption-details__summary">캡션·설명글 추가 (선택)</summary>
+              <div class="video-caption-details__body">
+                <div class="form-field video-user-text-field">
+                  <label for="video-user-text" class="form-field__label">영상 설명글 / 캡션</label>
+                  <textarea id="video-user-text" class="form-field__textarea" rows="4" placeholder="릴스·영상 캡션, 설명, 고정 댓글을 붙여넣어 주세요."></textarea>
+                  <p id="video-user-text-hint" class="form-field__hint">YouTube·Shorts는 링크만으로 자동 추출을 시도합니다. Instagram·TikTok은 캡션 붙여넣기를 권장합니다.</p>
+                </div>
+              </div>
+            </details>
 
             <div id="video-fallback-section" class="video-fallback-section" hidden>
               <p id="video-fallback-message" class="video-fallback-section__message"></p>
@@ -556,16 +605,26 @@
               <button type="button" id="video-fallback-analyze-btn" class="btn btn--outline btn--full">붙여넣은 텍스트로 레시피 정리</button>
             </div>
 
-            <p id="video-form-error" class="form-error" hidden></p>
-            <div class="form-actions">
+            <div id="video-form-error" class="video-form-error-card" hidden role="alert">
+              <span class="video-form-error-card__icon" aria-hidden="true">⚠️</span>
+              <p class="video-form-error-card__text"></p>
+            </div>
+
+            <div id="video-extract-loading" class="video-extract-loading" hidden aria-live="polite" aria-busy="true">
+              <div class="video-extract-loading__spinner" aria-hidden="true"></div>
+              <p id="video-extract-loading-text" class="video-extract-loading__text">레시피를 분석하고 있어요…</p>
+              <p class="video-extract-loading__hint">보통 10~30초 정도 걸릴 수 있어요</p>
+            </div>
+
+            <div class="form-actions video-extract-actions">
               <button type="button" class="btn btn--ghost" data-close-modal="form">취소</button>
-              <button type="button" id="video-analyze-btn" class="btn btn--primary">영상 링크로 레시피 추출</button>
+              <button type="button" id="video-analyze-btn" class="btn btn--primary btn--full">레시피 추출하기</button>
             </div>
           </div>
 
           <!-- AI 분석 확인 -->
-          <div id="recipe-form-panel-review" class="recipe-form-panel" data-recipe-panel="review" hidden>
-            <p class="video-review__lead">분석 결과를 확인하고 수정한 뒤 저장하세요. 영상 원문은 저장되지 않습니다.</p>
+          <div id="recipe-form-panel-review" class="recipe-form-panel video-review-panel" data-recipe-panel="review" hidden>
+            <p class="video-review__lead">추출된 레시피를 확인하고 필요하면 수정한 뒤 저장하세요.</p>
             <p id="video-review-mock-notice" class="video-review__mock-notice" hidden>현재는 테스트 데이터입니다</p>
             <p id="video-review-partial-notice" class="video-review__partial-notice" hidden></p>
             <div id="video-review-preview" class="video-link-preview video-link-preview--review" hidden>
@@ -577,68 +636,82 @@
                 <p id="video-review-title-hint" class="video-link-preview__title"></p>
               </div>
             </div>
-            <div class="form-field">
-              <label class="form-field__label">원본 영상</label>
-              <a id="video-review-source-link" class="video-review__source" href="#" target="_blank" rel="noopener noreferrer"></a>
-            </div>
-            <div class="form-field">
-              <label for="video-review-name" class="form-field__label">레시피 이름 <span class="required">*</span></label>
-              <input type="text" id="video-review-name" class="form-field__input" required>
-            </div>
-            <div class="form-field">
-              <label for="video-review-ingredients" class="form-field__label">재료 <span class="required">*</span></label>
-              <textarea id="video-review-ingredients" class="form-field__textarea" rows="3" placeholder="한 줄에 재료 하나"></textarea>
-            </div>
-            <div class="form-field">
-              <label for="video-review-optional" class="form-field__label">선택 재료</label>
-              <textarea id="video-review-optional" class="form-field__textarea" rows="2" placeholder="없어도 되는 재료 (한 줄에 하나)"></textarea>
-              <p class="form-field__hint">저장 시 자동으로 「(선택)」 표시가 붙습니다</p>
-            </div>
-            <div class="form-field">
-              <label for="video-review-substitutes" class="form-field__label">대체 가능 재료</label>
-              <textarea id="video-review-substitutes" class="form-field__textarea" rows="2" placeholder="예: 설탕 → 스테비아"></textarea>
-            </div>
-            <div class="form-field">
-              <label for="video-review-steps" class="form-field__label">조리 순서 <span class="required">*</span></label>
-              <textarea id="video-review-steps" class="form-field__textarea" rows="4" placeholder="한 줄에 한 단계"></textarea>
-            </div>
-            <div class="form-row">
+            <section class="video-review-section">
+              <h3 class="video-review-section__title">기본 정보</h3>
               <div class="form-field">
-                <label for="video-review-cook-time" class="form-field__label">예상 조리시간(분)</label>
-                <input type="number" id="video-review-cook-time" class="form-field__input" min="1" value="20">
+                <label class="form-field__label">원본 영상</label>
+                <a id="video-review-source-link" class="video-review__source" href="#" target="_blank" rel="noopener noreferrer"></a>
               </div>
               <div class="form-field">
-                <label for="video-review-difficulty" class="form-field__label">난이도</label>
-                <select id="video-review-difficulty" class="form-field__select">
-                  <option value="쉬움">쉬움</option><option value="보통" selected>보통</option><option value="어려움">어려움</option>
+                <label for="video-review-name" class="form-field__label">레시피 이름 <span class="required">*</span></label>
+                <input type="text" id="video-review-name" class="form-field__input" required>
+              </div>
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="video-review-cook-time" class="form-field__label">예상 조리시간(분)</label>
+                  <input type="number" id="video-review-cook-time" class="form-field__input" min="1" value="20">
+                </div>
+                <div class="form-field">
+                  <label for="video-review-difficulty" class="form-field__label">난이도</label>
+                  <select id="video-review-difficulty" class="form-field__select">
+                    <option value="쉬움">쉬움</option><option value="보통" selected>보통</option><option value="어려움">어려움</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-field">
+                <label for="video-review-category" class="form-field__label">카테고리</label>
+                <select id="video-review-category" class="form-field__select">
+                  <option value="korean">한식</option><option value="western">양식</option>
+                  <option value="japanese">일식</option><option value="chinese">중식</option>
+                  <option value="diet">다이어트</option><option value="high-protein">고단백</option>
                 </select>
               </div>
-            </div>
-            <div class="form-field">
-              <label for="video-review-category" class="form-field__label">카테고리</label>
-              <select id="video-review-category" class="form-field__select">
-                <option value="korean">한식</option><option value="western">양식</option>
-                <option value="japanese">일식</option><option value="chinese">중식</option>
-                <option value="diet">다이어트</option><option value="high-protein">고단백</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <span class="form-field__label">공개 설정</span>
-              <div class="visibility-toggle">
-                <label class="visibility-option">
-                  <input type="radio" name="video-recipe-visibility" id="video-recipe-visibility-private" value="private" checked>
-                  <span>🔒 비공개</span>
-                </label>
-                <label class="visibility-option">
-                  <input type="radio" name="video-recipe-visibility" id="video-recipe-visibility-public" value="public">
-                  <span>🌐 공개</span>
-                </label>
+            </section>
+            <section class="video-review-section">
+              <h3 class="video-review-section__title">재료</h3>
+              <div class="form-field">
+                <label for="video-review-ingredients" class="form-field__label">필수 재료 <span class="required">*</span></label>
+                <textarea id="video-review-ingredients" class="form-field__textarea" rows="3" placeholder="한 줄에 재료 하나"></textarea>
               </div>
+              <div class="form-field">
+                <label for="video-review-optional" class="form-field__label">선택 재료</label>
+                <textarea id="video-review-optional" class="form-field__textarea" rows="2" placeholder="없어도 되는 재료 (한 줄에 하나)"></textarea>
+                <p class="form-field__hint">저장 시 자동으로 「(선택)」 표시가 붙습니다</p>
+              </div>
+              <div class="form-field">
+                <label for="video-review-substitutes" class="form-field__label">대체 가능 재료</label>
+                <textarea id="video-review-substitutes" class="form-field__textarea" rows="2" placeholder="예: 설탕 → 스테비아"></textarea>
+              </div>
+            </section>
+            <section class="video-review-section">
+              <h3 class="video-review-section__title">조리 순서</h3>
+              <div class="form-field">
+                <label for="video-review-steps" class="form-field__label">단계 <span class="required">*</span></label>
+                <textarea id="video-review-steps" class="form-field__textarea" rows="4" placeholder="한 줄에 한 단계"></textarea>
+              </div>
+            </section>
+            <section class="video-review-section">
+              <h3 class="video-review-section__title">공개 설정</h3>
+              <div class="form-field">
+                <div class="visibility-toggle">
+                  <label class="visibility-option">
+                    <input type="radio" name="video-recipe-visibility" id="video-recipe-visibility-private" value="private" checked>
+                    <span>🔒 비공개</span>
+                  </label>
+                  <label class="visibility-option">
+                    <input type="radio" name="video-recipe-visibility" id="video-recipe-visibility-public" value="public">
+                    <span>🌐 공개</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+            <div id="video-review-error" class="video-form-error-card" hidden role="alert">
+              <span class="video-form-error-card__icon" aria-hidden="true">⚠️</span>
+              <p class="video-form-error-card__text"></p>
             </div>
-            <p id="video-review-error" class="form-error" hidden></p>
-            <div class="form-actions">
-              <button type="button" id="video-review-back-btn" class="btn btn--ghost">← 다시 입력</button>
-              <button type="button" id="video-recipe-save-btn" class="btn btn--primary">내 레시피로 저장</button>
+            <div class="form-actions video-review-actions">
+              <button type="button" id="video-review-back-btn" class="btn btn--ghost">← 링크 다시 입력</button>
+              <button type="button" id="video-recipe-save-btn" class="btn btn--primary btn--full">내 레시피로 저장</button>
             </div>
           </div>
         </div>
@@ -681,6 +754,35 @@
     </div>
 
     <!-- 프로필 메뉴 -->
+    <!-- 식단 플래너: 식사 슬롯 선택 -->
+    <div id="planner-slot-sheet" class="modal modal--sheet" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="planner-slot"></div>
+      <div class="modal__panel planner-sheet" role="dialog" aria-modal="true" aria-labelledby="planner-slot-sheet-title">
+        <div class="planner-sheet__handle" aria-hidden="true"></div>
+        <h3 id="planner-slot-sheet-title" class="planner-sheet__title">월요일 7/6</h3>
+        <div id="planner-slot-menu" class="planner-slot-menu"></div>
+      </div>
+    </div>
+
+    <!-- 식단 플래너: 레시피 선택 -->
+    <div id="planner-recipe-sheet" class="modal modal--sheet" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="planner-recipe"></div>
+      <div class="modal__panel planner-sheet planner-sheet--recipe" role="dialog" aria-modal="true" aria-labelledby="planner-recipe-sheet-title">
+        <div class="planner-sheet__handle" aria-hidden="true"></div>
+        <h3 id="planner-recipe-sheet-title" class="planner-sheet__title">아침 추가</h3>
+        <div class="planner-recipe-search-wrap">
+          <input type="search" id="planner-recipe-search" class="planner-recipe-search" placeholder="레시피 검색" autocomplete="off" aria-label="레시피 검색">
+        </div>
+        <div id="planner-recipe-tabs" class="planner-recipe-tabs" role="tablist">
+          <button type="button" class="planner-recipe-tabs__btn planner-recipe-tabs__btn--active" data-planner-tab="recommend" role="tab">추천 레시피</button>
+          <button type="button" class="planner-recipe-tabs__btn" data-planner-tab="mine" role="tab">내 레시피</button>
+          <button type="button" class="planner-recipe-tabs__btn" data-planner-tab="community" role="tab">커뮤니티</button>
+        </div>
+        <div id="planner-recipe-list" class="planner-recipe-list"></div>
+        <p id="planner-recipe-empty" class="planner-recipe-empty" hidden>검색 결과가 없습니다.</p>
+      </div>
+    </div>
+
     <div id="profile-menu-modal" class="modal modal--sheet" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="profile"></div>
       <div class="modal__panel profile-menu" role="dialog" aria-modal="true" aria-labelledby="profile-menu-title">
@@ -782,15 +884,15 @@
       };
     })();
   </script>
-  <script type="module" src="js/firebase-bootstrap.js?v=58"></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=59"></script>
   <script src="js/video-extract-platform.js?v=54"></script>
   <script src="app-config.js?v=56"></script>
   <script src="nav-icons.js?v=47"></script>
   <script src="recipe-placeholders.js?v=47"></script>
-  <script src="recipe-images.js?v=47"></script>
+  <script src="recipe-images.js?v=49"></script>
   <script src="recipes-builtin.js?v=47"></script>
-  <script src="js/login-required-modal.js?v=62"></script>
-  <script src="js/auth-gate-ui.js?v=62"></script>
-  <script src="script.js?v=64" defer></script>
+  <script src="js/login-required-modal.js?v=65"></script>
+  <script src="js/auth-gate-ui.js?v=65"></script>
+  <script src="script.js?v=75" defer></script>
 </body>
 </html>
