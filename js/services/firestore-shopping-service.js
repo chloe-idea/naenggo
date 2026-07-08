@@ -33,14 +33,19 @@ function mapDoc(docSnap) {
   return {
     id: docSnap.id,
     firestoreId: docSnap.id,
+    type: data.type || 'shopping',
     date: data.date || '',
     amount: Number(data.amount) || 0,
     store: data.store || '',
     currency: data.currency || 'KRW',
+    items: Array.isArray(data.items) ? data.items : [],
     ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
     recipeId: data.recipeId || null,
     recipeName: data.recipeName || '',
-    pantryAdded: Boolean(data.pantryAdded),
+    ingredientsAdded: Boolean(data.ingredientsAdded ?? data.pantryAdded),
+    pantryAdded: Boolean(data.ingredientsAdded ?? data.pantryAdded),
+    groceryItemKey: data.groceryItemKey || '',
+    source: data.source || '',
     createdAt: timestampToIso(data.createdAt) || nowIso(),
     updatedAt: timestampToIso(data.updatedAt) || nowIso(),
   };
@@ -78,14 +83,19 @@ export const FirestoreShoppingService = {
     const recordId = record.firestoreId || record.id || doc(col(user.uid)).id;
     const ref = recordDoc(user.uid, recordId);
     const payload = {
+      type: record.type || 'shopping',
       date: record.date,
       amount: Number(record.amount) || 0,
       store: record.store || '',
       currency: record.currency || 'KRW',
+      items: record.items || [],
       ingredients: record.ingredients || [],
       recipeId: record.recipeId || null,
       recipeName: record.recipeName || '',
-      pantryAdded: Boolean(record.pantryAdded),
+      ingredientsAdded: Boolean(record.ingredientsAdded ?? record.pantryAdded),
+      pantryAdded: Boolean(record.ingredientsAdded ?? record.pantryAdded),
+      groceryItemKey: record.groceryItemKey || '',
+      source: record.source || '',
       updatedAt: serverTimestamp(),
     };
 

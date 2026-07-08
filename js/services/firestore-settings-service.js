@@ -23,7 +23,7 @@ function settingsDoc(uid) {
 const DEFAULT_SETTINGS = {
   currency: 'KRW',
   monthlyFoodBudget: 0,
-  grocery: { budget: '', items: {}, manualItems: [] },
+  grocery: { budget: '', items: {}, manualItems: [], completedKeys: [] },
   savedRecipeIds: [],
 };
 
@@ -55,6 +55,7 @@ export const FirestoreSettingsService = {
               ? data.grocery.items
               : {},
             manualItems: Array.isArray(data.grocery?.manualItems) ? data.grocery.manualItems : [],
+            completedKeys: Array.isArray(data.grocery?.completedKeys) ? data.grocery.completedKeys : [],
           },
           savedRecipeIds: Array.isArray(data.savedRecipeIds) ? data.savedRecipeIds : [],
         });

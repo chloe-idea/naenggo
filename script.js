@@ -30,6 +30,7 @@ const CONFIG = {
     MONTHLY_FOOD_BUDGET: 'naengjanggo_v2_monthly_food_budget',
     MEAL_PLAN: 'naengjanggo_v2_meal_plan',
     GROCERY: 'naengjanggo_v2_grocery',
+    HOME_PANTRY_EXPANDED: 'naengjanggo_v2_home_pantry_expanded',
     CLIENT_USER_ID: 'naengjanggo_v2_client_user_id',
     LEGACY_RECIPES: 'naengjanggo_user_recipes',
   },
@@ -65,20 +66,9 @@ const FILTERS = [
   { id: 'quick', label: '⏱️ 15분 이하' },
 ];
 
-const INGREDIENT_EMOJI = {
-  계란: '🥚', 달걀: '🥚', 양파: '🧅', 마늘: '🧄', 대파: '🧅', 파: '🧅', 쪽파: '🧅',
-  토마토: '🍅', 감자: '🥔', 당근: '🥕', 버터: '🧈', 치즈: '🧀', 우유: '🥛', 베이컨: '🥓',
-  닭고기: '🍗', 돼지고기: '🥩', 소고기: '🥩', 새우: '🦐', 연어: '🐟', 참치: '🐟',
-  밥: '🍚', 쌀: '🍚', 면: '🍜', 라면: '🍜', 파스타: '🍝', 빵: '🍞', 두부: '🧈',
-  김치: '🥬', 상추: '🥬', 양배추: '🥬', 브로콜리: '🥦', 버섯: '🍄', 고추: '🌶️',
-  사과: '🍎', 바나나: '🍌', 레몬: '🍋', 설탕: '🍬', 소금: '🧂', 간장: '🫙', 식용유: '🫒',
-};
-
 function pantryItemEmoji(name) {
-  const n = (name || '').trim();
-  if (INGREDIENT_EMOJI[n]) return INGREDIENT_EMOJI[n];
-  for (const [key, emoji] of Object.entries(INGREDIENT_EMOJI)) {
-    if (n.includes(key) || key.includes(n)) return emoji;
+  if (typeof IngredientEmojiUtil !== 'undefined') {
+    return IngredientEmojiUtil.getIngredientEmoji(name);
   }
   return '🥬';
 }
@@ -1970,6 +1960,112 @@ const MealLogRepository = {
   },
 };
 
+const shoppingPantryAddInFlight = new Set();
+
+function normalizeShoppingItem(raw) {
+  if (raw && typeof raw === 'object' && raw.name) {
+    return {
+      name: String(raw.name).trim(),
+      quantity: String(raw.quantity || '').trim(),
+      unit: String(raw.unit || '').trim(),
+      price: raw.price !== '' && raw.price != null ? String(raw.price) : '',
+    };
+  }
+  const parsed = parseRecipeIngredient(raw);
+  return {
+    name: (parsed.name || formatIngredientDisplay(parsed)).trim(),
+    quantity: String(parsed.quantity || '').trim(),
+    unit: String(parsed.unit || '').trim(),
+    price: '',
+  };
+}
+
+function normalizeShoppingRecord(record) {
+  if (!record) return null;
+  const items = Array.isArray(record.items) && record.items.length
+    ? record.items.map(normalizeShoppingItem).filter((item) => item.name)
+    : (record.ingredients || []).map(normalizeShoppingItem).filter((item) => item.name);
+  const ingredientsAdded = Boolean(record.ingredientsAdded ?? record.pantryAdded);
+  return {
+    ...record,
+    type: record.type || 'shopping',
+    items,
+    ingredients: items.map((item) => formatIngredientDisplay(item)),
+    ingredientsAdded,
+    pantryAdded: ingredientsAdded,
+  };
+}
+
+function isShoppingIngredientsAdded(record) {
+  return Boolean(normalizeShoppingRecord(record)?.ingredientsAdded);
+}
+
+function getShoppingRecordItems(record) {
+  return normalizeShoppingRecord(record)?.items || [];
+}
+
+function mergePantryQuantityFields(existingQty, existingUnit, nextQty, nextUnit) {
+  const currentQty = String(existingQty || '').trim();
+  const currentUnit = String(existingUnit || '').trim();
+  const addQty = String(nextQty || '').trim();
+  const addUnit = String(nextUnit || '').trim();
+  if (!addQty) return { quantity: currentQty, unit: currentUnit };
+  if (!currentQty) return { quantity: addQty, unit: addUnit || currentUnit };
+  if (currentUnit && addUnit && currentUnit !== addUnit) {
+    return { quantity: `${currentQty}${currentUnit} + ${addQty}${addUnit}`, unit: '' };
+  }
+  const unit = addUnit || currentUnit;
+  const a = Number(currentQty);
+  const b = Number(addQty);
+  if (!Number.isNaN(a) && !Number.isNaN(b)) return { quantity: String(a + b), unit };
+  return { quantity: `${currentQty} + ${addQty}`, unit };
+}
+
+async function addShoppingItemsToPantry(record) {
+  const normalized = normalizeShoppingRecord(record);
+  const items = normalized?.items || [];
+  if (!items.length) return { added: 0, merged: 0 };
+  let added = 0;
+  let merged = 0;
+  for (const item of items) {
+    const existing = getPantryItemsForUi().find(
+      (pantryItem) => MatchService.normalize(pantryItem.name) === MatchService.normalize(item.name),
+    );
+    if (existing) {
+      const next = mergePantryQuantityFields(existing.quantity, existing.unit, item.quantity, item.unit);
+      await updatePantryItem(existing.id, {
+        quantity: next.quantity,
+        unit: next.unit || existing.unit || item.unit,
+      });
+      merged += 1;
+    } else {
+      await createPantryItem({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        expiryDate: '',
+        recipeId: record.recipeId,
+        recipeName: record.recipeName,
+      }, { showGuestHint: false });
+      added += 1;
+    }
+  }
+  return { added, merged };
+}
+
+async function markShoppingRecordsIngredientsAdded(recordIds) {
+  for (const recordId of recordIds) {
+    const record = ShoppingRecordRepository.getAll().find((entry) => entry.id === recordId);
+    if (!record || isShoppingIngredientsAdded(record)) continue;
+    const saved = await saveShoppingRecordToStore({
+      ...normalizeShoppingRecord(record),
+      ingredientsAdded: true,
+      pantryAdded: true,
+    }, recordId);
+    upsertShoppingRecordLocal(saved);
+  }
+}
+
 const ShoppingRecordRepository = {
   _records: [],
   load() {
@@ -1983,15 +2079,15 @@ const ShoppingRecordRepository = {
     this._records = [];
   },
   replaceAll(records) {
-    this._records = (records || []).map((record) => ({
+    this._records = (records || []).map((record) => normalizeShoppingRecord({
       ...record,
       amount: Number(record.amount) || 0,
       store: record.store || '',
       currency: record.currency || DEFAULT_CURRENCY,
-      ingredients: Array.isArray(record.ingredients) ? record.ingredients : [],
       recipeId: record.recipeId || null,
       recipeName: record.recipeName || '',
-      pantryAdded: Boolean(record.pantryAdded),
+      groceryItemKey: record.groceryItemKey || '',
+      source: record.source || '',
     }));
   },
   getAll() { return this._records; },
@@ -2001,19 +2097,24 @@ const ShoppingRecordRepository = {
     return this._records.filter((r) => r.date.startsWith(prefix));
   },
   create(data) {
-    const record = {
+    const record = normalizeShoppingRecord({
       id: StorageAdapter.createId('shopping'),
+      type: 'shopping',
       date: data.date,
       amount: Number(data.amount) || 0,
       store: data.store || '',
       currency: data.currency || DEFAULT_CURRENCY,
-      ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+      items: data.items,
+      ingredients: data.ingredients,
       recipeId: data.recipeId || null,
       recipeName: data.recipeName || '',
-      pantryAdded: Boolean(data.pantryAdded),
+      ingredientsAdded: Boolean(data.ingredientsAdded),
+      pantryAdded: Boolean(data.pantryAdded ?? data.ingredientsAdded),
+      groceryItemKey: data.groceryItemKey || '',
+      source: data.source || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
+    });
     this._records.push(record);
     this.save();
     return record;
@@ -2023,13 +2124,13 @@ const ShoppingRecordRepository = {
     if (i === -1) return null;
     const preservedCurrency = this._records[i].currency;
     const { currency, ...rest } = data;
-    this._records[i] = {
+    this._records[i] = normalizeShoppingRecord({
       ...this._records[i],
       ...rest,
       amount: Number(rest.amount ?? this._records[i].amount) || 0,
       updatedAt: new Date().toISOString(),
       currency: currency != null ? currency : preservedCurrency,
-    };
+    });
     this.save();
     return this._records[i];
   },
@@ -2089,7 +2190,7 @@ const MealPlanRepository = {
 };
 
 const GroceryRepository = {
-  _state: { budget: '', items: {}, manualItems: [] },
+  _state: { budget: '', items: {}, manualItems: [], completedKeys: [] },
   load() {
     this.clearSession();
     if (isGuestUser()) {
@@ -2111,7 +2212,7 @@ const GroceryRepository = {
     }
   },
   clearSession() {
-    this._state = { budget: '', items: {}, manualItems: [] };
+    this._state = { budget: '', items: {}, manualItems: [], completedKeys: [] };
   },
   replaceState(state) {
     this._state = {
@@ -2120,6 +2221,7 @@ const GroceryRepository = {
       manualItems: Array.isArray(state?.manualItems)
         ? state.manualItems.map((item) => this._normalizeManualItem(item)).filter(Boolean)
         : [],
+      completedKeys: Array.isArray(state?.completedKeys) ? [...state.completedKeys] : [],
     };
   },
   _normalizeManualItem(raw) {
@@ -2147,11 +2249,22 @@ const GroceryRepository = {
     if (!item) return null;
     this._state.manualItems.push(item);
     const key = GroceryListService.manualItemKey(item.id);
-    this._state.items[key] = { checked: false, price: item.price };
+    this._state.items[key] = { checked: false, price: item.price, actualAmount: '' };
     this.save();
     return item;
   },
-  getMeta(key) { return this._state.items[key] || { checked: false, price: '' }; },
+  getMeta(key) {
+    return this._state.items[key] || { checked: false, price: '', actualAmount: '', shoppingRecordId: '' };
+  },
+  setItemAmounts(key, { price, actualAmount }) {
+    const meta = this.getMeta(key);
+    this._state.items[key] = {
+      ...meta,
+      price: price ?? meta.price,
+      actualAmount: actualAmount ?? meta.actualAmount,
+    };
+    this.save();
+  },
   setChecked(key, checked) {
     this._state.items[key] = { ...this.getMeta(key), checked: Boolean(checked) };
     this.save();
@@ -2160,11 +2273,48 @@ const GroceryRepository = {
     this._state.items[key] = { ...this.getMeta(key), price };
     this.save();
   },
+  setActualAmount(key, actualAmount) {
+    this._state.items[key] = { ...this.getMeta(key), actualAmount };
+    this.save();
+  },
+  setShoppingRecordId(key, shoppingRecordId) {
+    this._state.items[key] = { ...this.getMeta(key), shoppingRecordId: shoppingRecordId || '' };
+    this.save();
+  },
   setBudget(budget) {
     this._state.budget = budget;
     this.save();
   },
   getBudget() { return this._state.budget || ''; },
+  getCompletedKeys() {
+    return Array.isArray(this._state.completedKeys) ? this._state.completedKeys : [];
+  },
+  markItemCompleted(key) {
+    if (!key) return;
+    if (!Array.isArray(this._state.completedKeys)) this._state.completedKeys = [];
+    if (!this._state.completedKeys.includes(key)) this._state.completedKeys.push(key);
+    delete this._state.items[key];
+    this.save();
+  },
+  removeManualItem(manualId) {
+    const key = GroceryListService.manualItemKey(manualId);
+    this._state.manualItems = (this._state.manualItems || []).filter((item) => item.id !== manualId);
+    delete this._state.items[key];
+    this._state.completedKeys = this.getCompletedKeys().filter((completedKey) => completedKey !== key);
+    this.save();
+  },
+  completeCheckedItems(items) {
+    for (const item of items || []) {
+      if (item.manual && item.manualId) this.removeManualItem(item.manualId);
+      else this.markItemCompleted(item.key);
+    }
+  },
+  pruneCompletedKeys(activeMissingKeys) {
+    const active = new Set(activeMissingKeys || []);
+    const before = this.getCompletedKeys();
+    this._state.completedKeys = before.filter((key) => active.has(key));
+    if (this._state.completedKeys.length !== before.length) this.save();
+  },
 };
 
 const GROCERY_CATEGORIES = [
@@ -2255,6 +2405,17 @@ const GroceryListService = {
       grouped[cat.id].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
     }
     this.mergeManualItems(grouped);
+    const activeKeys = [
+      ...map.keys(),
+      ...GroceryRepository.getManualItems().map((item) => this.manualItemKey(item.id)),
+    ];
+    GroceryRepository.pruneCompletedKeys(activeKeys);
+    const completed = new Set(GroceryRepository.getCompletedKeys());
+    if (completed.size) {
+      for (const cat of GROCERY_CATEGORIES) {
+        grouped[cat.id] = grouped[cat.id].filter((item) => !completed.has(item.key));
+      }
+    }
     return grouped;
   },
   mergeManualItems(grouped) {
@@ -2280,6 +2441,51 @@ const GroceryListService = {
       }
     }
     return total;
+  },
+  isIngredientInGroceryList(ingredientName, grouped) {
+    const normalized = MatchService.normalize(parseRecipeIngredient(ingredientName).name || ingredientName);
+    for (const cat of GROCERY_CATEGORIES) {
+      for (const item of grouped[cat.id] || []) {
+        if (item.key === this.itemKey(ingredientName)) return true;
+        if (MatchService.normalize(item.name) === normalized) return true;
+      }
+    }
+    for (const manual of GroceryRepository.getManualItems()) {
+      if (MatchService.normalize(manual.name) === normalized) return true;
+    }
+    return false;
+  },
+  addMissingIngredientsFromRecipe(recipe, grouped) {
+    const pantryNames = RecommendationService.getPantryNames();
+    const { missing } = MatchService.analyze(pantryNames, recipe.ingredients || []);
+    if (!missing.length) return { added: 0, missingCount: 0 };
+    let added = 0;
+    const seen = new Set();
+    for (const raw of missing) {
+      const item = parseRecipeIngredient(raw);
+      const name = item.name || formatIngredientDisplay(item);
+      const normalized = MatchService.normalize(name);
+      if (!name || seen.has(normalized)) continue;
+      seen.add(normalized);
+      if (this.isIngredientInGroceryList(raw, grouped)) continue;
+      const manual = GroceryRepository.addManualItem({
+        name,
+        quantity: item.quantity || '',
+        unit: item.unit || '',
+        price: '',
+      });
+      if (!manual) continue;
+      added += 1;
+      const cat = this.categorize(manual.name);
+      grouped[cat.id].push({
+        key: this.manualItemKey(manual.id),
+        name: this.formatManualDisplay(manual),
+        count: 1,
+        manual: true,
+        manualId: manual.id,
+      });
+    }
+    return { added, missingCount: missing.length };
   },
 };
 
@@ -2506,8 +2712,8 @@ async function saveShoppingRecordToStore(payload, editingId = null) {
   }
   const existing = editingId ? ShoppingRecordRepository.getAll().find((r) => r.id === editingId) : null;
   const merged = existing ? { ...existing, ...payload } : { ...payload, id: StorageAdapter.createId('shopping') };
-  await getFirestoreUserDataSync().shopping.saveRecord(merged);
-  return merged;
+  const recordId = await getFirestoreUserDataSync().shopping.saveRecord(merged);
+  return { ...merged, id: recordId, firestoreId: recordId };
 }
 
 async function deleteShoppingRecordFromStore(recordId) {
@@ -2540,6 +2746,52 @@ function markMealPlanLocalMutation() {
   mealPlanLocalMutatedAt = Date.now();
 }
 
+/** 로컬 장보기 금액 입력 직후 Firestore snapshot이 덮어쓰거나 리스트가 리렌더되는 것을 방지 */
+let groceryLocalMutatedAt = 0;
+let groceryPersistTimer = null;
+
+function markGroceryLocalMutation() {
+  groceryLocalMutatedAt = Date.now();
+}
+
+function schedulePersistGroceryState() {
+  if (!isGuestUser() && !isLoggedInAppUser()) return;
+  clearTimeout(groceryPersistTimer);
+  groceryPersistTimer = setTimeout(() => {
+    persistGroceryState().catch(() => undefined);
+  }, 800);
+}
+
+async function flushPersistGroceryState() {
+  clearTimeout(groceryPersistTimer);
+  await persistGroceryState();
+}
+
+function isGroceryAmountInput(el) {
+  return el?.classList?.contains('grocery-item__price') || el?.classList?.contains('grocery-item__actual');
+}
+
+function isGroceryListAmountEditing() {
+  const active = document.activeElement;
+  return Boolean(dom.groceryList?.contains(active) && isGroceryAmountInput(active));
+}
+
+function syncGroceryAmountRow(row, { schedulePersist = true } = {}) {
+  if (!row) return;
+  const key = row.querySelector('[data-price-key]')?.dataset.priceKey
+    || row.querySelector('[data-actual-key]')?.dataset.actualKey;
+  if (!key) return;
+  const price = row.querySelector('.grocery-item__price')?.value ?? '';
+  const actualAmount = row.querySelector('.grocery-item__actual')?.value ?? '';
+  markGroceryLocalMutation();
+  GroceryRepository.setItemAmounts(key, { price, actualAmount });
+  const latestGrouped = GroceryListService.computeMissing(
+    GroceryListService.getPlannerDates(state.plannerRange),
+  );
+  renderGroceryBudgetSummary(GroceryListService.estimateTotal(latestGrouped));
+  if (schedulePersist) schedulePersistGroceryState();
+}
+
 async function persistGroceryState() {
   if (isGuestUser()) {
     GroceryRepository.save();
@@ -2550,6 +2802,7 @@ async function persistGroceryState() {
     budget: GroceryRepository.getBudget(),
     items: GroceryRepository._state.items,
     manualItems: GroceryRepository.getManualItems(),
+    completedKeys: GroceryRepository.getCompletedKeys(),
   });
 }
 
@@ -2974,6 +3227,50 @@ const RecommendationService = {
     }
     return results.sort((a, b) => this.compareHomeResultsByDate(a, b));
   },
+  countMakeableNow(recipes) {
+    const names = this.getPantryNames();
+    if (!names.length) return 0;
+    let count = 0;
+    for (const recipe of recipes) {
+      const analysis = MatchService.analyze(names, recipe.ingredients);
+      if (analysis.missing.length === 0 && analysis.substituted.length === 0) count += 1;
+    }
+    return count;
+  },
+  getPantryUtilization(result) {
+    const pantrySize = this.getPantryNames().length;
+    if (!pantrySize) return 0;
+    const used = new Set((result.matchedPantryNames || []).map((name) => MatchService.normalize(name)));
+    return used.size / pantrySize;
+  },
+  compareNaengtulResults(a, b) {
+    if ((b.expiryBoost || 0) !== (a.expiryBoost || 0)) return (b.expiryBoost || 0) - (a.expiryBoost || 0);
+    const utilDiff = this.getPantryUtilization(b) - this.getPantryUtilization(a);
+    if (utilDiff !== 0) return utilDiff > 0 ? 1 : -1;
+    const usedDiff = (b.matchedPantryNames?.length ?? 0) - (a.matchedPantryNames?.length ?? 0);
+    if (usedDiff !== 0) return usedDiff;
+    const timeA = Number(a.recipe.cookTime) || 9999;
+    const timeB = Number(b.recipe.cookTime) || 9999;
+    if (timeA !== timeB) return timeA - timeB;
+    return this.compareHomeResultsByDate(a, b);
+  },
+  recommendNaengtul(recipes, { limit = 3 } = {}) {
+    const names = this.getPantryNames();
+    if (!names.length) return [];
+    const results = [];
+    for (const recipe of recipes) {
+      const analysis = MatchService.analyze(names, recipe.ingredients);
+      if (analysis.missing.length > 0 || analysis.substituted.length > 0) continue;
+      results.push({
+        recipe,
+        ...analysis,
+        expiryBoost: this.getExpiryBoost(analysis.matchedPantryNames),
+      });
+    }
+    return results
+      .sort((a, b) => this.compareNaengtulResults(a, b))
+      .slice(0, limit);
+  },
   matchesFilters(result, activeFilters) {
     if (!activeFilters?.size) return true;
     const recipe = result.recipe;
@@ -3036,6 +3333,8 @@ const state = {
   editingMealId: null, editingShoppingId: null, formImage: null, mealFormImage: null, isComposing: false, detailRecipeId: null,
   calendarYear: new Date().getFullYear(), calendarMonth: new Date().getMonth(),
   selectedCalendarDate: null, selectedMealType: 'home-cook', mealPhotoRemoved: false,
+  calendarModalType: null,
+  calendarReopenListDate: null,
   currency: CURRENCY_OPTIONS[StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)]
     ? StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)
     : DEFAULT_CURRENCY,
@@ -3052,7 +3351,6 @@ const state = {
   plannerRange: 'week',
   plannerAnimate: null,
   plannerSheet: { date: null, slot: null, action: 'add', tab: 'recommend', search: '' },
-  martMode: false,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -3071,7 +3369,7 @@ const dom = {
   plannerRecipeSheet: $('#planner-recipe-sheet'), plannerRecipeSheetTitle: $('#planner-recipe-sheet-title'),
   plannerRecipeSearch: $('#planner-recipe-search'), plannerRecipeTabs: $('#planner-recipe-tabs'),
   plannerRecipeList: $('#planner-recipe-list'), plannerRecipeEmpty: $('#planner-recipe-empty'),
-  martModeToggle: $('#mart-mode-toggle'), groceryCompleteBtn: $('#grocery-complete-btn'),
+  groceryCompleteBtn: $('#grocery-complete-btn'),
   groceryAddItemBtn: $('#grocery-add-item-btn'),
   groceryBudget: $('#grocery-budget'), groceryBudgetSummary: $('#grocery-budget-summary'),
   groceryList: $('#grocery-list'), groceryEmpty: $('#grocery-empty'),
@@ -3082,9 +3380,16 @@ const dom = {
   tabItems: document.querySelectorAll('.tab-bar__item'),
   openPantryManageBtn: $('#open-pantry-manage-btn'),
   quickForm: $('#quick-ingredient-form'), quickInput: $('#quick-ingredient-input'),
+  homePantrySection: document.querySelector('.home-pantry-section'),
+  pantryChipsClip: $('#pantry-chips-clip'),
   pantryChips: $('#pantry-chips'),
   pantryChipsCount: $('#pantry-chips-count'),
+  pantryChipsToggle: $('#pantry-chips-toggle'),
+  pantryChipsDivider: $('#pantry-chips-divider'),
+  homeRecipesSubtitle: $('#home-recipes-subtitle'),
   menuSearchInput: $('#menu-search-input'),
+  homeSearchFloat: $('#home-search-float'),
+  homeSearchExpandArea: $('#home-search-expand-area'),
   homeTodayHero: $('#home-today-hero'),
   homeRecipesSeeAll: $('#home-recipes-see-all'),
   homeFilterBtn: $('#home-filter-btn'),
@@ -3106,6 +3411,9 @@ const dom = {
   calendarDaySection: $('#calendar-day-section'), calendarDayLabel: $('#calendar-day-label'),
   calendarDaySheet: $('#calendar-day-sheet'), calendarDaySheetTitle: $('#calendar-day-sheet-title'),
   calendarDayList: $('#calendar-day-list'), calendarDayEmpty: $('#calendar-day-empty'),
+  calendarExpenseSheet: $('#calendar-expense-sheet'), calendarExpenseSheetTitle: $('#calendar-expense-sheet-title'),
+  calendarExpenseSummary: $('#calendar-expense-summary'), calendarExpenseList: $('#calendar-expense-list'),
+  calendarExpenseEmpty: $('#calendar-expense-empty'),
   monthlyFoodBudget: $('#monthly-food-budget'),
   openMealAddBtn: $('#open-meal-add-btn'), openShoppingAddBtn: $('#open-shopping-add-btn'),
   mealModal: $('#meal-modal'), mealModalForm: $('#meal-modal-form'), mealModalTitle: $('#meal-modal-title'),
@@ -3118,7 +3426,7 @@ const dom = {
   shoppingModal: $('#shopping-modal'), shoppingModalForm: $('#shopping-modal-form'),
   shoppingModalTitle: $('#shopping-modal-title'), shoppingDate: $('#shopping-date'),
   shoppingAmount: $('#shopping-amount'), shoppingStore: $('#shopping-store'),
-  shoppingIngredients: $('#shopping-ingredients'), shoppingAddPantry: $('#shopping-add-pantry'),
+  shoppingIngredients: $('#shopping-ingredients'),
   shoppingRecipeInput: $('#shopping-recipe-input'), shoppingRecipeId: $('#shopping-recipe-id'),
   shoppingRecipeSuggestions: $('#shopping-recipe-suggestions'),
   pantryModal: $('#pantry-modal'), pantryModalForm: $('#pantry-modal-form'),
@@ -3268,7 +3576,18 @@ function recipePlaceholderHTML(recipe, variant = 'card') {
 
 function recipeCardImageHTML(recipe) {
   if (typeof RecipeImageService !== 'undefined') {
-    return RecipeImageService.renderImg(recipe, { variant: 'card', zoomable: true });
+    const hasPhoto = RecipeImageService.pickPhoto(recipe);
+    if (hasPhoto) {
+      return RecipeImageService.renderImg(recipe, { variant: 'card', zoomable: true });
+    }
+    const categorySrc = RecipeImageService.resolveCategoryAssetSrc(recipe);
+    const dishType = recipe.dishType || DishTypeService.infer(recipe.name);
+    const svg = DishTypeService.placeholderSVG(recipe);
+    return `
+      <div class="recipe-card__image recipe-card__image--placeholder recipe-card__image--${esc(dishType)}" aria-hidden="true">
+        <img class="recipe-card__image-bg" src="${esc(categorySrc)}" alt="">
+        ${svg}
+      </div>`;
   }
   return recipePlaceholderHTML(recipe, 'card');
 }
@@ -3361,7 +3680,10 @@ function switchView(view) {
   dom.tabItems.forEach((tab) => tab.classList.toggle('tab-bar__item--active', tab.dataset.view === view));
   document.body.classList.toggle('view--main', view === 'main');
   document.body.classList.toggle('view--calendar', view === 'calendar');
-  if (prevView === 'main' && view !== 'main') toggleHomeFilterPanel(false);
+  if (prevView === 'main' && view !== 'main') {
+    toggleHomeFilterPanel(false);
+    collapseHomeSearchDock();
+  }
   if (dom.headerSubtitle) {
     dom.headerSubtitle.hidden = false;
     dom.headerSubtitle.textContent = VIEW_TITLES[view] || VIEW_TITLES.main;
@@ -3411,30 +3733,150 @@ function pantryChipBadge(item) {
   return `<span class="tag__expiry-badge">${esc(label)}</span>`;
 }
 
-function renderPantryChips() {
-  const items = getPantryItemsForUi();
-  if (dom.pantryChipsCount) {
-    const count = items.length;
-    dom.pantryChipsCount.textContent = count > 0 ? ` (${count})` : '';
-    dom.pantryChipsCount.hidden = count === 0;
-  }
-  if (!items.length) {
-    dom.pantryChips.innerHTML = '<p class="hint hint--inline">재료를 추가하면 맞춤 레시피를 추천해 드려요.</p>';
-    return;
-  }
-  dom.pantryChips.innerHTML = items.map((item) => `
+const HOME_PANTRY_PREVIEW_COUNT = 4;
+let pantryChipsExpanded = Boolean(StorageAdapter.get(CONFIG.STORAGE.HOME_PANTRY_EXPANDED, false));
+
+function pantryChipHTML(item) {
+  return `
     <span class="tag" role="listitem">
       <span class="tag__emoji" aria-hidden="true">${pantryItemEmoji(item.name)}</span>
       <span class="tag__name">${esc(item.name)}</span>${pantryChipBadge(item)}
       <button type="button" class="tag__remove" data-rm="${esc(item.id)}" aria-label="삭제">&times;</button>
-    </span>`).join('');
-  dom.pantryChips.querySelectorAll('[data-rm]').forEach((btn) => {
+    </span>`;
+}
+
+function buildPantryChipsHTML(items, { expanded } = {}) {
+  const needsCollapse = items.length > HOME_PANTRY_PREVIEW_COUNT;
+  const showAll = expanded || !needsCollapse;
+  const visible = showAll ? items : items.slice(0, HOME_PANTRY_PREVIEW_COUNT);
+  const overflow = !showAll && needsCollapse ? items.length - HOME_PANTRY_PREVIEW_COUNT : 0;
+  let html = visible.map(pantryChipHTML).join('');
+  if (overflow > 0) {
+    html += `<span class="tag tag--overflow" role="listitem" aria-label="외 ${overflow}개 재료">+${overflow}</span>`;
+  }
+  return html;
+}
+
+function bindPantryChipRemoveHandlers(root = dom.pantryChips) {
+  root?.querySelectorAll('[data-rm]').forEach((btn) => {
     btn.onclick = () => {
       requireAppLogin(() => {
         removePantryItem(btn.dataset.rm).catch((err) => handlePantryFirestoreError(err));
       });
     };
   });
+}
+
+function updatePantryChipsToggle(items) {
+  const btn = dom.pantryChipsToggle;
+  const divider = dom.pantryChipsDivider;
+  const needsCollapse = items.length > HOME_PANTRY_PREVIEW_COUNT;
+  if (divider) divider.hidden = !needsCollapse;
+  if (!btn) return;
+  btn.hidden = !needsCollapse;
+  if (!needsCollapse) return;
+  btn.textContent = pantryChipsExpanded ? '▲ 보유 재료 접기' : '▼ 보유 재료 펼치기';
+  btn.setAttribute('aria-expanded', pantryChipsExpanded ? 'true' : 'false');
+}
+
+function updateHomeRecipesSubtitle() {
+  const el = dom.homeRecipesSubtitle;
+  if (!el) return;
+  const names = RecommendationService.getPantryNames();
+  if (!names.length) {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  const count = RecommendationService.countMakeableNow(RecipeRepository.getHomeRecipes());
+  if (count > 0) {
+    el.textContent = `🥕 현재 재료로 바로 만들 수 있는 레시피 ${count}개`;
+  } else {
+    el.textContent = '🥕 현재 재료로 만들 수 있는 레시피가 없습니다. 부족한 재료를 추가해보세요.';
+  }
+  el.hidden = false;
+}
+
+function runPantryChipsHeightTransition(clip, fromHeight, toHeight, onComplete) {
+  clip.style.height = `${fromHeight}px`;
+  clip.style.overflow = 'hidden';
+  requestAnimationFrame(() => {
+    clip.style.transition = 'height 250ms ease';
+    clip.style.height = `${toHeight}px`;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clip.style.height = '';
+      clip.style.overflow = '';
+      clip.style.transition = '';
+      onComplete?.();
+    };
+    clip.addEventListener('transitionend', finish, { once: true });
+    setTimeout(finish, 280);
+  });
+}
+
+function setPantryChipsExpanded(next, { animate = false } = {}) {
+  pantryChipsExpanded = next;
+  StorageAdapter.set(CONFIG.STORAGE.HOME_PANTRY_EXPANDED, next);
+  renderPantryChips({ animate });
+}
+
+function renderPantryChips({ animate = false } = {}) {
+  const items = getPantryItemsForUi();
+  const count = items.length;
+  if (dom.pantryChipsCount) {
+    dom.pantryChipsCount.textContent = count > 0 ? ` (${count})` : '';
+    dom.pantryChipsCount.hidden = count === 0;
+  }
+  const clip = dom.pantryChipsClip;
+  const chips = dom.pantryChips;
+  const needsCollapse = count > HOME_PANTRY_PREVIEW_COUNT;
+  const effectivelyExpanded = pantryChipsExpanded && needsCollapse;
+  dom.homePantrySection?.classList.toggle('is-expanded', effectivelyExpanded);
+
+  if (!count) {
+    chips.innerHTML = '<p class="hint hint--inline">재료를 추가하면 맞춤 레시피를 추천해 드려요.</p>';
+    updatePantryChipsToggle(items);
+    return;
+  }
+
+  if (!needsCollapse) {
+    chips.innerHTML = buildPantryChipsHTML(items, { expanded: true });
+    bindPantryChipRemoveHandlers();
+    updatePantryChipsToggle(items);
+    return;
+  }
+
+  if (animate && clip) {
+    const startHeight = clip.offsetHeight;
+    if (effectivelyExpanded) {
+      chips.innerHTML = buildPantryChipsHTML(items, { expanded: true });
+      bindPantryChipRemoveHandlers();
+      const endHeight = chips.scrollHeight;
+      runPantryChipsHeightTransition(clip, startHeight, endHeight, () => {
+        updatePantryChipsToggle(items);
+      });
+    } else {
+      const fullHTML = buildPantryChipsHTML(items, { expanded: true });
+      const collapsedHTML = buildPantryChipsHTML(items, { expanded: false });
+      chips.innerHTML = collapsedHTML;
+      const endHeight = chips.scrollHeight;
+      chips.innerHTML = fullHTML;
+      bindPantryChipRemoveHandlers();
+      runPantryChipsHeightTransition(clip, startHeight, endHeight, () => {
+        chips.innerHTML = collapsedHTML;
+        bindPantryChipRemoveHandlers();
+        updatePantryChipsToggle(items);
+      });
+    }
+    return;
+  }
+
+  chips.innerHTML = buildPantryChipsHTML(items, { expanded: effectivelyExpanded });
+  bindPantryChipRemoveHandlers();
+  updatePantryChipsToggle(items);
 }
 
 function canForkRecipe(recipe) {
@@ -3486,6 +3928,30 @@ function recipeOriginHTML(recipe, { compact = false } = {}) {
   return `<p class="recipe-detail__origin recipe-detail__origin--static">원본: ${esc(label)}</p>`;
 }
 
+function groceryAddButtonHTML(recipeId, { compact = false } = {}) {
+  const cls = compact ? 'btn-grocery-add btn-grocery-add--sm' : 'btn-grocery-add';
+  return `<button type="button" class="${cls}" data-grocery-add-rid="${esc(recipeId)}" onclick="event.stopPropagation()">장보기 추가</button>`;
+}
+
+async function addRecipeMissingToGroceryList(recipeId) {
+  const recipe = RecipeRepository.getById(recipeId);
+  if (!recipe) return;
+  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const grouped = GroceryListService.computeMissing(dates);
+  const { added, missingCount } = GroceryListService.addMissingIngredientsFromRecipe(recipe, grouped);
+  if (!missingCount) {
+    showToast('이미 모든 재료가 있어요');
+    return;
+  }
+  if (!added) {
+    showToast('이미 장보기 리스트에 있어요');
+    return;
+  }
+  await persistGroceryState();
+  if (state.view === 'planner') renderGroceryList();
+  showToast('장보기 리스트에 추가되었습니다');
+}
+
 // ===== Render: Recipe Card =====
 function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryNames, exact, substituted, recommendationReason, showAuthor, showVisibility, showCardSave, showCardMealLog, showCardFork, showSaveCount, hideMatchBadge, hideOrigin, hideReason, hideExpiryHint, showMissingLine, showCommunityBadge }) {
   const badge = !hideMatchBadge && matchPercent != null ? (matchPercent >= 70 ? 'high' : matchPercent >= 40 ? 'mid' : 'low') : null;
@@ -3506,7 +3972,7 @@ function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryN
     ? `<button type="button" class="recipe-card__action-btn" data-fork-id="${esc(recipe.id)}" data-auth-required aria-label="내 버전 만들기">✏️ 내 버전</button>`
     : '';
   const missingLine = (showMissingLine || matchPercent != null) && (missing?.length || exact?.length || substituted?.length)
-    ? `<p class="recipe-card__missing">${esc(MatchService.formatCardSummary({ exact: exact || [], substituted: substituted || [], missing: missing || [] }))}${missing?.length && AffiliateService.isEnabled() ? ` ${AffiliateService.buyButtonHTML(missing[0], { compact: true })}` : ''}</p>`
+    ? `<p class="recipe-card__missing">${esc(MatchService.formatCardSummary({ exact: exact || [], substituted: substituted || [], missing: missing || [] }))}${missing?.length ? ` ${groceryAddButtonHTML(recipe.id, { compact: true })}` : ''}</p>`
     : (showMissingLine && !missing?.length && !exact?.length && !substituted?.length
       ? '<p class="recipe-card__missing">보유 재료와 일치합니다</p>'
       : '');
@@ -3543,12 +4009,12 @@ function bindRecipeCards(container, results) {
   bindZoomableImages(container);
   container.querySelectorAll('.recipe-card').forEach((card) => {
     const open = (e) => {
-      if (e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-zoom-src], .recipe-card__image-btn')) return;
+      if (e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid], [data-zoom-src], .recipe-card__image-btn')) return;
       const r = results.find((x) => idEq(x.recipe.id, card.dataset.rid));
       openRecipeDetail(r || { recipe: RecipeRepository.getById(card.dataset.rid) });
     };
     card.onclick = open;
-    card.onkeydown = (e) => { if (e.key === 'Enter' && !e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id]')) open(e); };
+    card.onkeydown = (e) => { if (e.key === 'Enter' && !e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid]')) open(e); };
   });
   container.querySelectorAll('[data-log-meal-id]').forEach((btn) => {
     btn.onclick = (e) => {
@@ -3579,14 +4045,30 @@ function bindRecipeCards(container, results) {
       forkRecipeFrom(btn.dataset.forkId);
     };
   });
+  container.querySelectorAll('[data-grocery-add-rid]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      addRecipeMissingToGroceryList(btn.dataset.groceryAddRid).catch(() => showToast('장보기 추가에 실패했습니다.'));
+    };
+  });
 }
 
 // ===== Render: Home =====
 function homeHeroImageHTML(recipe) {
-  if (typeof RecipeImageService !== 'undefined') {
-    return RecipeImageService.renderImg(recipe, { variant: 'home-hero', alt: '' });
+  const dishType = recipe.dishType || DishTypeService.infer(recipe.name);
+  const hasPhoto = typeof RecipeImageService !== 'undefined' && RecipeImageService.pickPhoto(recipe);
+  if (hasPhoto) {
+    return `<div class="home-today-hero__image-frame">${RecipeImageService.renderImg(recipe, { variant: 'home-hero', alt: '' })}</div>`;
   }
-  return `<div class="home-today-hero__img home-today-hero__img--placeholder" aria-hidden="true">${DishTypeService.placeholderSVG(recipe)}</div>`;
+  const categorySrc = typeof RecipeImageService !== 'undefined'
+    ? RecipeImageService.resolveCategoryAssetSrc(recipe)
+    : '';
+  const svg = DishTypeService.placeholderSVG(recipe);
+  return `
+    <div class="home-today-hero__image-frame home-today-hero__image-frame--illustrated" aria-hidden="true">
+      ${categorySrc ? `<img class="home-today-hero__img-bg" src="${esc(categorySrc)}" alt="">` : ''}
+      <div class="home-today-hero__img home-today-hero__img--placeholder home-today-hero__img--${esc(dishType)}">${svg}</div>
+    </div>`;
 }
 
 function homeMatchLevel(matchPercent) {
@@ -3596,34 +4078,88 @@ function homeMatchLevel(matchPercent) {
   return 'low';
 }
 
-function homeTodayHeroHTML(result) {
-  if (!result) return '';
+function homeNaengtulCardHTML(result, index, total) {
   const { recipe, matchPercent } = result;
   const level = homeMatchLevel(matchPercent);
   return `
-    <section class="home-today-hero" aria-label="오늘의 추천">
+    <article class="home-today-hero home-naengtul-card" data-naengtul-index="${index}" aria-label="냉털 추천 ${index + 1} / ${total}">
       <div class="home-today-hero__content">
-        <p class="home-today-hero__label">오늘의 추천</p>
         <h3 class="home-today-hero__name">${esc(recipe.name)}</h3>
-        <p class="home-today-hero__tagline">지금 가진 재료로 만들 수 있어요!</p>
         <div class="home-today-hero__stats">
           ${matchPercent != null ? `<span class="home-today-hero__match home-today-hero__match--${level}">${matchPercent}% 재료 일치</span>` : ''}
           <span>${recipe.cookTime}분</span>
-          <span>${esc(recipe.difficulty)}</span>
         </div>
         <button type="button" class="home-today-hero__cta" data-hero-rid="${esc(recipe.id)}">레시피 보기 →</button>
       </div>
       <div class="home-today-hero__image">${homeHeroImageHTML(recipe)}</div>
+    </article>`;
+}
+
+function homeNaengtulHTML(results) {
+  if (!results.length) {
+    return `
+      <section class="home-naengtul-empty" aria-label="냉털 추천">
+        <p class="home-naengtul-empty__title">지금 만들 수 있는 냉털 메뉴가 없습니다.</p>
+        <p class="home-naengtul-empty__text">부족한 재료 1개 레시피를 확인해보세요.</p>
+        <button type="button" class="home-naengtul-empty__cta" data-scroll-home-recipes>레시피 탐색 보기 →</button>
+      </section>`;
+  }
+  const total = results.length;
+  const showDots = total > 1;
+  return `
+    <section class="home-naengtul" aria-label="냉털 추천">
+      <div class="home-naengtul__head">
+        <p class="home-naengtul__label">냉털 추천</p>
+        ${showDots ? `<div class="home-naengtul__dots" role="tablist" aria-label="냉털 추천 카드">${results.map((_, i) => `<button type="button" class="home-naengtul__dot${i === 0 ? ' home-naengtul__dot--active' : ''}" role="tab" aria-selected="${i === 0 ? 'true' : 'false'}" aria-label="${i + 1}번째 추천" data-naengtul-dot="${i}"></button>`).join('')}</div>` : ''}
+      </div>
+      <div class="home-naengtul__carousel">
+        ${results.map((r, i) => homeNaengtulCardHTML(r, i, total)).join('')}
+      </div>
     </section>`;
 }
 
-function bindHomeTodayHero(container, topResult) {
-  const btn = container.querySelector('[data-hero-rid]');
-  if (!btn) return;
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    openRecipeDetail(topResult);
+function scrollToHomeRecipes() {
+  dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function bindHomeNaengtul(container, results) {
+  container.querySelector('[data-scroll-home-recipes]')?.addEventListener('click', scrollToHomeRecipes);
+
+  container.querySelectorAll('[data-hero-rid]').forEach((btn) => {
+    const idx = Number.parseInt(btn.closest('[data-naengtul-index]')?.dataset.naengtulIndex ?? '0', 10);
+    const result = results[idx];
+    if (!result) return;
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openRecipeDetail(result);
+    };
+  });
+
+  const carousel = container.querySelector('.home-naengtul__carousel');
+  const dots = [...container.querySelectorAll('[data-naengtul-dot]')];
+  if (!carousel || dots.length < 2) return;
+
+  const cards = [...carousel.querySelectorAll('[data-naengtul-index]')];
+  const getPageWidth = () => carousel.clientWidth || 1;
+  const getActiveIndex = () => Math.min(
+    cards.length - 1,
+    Math.max(0, Math.round(carousel.scrollLeft / getPageWidth())),
+  );
+  const updateDots = () => {
+    const index = getActiveIndex();
+    dots.forEach((dot, i) => {
+      const active = i === index;
+      dot.classList.toggle('home-naengtul__dot--active', active);
+      dot.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
   };
+  carousel.addEventListener('scroll', () => requestAnimationFrame(updateDots), { passive: true });
+  dots.forEach((dot) => {
+    dot.addEventListener('click', () => {
+      const i = Number.parseInt(dot.dataset.naengtulDot, 10);
+      carousel.scrollTo({ left: i * getPageWidth(), behavior: 'smooth' });
+    });
+  });
 }
 
 function renderHomeFilters() {
@@ -3637,6 +4173,13 @@ function renderHomeFilters() {
       else state.filters.add(chip.dataset.homeF);
       renderHomeFilters();
       renderHome();
+      if (state.filters.size > 0) {
+        expandHomeSearchDock();
+        toggleHomeFilterPanel(true);
+      } else if (!dom.menuSearchInput?.value.trim()) {
+        toggleHomeFilterPanel(false);
+        maybeCollapseHomeSearchDock();
+      }
     };
   });
 }
@@ -3644,8 +4187,100 @@ function renderHomeFilters() {
 function toggleHomeFilterPanel(force) {
   if (!dom.homeFilterPanel || !dom.homeFilterBtn) return;
   const open = typeof force === 'boolean' ? force : dom.homeFilterPanel.hidden;
+  if (open) expandHomeSearchDock();
   dom.homeFilterPanel.hidden = !open;
+  dom.homeSearchFloat?.classList.toggle('home-search-float--show-filters', open);
+  document.body.classList.toggle('home-search-filter-open', open);
   dom.homeFilterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (dom.homeSearchExpandArea) {
+    dom.homeSearchExpandArea.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
+  if (!open) maybeCollapseHomeSearchDock();
+}
+
+let homeSearchDockExpanded = false;
+let homeSearchBlurTimer = null;
+let homeSearchRenderTimer = null;
+
+function expandHomeSearchDock() {
+  if (homeSearchDockExpanded) return;
+  homeSearchDockExpanded = true;
+  dom.homeSearchFloat?.classList.add('home-search-float--expanded');
+  document.body.classList.add('home-search-expanded');
+  if (state.filters.size > 0) toggleHomeFilterPanel(true);
+}
+
+function collapseHomeSearchDock() {
+  if (!homeSearchDockExpanded) return;
+  homeSearchDockExpanded = false;
+  dom.homeSearchFloat?.classList.remove('home-search-float--expanded', 'home-search-float--show-filters');
+  document.body.classList.remove('home-search-expanded', 'home-search-filter-open');
+  toggleHomeFilterPanel(false);
+}
+
+function maybeCollapseHomeSearchDock() {
+  if (document.activeElement === dom.menuSearchInput) return;
+  if (!dom.homeFilterPanel?.hidden) return;
+  collapseHomeSearchDock();
+}
+
+function scheduleHomeSearchRender() {
+  clearTimeout(homeSearchRenderTimer);
+  homeSearchRenderTimer = setTimeout(() => renderHome(), 180);
+}
+
+function initHomeSearchDock() {
+  if (!dom.menuSearchInput || !dom.homeSearchFloat) return;
+
+  dom.menuSearchInput.addEventListener('focus', () => {
+    clearTimeout(homeSearchBlurTimer);
+    expandHomeSearchDock();
+  });
+
+  dom.menuSearchInput.addEventListener('blur', () => {
+    clearTimeout(homeSearchBlurTimer);
+    homeSearchBlurTimer = setTimeout(maybeCollapseHomeSearchDock, 160);
+  });
+
+  dom.menuSearchInput.addEventListener('input', () => {
+    state.menuSearch = dom.menuSearchInput.value;
+    if (state.menuSearch.trim()) expandHomeSearchDock();
+    scheduleHomeSearchRender();
+    if (!state.menuSearch.trim() && dom.homeFilterPanel?.hidden) {
+      maybeCollapseHomeSearchDock();
+    }
+  });
+
+  dom.menuSearchInput.addEventListener('search', () => {
+    if (!dom.menuSearchInput.value.trim()) {
+      state.menuSearch = '';
+      renderHome();
+      maybeCollapseHomeSearchDock();
+    }
+  });
+
+  dom.menuSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      dom.menuSearchInput.blur();
+      maybeCollapseHomeSearchDock();
+    }
+  });
+
+  dom.homeFilterBtn?.addEventListener('mousedown', (e) => e.preventDefault());
+  dom.homeFilterBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    expandHomeSearchDock();
+    toggleHomeFilterPanel();
+  });
+
+  document.addEventListener('pointerdown', (e) => {
+    if (state.view !== 'main' || !homeSearchDockExpanded) return;
+    if (dom.homeSearchFloat?.contains(e.target)) return;
+    dom.menuSearchInput?.blur();
+    toggleHomeFilterPanel(false);
+    collapseHomeSearchDock();
+  }, { passive: true });
 }
 
 function renderHome() {
@@ -3667,10 +4302,11 @@ function renderHome() {
   dom.noResults.hidden = results.length > 0;
   dom.resultsCount.textContent = results.length ? `${results.length}개` : '';
 
-  if (results.length && names.length && dom.homeTodayHero) {
+  if (names.length && dom.homeTodayHero) {
+    const naengtulResults = RecommendationService.recommendNaengtul(homeRecipes);
     dom.homeTodayHero.hidden = false;
-    dom.homeTodayHero.innerHTML = homeTodayHeroHTML(results[0]);
-    bindHomeTodayHero(dom.homeTodayHero, results[0]);
+    dom.homeTodayHero.innerHTML = homeNaengtulHTML(naengtulResults);
+    bindHomeNaengtul(dom.homeTodayHero, naengtulResults);
   }
 
   dom.recipeList.innerHTML = results.map((r) => recipeCardHTML({
@@ -3682,6 +4318,7 @@ function renderHome() {
     showCommunityBadge: isPublicCommunityRecipe(r.recipe),
   })).join('');
   bindRecipeCards(dom.recipeList, results);
+  updateHomeRecipesSubtitle();
   syncAuthGateUi();
 }
 
@@ -3777,6 +4414,172 @@ function renderPantryManage() {
 }
 
 // ===== Render: Calendar =====
+function getCalendarMonthExpenseEntries(year, month) {
+  const monthLogs = MealLogRepository.getByMonth(year, month);
+  const shoppingRecords = ShoppingRecordRepository.getByMonth(year, month);
+  const entries = [];
+
+  shoppingRecords.forEach((record) => {
+    const normalized = normalizeShoppingRecord(record);
+    const amount = Number(normalized.amount) || 0;
+    if (amount <= 0) return;
+    const items = getShoppingRecordItems(normalized);
+    const title = items.length
+      ? items.map((item) => formatIngredientDisplay(item)).join(', ')
+      : '장보기';
+    entries.push({
+      id: normalized.id,
+      date: normalized.date,
+      kind: 'shopping',
+      category: 'shopping',
+      emoji: '🛒',
+      title,
+      subtitle: normalized.store || '',
+      amount,
+      currency: normalized.currency || DEFAULT_CURRENCY,
+    });
+  });
+
+  monthLogs.forEach((log) => {
+    const type = normalizeMealType(log.mealType);
+    const amount = Number(log.cost) || 0;
+    if (type === 'home-cook' || amount <= 0) return;
+    const info = mealTypeInfo(type);
+    entries.push({
+      id: log.id,
+      date: log.date,
+      kind: 'meal',
+      category: type,
+      emoji: info.emoji,
+      title: log.name,
+      subtitle: log.memo || '',
+      amount,
+      currency: log.currency || DEFAULT_CURRENCY,
+    });
+  });
+
+  return entries.sort((a, b) => {
+    const dateCmp = b.date.localeCompare(a.date);
+    if (dateCmp !== 0) return dateCmp;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+
+function getCalendarMonthExpenseBreakdown(entries) {
+  const breakdown = [
+    { key: 'shopping', label: '장보기', emoji: '🛒', totals: {} },
+    { key: 'eat-out', label: '외식', emoji: '🍽️', totals: {} },
+    { key: 'delivery', label: '배달', emoji: '🛵', totals: {} },
+    { key: 'snack', label: '간식', emoji: '🍪', totals: {} },
+  ];
+  const map = Object.fromEntries(breakdown.map((item) => [item.key, item]));
+  entries.forEach((entry) => {
+    const bucket = map[entry.category];
+    if (!bucket) return;
+    bucket.totals[entry.currency] = (bucket.totals[entry.currency] || 0) + entry.amount;
+  });
+  return breakdown.filter((item) => Object.values(item.totals).some((amount) => amount > 0));
+}
+
+function groupExpenseEntriesByDate(entries) {
+  const groups = new Map();
+  entries.forEach((entry) => {
+    if (!groups.has(entry.date)) groups.set(entry.date, []);
+    groups.get(entry.date).push(entry);
+  });
+  return [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+}
+
+function renderCalendarExpenseSheet() {
+  const year = state.calendarYear;
+  const month = state.calendarMonth + 1;
+  if (dom.calendarExpenseSheetTitle) {
+    dom.calendarExpenseSheetTitle.textContent = `${month}월 지출 내역`;
+  }
+
+  if (isGuestUser()) {
+    if (dom.calendarExpenseSummary) dom.calendarExpenseSummary.innerHTML = '';
+    if (dom.calendarExpenseList) dom.calendarExpenseList.innerHTML = '';
+    if (dom.calendarExpenseEmpty) {
+      dom.calendarExpenseEmpty.hidden = false;
+      const emptyText = dom.calendarExpenseEmpty.querySelector('.empty-state__text');
+      if (emptyText) emptyText.textContent = '로그인하면 이번 달 지출 내역을 확인할 수 있어요.';
+    }
+    return;
+  }
+
+  const stats = getCalendarMonthStats(year, month);
+  const entries = getCalendarMonthExpenseEntries(year, month);
+  const breakdown = getCalendarMonthExpenseBreakdown(entries);
+  const grouped = groupExpenseEntriesByDate(entries);
+
+  if (dom.calendarExpenseSummary) {
+    const chips = breakdown.map((item) => `
+      <span class="calendar-expense-chip">
+        <span class="calendar-expense-chip__label">${item.emoji} ${esc(item.label)}</span>
+        <strong class="calendar-expense-chip__amount">${esc(formatMoneyTotalsByCurrency(item.totals))}</strong>
+      </span>`).join('');
+    dom.calendarExpenseSummary.innerHTML = `
+      <div class="calendar-expense-total">
+        <p class="calendar-expense-total__label">이번 달 총 지출</p>
+        <p class="calendar-expense-total__amount">${esc(stats.totalFoodCost)}</p>
+      </div>
+      ${chips ? `<div class="calendar-expense-chips">${chips}</div>` : ''}`;
+  }
+
+  if (!entries.length) {
+    if (dom.calendarExpenseList) dom.calendarExpenseList.innerHTML = '';
+    if (dom.calendarExpenseEmpty) {
+      dom.calendarExpenseEmpty.hidden = false;
+      const emptyText = dom.calendarExpenseEmpty.querySelector('.empty-state__text');
+      if (emptyText) emptyText.textContent = '이번 달 기록된 지출이 없어요';
+    }
+    return;
+  }
+
+  if (dom.calendarExpenseEmpty) dom.calendarExpenseEmpty.hidden = true;
+  if (dom.calendarExpenseList) {
+    dom.calendarExpenseList.innerHTML = grouped.map(([date, dayEntries]) => `
+      <section class="calendar-expense-day">
+        <h4 class="calendar-expense-day__title">${esc(formatDateLabel(date))}</h4>
+        <ul class="calendar-expense-day__list">
+          ${dayEntries.map((entry) => {
+            const categoryLabel = entry.kind === 'shopping'
+              ? '장보기'
+              : mealTypeInfo(entry.category).label;
+            const meta = [categoryLabel, entry.subtitle].filter(Boolean).join(' · ');
+            return `
+            <li class="calendar-expense-item">
+              <span class="calendar-expense-item__emoji" aria-hidden="true">${entry.emoji}</span>
+              <div class="calendar-expense-item__text">
+                <p class="calendar-expense-item__title">${esc(entry.title)}</p>
+                ${meta ? `<p class="calendar-expense-item__meta">${esc(meta)}</p>` : ''}
+              </div>
+              <span class="calendar-expense-item__amount">${esc(formatMoney(entry.amount, entry.currency))}</span>
+            </li>`;
+          }).join('')}
+        </ul>
+      </section>`).join('');
+  }
+}
+
+function closeCalendarExpenseSheet() {
+  if (!dom.calendarExpenseSheet) return;
+  dom.calendarExpenseSheet.hidden = true;
+  dom.calendarExpenseSheet.setAttribute('aria-hidden', 'true');
+  updateBodyScrollLock();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function openCalendarExpenseSheet() {
+  if (!dom.calendarExpenseSheet) return;
+  renderCalendarExpenseSheet();
+  dom.calendarExpenseSheet.hidden = false;
+  dom.calendarExpenseSheet.setAttribute('aria-hidden', 'false');
+  updateBodyScrollLock();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
 function getCalendarMonthStats(year, month) {
   const monthLogs = MealLogRepository.getByMonth(year, month);
   const shoppingRecords = ShoppingRecordRepository.getByMonth(year, month);
@@ -3848,9 +4651,12 @@ function renderMealStats() {
 
   dom.mealStats.innerHTML = `
     <div class="calendar-summary__spend calendar-spend-card">
-      <p class="calendar-spend-card__label">💰 이번 달 식비</p>
-      <p class="calendar-spend-card__amount">${totalFoodCost}</p>
-      ${progressHTML}
+      <button type="button" class="calendar-spend-card__trigger" data-open-calendar-expense aria-label="이번 달 지출 내역 보기">
+        <p class="calendar-spend-card__label">💰 이번 달 식비</p>
+        <p class="calendar-spend-card__amount">${totalFoodCost}</p>
+        ${progressHTML}
+        <span class="calendar-spend-card__hint">내역 보기</span>
+      </button>
       <div class="calendar-spend-card__goal">
         <label for="monthly-food-budget" class="calendar-spend-card__goal-label">월 목표</label>
         <input type="number" id="monthly-food-budget" class="calendar-spend-card__goal-input"
@@ -3865,6 +4671,13 @@ function renderMealStats() {
     </div>`;
 
   dom.monthlyFoodBudget = $('#monthly-food-budget');
+  dom.mealStats.querySelector('[data-open-calendar-expense]')?.addEventListener('click', () => {
+    if (isGuestUser()) {
+      requireAppLogin(() => openCalendarExpenseSheet());
+      return;
+    }
+    openCalendarExpenseSheet();
+  });
   if (dom.monthlyFoodBudget) {
     dom.monthlyFoodBudget.onchange = () => {
       state.monthlyFoodBudget = Number(dom.monthlyFoodBudget.value) || 0;
@@ -3882,7 +4695,10 @@ function formatCalendarMealLine(log) {
 }
 
 function formatCalendarShoppingLine(record) {
-  return `🛒 ${formatMoney(record.amount, record.currency || DEFAULT_CURRENCY)}`;
+  const normalized = normalizeShoppingRecord(record);
+  const labels = getShoppingRecordItems(normalized).map((item) => formatIngredientDisplay(item));
+  const label = labels.length ? labels.join(', ') : '장보기';
+  return `🛒 ${label} ${formatMoney(normalized.amount, normalized.currency || DEFAULT_CURRENCY)}`;
 }
 
 function renderCalendar() {
@@ -3942,22 +4758,198 @@ function renderCalendar() {
   if (state.selectedCalendarDate && dom.calendarDaySheet && !dom.calendarDaySheet.hidden) {
     renderCalendarDayDetail(state.selectedCalendarDate);
   }
+  if (dom.calendarExpenseSheet && !dom.calendarExpenseSheet.hidden) {
+    renderCalendarExpenseSheet();
+  }
 }
 
-function closeCalendarDaySheet() {
+function renderDayRecordActions(editAttr, delAttr) {
+  return `
+    <div class="day-record-row__aside">
+      <div class="day-record-row__actions">
+        <button type="button" class="day-record-row__link" ${editAttr}>수정</button>
+        <span class="day-record-row__sep" aria-hidden="true">·</span>
+        <button type="button" class="day-record-row__link day-record-row__link--danger" ${delAttr}>삭제</button>
+      </div>
+    </div>`;
+}
+
+function renderCalendarMealRecordRow(log) {
+  const info = mealTypeInfo(log.mealType);
+  const amount = Number(log.cost) > 0
+    ? `<span class="day-record-row__amount">${esc(formatMoney(log.cost, log.currency || DEFAULT_CURRENCY))}</span>`
+    : '';
+  const icon = log.photo
+    ? `<img class="day-record-row__thumb" src="${log.photo}" alt="">`
+    : `<span class="day-record-row__icon" aria-hidden="true">${info.emoji}</span>`;
+  const memo = log.memo ? `<p class="day-record-row__sub">${esc(log.memo)}</p>` : '';
+  return `
+    <li class="day-record-row" data-meal-id="${esc(log.id)}">
+      <button type="button" class="day-record-row__main day-record-row__tap" data-view-meal="${esc(log.id)}">
+        ${icon}
+        <div class="day-record-row__content">
+          <div class="day-record-row__top">
+            <span class="day-record-row__title">${esc(log.name)}</span>
+            ${amount}
+          </div>
+          <p class="day-record-row__sub">${esc(info.label)}</p>
+          ${memo}
+        </div>
+      </button>
+      ${renderDayRecordActions(`data-edit-meal="${esc(log.id)}"`, `data-del-meal="${esc(log.id)}"`)}
+    </li>`;
+}
+
+function renderCalendarShoppingRecordRow(record) {
+  const normalized = normalizeShoppingRecord(record);
+  const items = getShoppingRecordItems(normalized);
+  const itemLabels = items.map((item) => formatIngredientDisplay(item));
+  const title = itemLabels.length ? itemLabels.join(', ') : '장보기';
+  const ingredientLine = itemLabels.length
+    ? `<p class="day-record-row__sub">🥬 ${esc(itemLabels.join(', '))}</p>` : '';
+  const recipeLine = normalized.recipeName
+    ? `<p class="day-record-row__sub">📖 ${esc(normalized.recipeName)}</p>` : '';
+  const pantryMeta = items.length && !isShoppingIngredientsAdded(normalized)
+    ? `<button type="button" class="day-record-row__pill" data-add-pantry-shopping="${esc(normalized.id)}">+ 보유 재료에 추가</button>`
+    : items.length && isShoppingIngredientsAdded(normalized)
+      ? '<span class="day-record-row__badge day-record-row__badge--done">✓ 보유 재료 반영됨</span>'
+      : '';
+  return `
+    <li class="day-record-row day-record-row--shopping" data-shopping-id="${esc(normalized.id)}">
+      <div class="day-record-row__main">
+        <span class="day-record-row__icon" aria-hidden="true">🛒</span>
+        <div class="day-record-row__content">
+          <div class="day-record-row__top">
+            <span class="day-record-row__title">${esc(title)}</span>
+            <span class="day-record-row__amount">${esc(formatMoney(normalized.amount, normalized.currency || DEFAULT_CURRENCY))}</span>
+          </div>
+          <p class="day-record-row__sub">${esc(normalized.store || '마트명 없음')}</p>
+          ${ingredientLine}
+          ${recipeLine}
+          ${pantryMeta ? `<div class="day-record-row__meta">${pantryMeta}</div>` : ''}
+        </div>
+      </div>
+      ${renderDayRecordActions(`data-edit-shopping="${esc(normalized.id)}"`, `data-del-shopping="${esc(normalized.id)}"`)}
+    </li>`;
+}
+
+function finishCloseCalendarDaySheet() {
   if (!dom.calendarDaySheet) return;
+  const panel = dom.calendarDaySheet.querySelector('.calendar-day-sheet');
+  if (panel) {
+    panel.style.transform = '';
+    panel.classList.remove('calendar-day-sheet--closing');
+  }
   dom.calendarDaySheet.hidden = true;
   dom.calendarDaySheet.setAttribute('aria-hidden', 'true');
+  if (state.calendarModalType === 'recordList') {
+    state.calendarModalType = null;
+  }
   updateBodyScrollLock();
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 
+function closeCalendarDaySheet({ immediate = false } = {}) {
+  if (!dom.calendarDaySheet || dom.calendarDaySheet.hidden) return;
+  const panel = dom.calendarDaySheet.querySelector('.calendar-day-sheet');
+  if (immediate || !panel) {
+    finishCloseCalendarDaySheet();
+    return;
+  }
+  if (panel.classList.contains('calendar-day-sheet--closing')) return;
+  panel.classList.add('calendar-day-sheet--closing');
+  let closed = false;
+  const done = () => {
+    if (closed) return;
+    closed = true;
+    panel.removeEventListener('animationend', onEnd);
+    finishCloseCalendarDaySheet();
+  };
+  const onEnd = (e) => {
+    if (e.target !== panel) return;
+    done();
+  };
+  panel.addEventListener('animationend', onEnd);
+  window.setTimeout(done, 280);
+}
+
+function initCalendarDaySheetGestures() {
+  const modal = dom.calendarDaySheet;
+  const panel = modal?.querySelector('.calendar-day-sheet');
+  const body = modal?.querySelector('.calendar-day-sheet__body');
+  if (!modal || !panel || panel.dataset.swipeBound) return;
+  panel.dataset.swipeBound = '1';
+
+  let startY = 0;
+  let dragging = false;
+
+  panel.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    if (body && body.scrollTop > 2) return;
+    startY = e.touches[0].clientY;
+    dragging = true;
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) panel.style.transform = `translateY(${Math.min(dy, 120)}px)`;
+  }, { passive: true });
+
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const dy = (e.changedTouches?.[0]?.clientY ?? startY) - startY;
+    panel.style.transform = '';
+    if (dy > 72) closeCalendarDaySheet();
+  };
+
+  panel.addEventListener('touchend', endDrag, { passive: true });
+  panel.addEventListener('touchcancel', endDrag, { passive: true });
+}
+
 function openCalendarDaySheet() {
   if (!dom.calendarDaySheet) return;
+  const panel = dom.calendarDaySheet.querySelector('.calendar-day-sheet');
+  if (panel) {
+    panel.classList.remove('calendar-day-sheet--closing');
+    panel.style.transform = '';
+    panel.style.animation = 'none';
+    void panel.offsetHeight;
+    panel.style.animation = '';
+  }
+  state.calendarModalType = 'recordList';
   dom.calendarDaySheet.hidden = false;
   dom.calendarDaySheet.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
+  updateBodyScrollLock();
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function openCalendarMealEditor(mealId, dateStr) {
+  state.calendarReopenListDate = dateStr;
+  state.calendarModalType = 'editRecord';
+  closeCalendarDaySheet({ immediate: true });
+  openMealModal(mealId);
+}
+
+function openCalendarShoppingEditor(recordId, dateStr) {
+  state.calendarReopenListDate = dateStr;
+  state.calendarModalType = 'editShopping';
+  closeCalendarDaySheet({ immediate: true });
+  openShoppingModal(recordId);
+}
+
+function reopenCalendarRecordListAfterEdit(dateStr) {
+  if (!dateStr || state.view !== 'calendar') return;
+  state.calendarModalType = 'recordList';
+  selectCalendarDate(dateStr);
+}
+
+function clearCalendarSubModalState() {
+  state.calendarModalType = null;
+  state.calendarReopenListDate = null;
+  state.editingMealId = null;
+  state.editingShoppingId = null;
 }
 
 function selectCalendarDate(dateStr) {
@@ -3987,66 +4979,19 @@ function renderCalendarDayDetail(dateStr) {
   const shoppingRecords = ShoppingRecordRepository.getByDate(dateStr);
   dom.calendarDayEmpty.hidden = logs.length + shoppingRecords.length > 0;
 
-  const mealItems = logs.map((log) => {
-    const info = mealTypeInfo(log.mealType);
-    return `
-    <div class="meal-day-item" data-meal-id="${esc(log.id)}">
-      <button type="button" class="meal-day-item__body" data-view-meal="${esc(log.id)}">
-        <div class="meal-day-item__head">
-          ${log.photo ? `<img class="meal-day-item__thumb" src="${log.photo}" alt="">` : `<span class="meal-day-item__emoji">${info.emoji}</span>`}
-          <div class="meal-day-item__text">
-            <p class="meal-day-item__name">${info.emoji} ${esc(log.name)}</p>
-            <p class="meal-day-item__type">${esc(info.label)}${log.cost ? ` · ${esc(formatMoney(log.cost, log.currency || DEFAULT_CURRENCY))}` : ''}</p>
-            ${log.memo ? `<p class="meal-day-item__memo">${esc(log.memo)}</p>` : ''}
-          </div>
-        </div>
-      </button>
-      <div class="meal-day-item__actions">
-        <button type="button" class="btn btn--ghost btn--sm" data-edit-meal="${esc(log.id)}">수정</button>
-        <button type="button" class="btn btn--danger btn--sm" data-del-meal="${esc(log.id)}">삭제</button>
-      </div>
-    </div>`;
-  }).join('');
+  const mealItems = logs.map((log) => renderCalendarMealRecordRow(log)).join('');
 
-  const shoppingItems = shoppingRecords.map((record) => {
-    const ingredientLine = record.ingredients?.length
-      ? `<p class="meal-day-item__memo">🥬 ${esc(record.ingredients.map(formatIngredientDisplay).join(', '))}</p>` : '';
-    const recipeLine = record.recipeName
-      ? `<p class="meal-day-item__memo">📖 ${esc(record.recipeName)}</p>` : '';
-    const pantryAction = record.ingredients?.length && !record.pantryAdded
-      ? `<button type="button" class="btn btn--outline btn--sm" data-add-pantry-shopping="${esc(record.id)}">보유 재료에 추가</button>`
-      : record.pantryAdded && record.ingredients?.length
-        ? '<span class="meal-day-item__done">✓ 보유 재료 반영됨</span>' : '';
-    return `
-    <div class="meal-day-item meal-day-item--shopping" data-shopping-id="${esc(record.id)}">
-      <div class="meal-day-item__body">
-        <div class="meal-day-item__head">
-          <span class="meal-day-item__emoji">🛒</span>
-          <div class="meal-day-item__text">
-            <p class="meal-day-item__name">장보기 ${esc(formatMoney(record.amount, record.currency || DEFAULT_CURRENCY))}</p>
-            <p class="meal-day-item__type">${record.store ? esc(record.store) : '마트명 없음'}</p>
-            ${recipeLine}
-            ${ingredientLine}
-          </div>
-        </div>
-      </div>
-      <div class="meal-day-item__actions">
-        ${pantryAction}
-        <button type="button" class="btn btn--ghost btn--sm" data-edit-shopping="${esc(record.id)}">수정</button>
-        <button type="button" class="btn btn--danger btn--sm" data-del-shopping="${esc(record.id)}">삭제</button>
-      </div>
-    </div>`;
-  }).join('');
+  const shoppingItems = shoppingRecords.map((record) => renderCalendarShoppingRecordRow(record)).join('');
 
   dom.calendarDayList.innerHTML = mealItems + shoppingItems;
 
   dom.calendarDayList.querySelectorAll('[data-view-meal]').forEach((b) => {
-    b.onclick = () => openMealModal(b.dataset.viewMeal);
+    b.onclick = () => openCalendarMealEditor(b.dataset.viewMeal, dateStr);
   });
   dom.calendarDayList.querySelectorAll('[data-edit-meal]').forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
-      requireAppLogin(() => openMealModal(b.dataset.editMeal));
+      requireAppLogin(() => openCalendarMealEditor(b.dataset.editMeal, dateStr));
     };
   });
   dom.calendarDayList.querySelectorAll('[data-del-meal]').forEach((b) => {
@@ -4070,7 +5015,7 @@ function renderCalendarDayDetail(dateStr) {
   dom.calendarDayList.querySelectorAll('[data-edit-shopping]').forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
-      requireAppLogin(() => openShoppingModal(b.dataset.editShopping));
+      requireAppLogin(() => openCalendarShoppingEditor(b.dataset.editShopping, dateStr));
     };
   });
   dom.calendarDayList.querySelectorAll('[data-del-shopping]').forEach((b) => {
@@ -4221,34 +5166,60 @@ function handleMealModalSubmit(e) {
 
   saveMealLogToStore(payload, state.editingMealId)
     .then(() => {
-      showToast(state.editingMealId ? '기록이 수정되었어요' : `"${name}" 기록 완료!`);
+      const wasEdit = Boolean(state.editingMealId);
+      const reopenDate = state.calendarReopenListDate;
+      showToast(wasEdit ? '기록이 수정되었어요' : `"${name}" 기록 완료!`);
       state.selectedCalendarDate = date;
       const [y, m] = date.split('-').map(Number);
       state.calendarYear = y;
       state.calendarMonth = m - 1;
+      state.editingMealId = null;
+      state.calendarReopenListDate = null;
+      state.calendarModalType = null;
       closeModal('meal');
       renderCalendar();
+      if (reopenDate) reopenCalendarRecordListAfterEdit(reopenDate);
     })
     .catch((err) => showToast(err.message || '식사 기록 저장에 실패했습니다.'));
 }
 
 function addShoppingRecordToPantry(recordId) {
-  const record = ShoppingRecordRepository.getAll().find((r) => r.id === recordId);
-  if (!record?.ingredients?.length) {
+  const record = ShoppingRecordRepository.getAll().find((entry) => entry.id === recordId);
+  if (!record) return;
+  if (shoppingPantryAddInFlight.has(recordId)) return;
+  if (isShoppingIngredientsAdded(record)) {
+    showToast('이미 보유 재료에 반영됐어요');
+    if (state.selectedCalendarDate && !dom.calendarDaySheet?.hidden) {
+      renderCalendarDayDetail(state.selectedCalendarDate);
+    }
+    return;
+  }
+  const items = getShoppingRecordItems(record);
+  if (!items.length) {
     showToast('추가할 재료가 없어요');
     return;
   }
-  PantryIngredientService.addFromNames(record.ingredients, {
-    recipeId: record.recipeId,
-    recipeName: record.recipeName,
-  }).then(({ added }) => {
-    if (isLoggedInAppUser()) {
-      saveShoppingRecordToStore({ ...record, pantryAdded: true }, recordId).catch(() => undefined);
-    } else {
-      ShoppingRecordRepository.update(recordId, { pantryAdded: true });
-    }
-    showToast(added ? `재료 ${added}개를 보유 재료에 추가했어요` : '이미 보유 재료에 있는 항목이에요');
-  }).catch(() => undefined);
+  shoppingPantryAddInFlight.add(recordId);
+  addShoppingItemsToPantry(record)
+    .then(async ({ added, merged }) => {
+      const saved = await saveShoppingRecordToStore({
+        ...normalizeShoppingRecord(record),
+        ingredientsAdded: true,
+        pantryAdded: true,
+      }, recordId);
+      upsertShoppingRecordLocal(saved);
+      renderCalendar();
+      if (state.selectedCalendarDate && !dom.calendarDaySheet?.hidden) {
+        renderCalendarDayDetail(state.selectedCalendarDate);
+      }
+      if (added || merged) {
+        showToast(`보유 재료에 반영했어요${added ? ` · ${added}개 추가` : ''}${merged ? `${added ? '' : ''} · ${merged}개 병합` : ''}`);
+      } else {
+        showToast('보유 재료에 반영했어요');
+      }
+    })
+    .catch(() => showToast('보유 재료 추가에 실패했습니다.'))
+    .finally(() => shoppingPantryAddInFlight.delete(recordId));
 }
 
 function openShoppingModal(id = null, defaultDate = null) {
@@ -4260,17 +5231,15 @@ function openShoppingModal(id = null, defaultDate = null) {
   dom.shoppingModalForm.reset();
   RecipePickerService.clear(state.shoppingRecipePicker);
   dom.shoppingIngredients.value = '';
-  dom.shoppingAddPantry.checked = true;
   dom.shoppingModalTitle.textContent = id ? '장보기 기록 수정' : '장보기 기록';
   dom.shoppingDate.value = defaultDate || state.selectedCalendarDate || todayStr();
   if (id) {
-    const record = ShoppingRecordRepository.getAll().find((r) => r.id === id);
+    const record = normalizeShoppingRecord(ShoppingRecordRepository.getAll().find((entry) => entry.id === id));
     if (!record) return;
     dom.shoppingDate.value = record.date;
     dom.shoppingAmount.value = record.amount || '';
     dom.shoppingStore.value = record.store || '';
-    dom.shoppingIngredients.value = (record.ingredients || []).join('\n');
-    dom.shoppingAddPantry.checked = !record.pantryAdded;
+    dom.shoppingIngredients.value = (record.items || []).map((item) => formatIngredientDisplay(item)).join('\n');
     if (record.recipeId) {
       const recipe = RecipeRepository.getById(record.recipeId);
       if (recipe) RecipePickerService.setSelection(state.shoppingRecipePicker, recipe);
@@ -4291,63 +5260,51 @@ function handleShoppingModalSubmit(e) {
   const date = dom.shoppingDate.value;
   const amount = Number(dom.shoppingAmount.value);
   const store = dom.shoppingStore.value.trim();
-  const ingredients = parseIngredientList(dom.shoppingIngredients.value);
-  const addToPantry = dom.shoppingAddPantry.checked;
+  const ingredientLines = parseIngredientList(dom.shoppingIngredients.value);
+  const items = ingredientLines.map((line) => normalizeShoppingItem(line));
   const resolved = RecipePickerService.resolve(dom.shoppingRecipeInput, dom.shoppingRecipeId);
   const recipeId = resolved?.id || null;
   const recipeName = resolved?.name || dom.shoppingRecipeInput.value.trim();
   if (!date || Number.isNaN(amount)) return;
 
   const existing = state.editingShoppingId
-    ? ShoppingRecordRepository.getAll().find((r) => r.id === state.editingShoppingId)
+    ? normalizeShoppingRecord(ShoppingRecordRepository.getAll().find((entry) => entry.id === state.editingShoppingId))
     : null;
-  const shouldAddPantry = addToPantry && ingredients.length && !(existing?.pantryAdded);
 
   const payload = {
+    type: 'shopping',
     date,
     amount,
     store,
-    ingredients,
+    items,
+    ingredients: items.map((item) => formatIngredientDisplay(item)),
     recipeId,
     recipeName,
-    pantryAdded: existing?.pantryAdded || shouldAddPantry,
+    ingredientsAdded: existing?.ingredientsAdded || false,
+    pantryAdded: existing?.ingredientsAdded || false,
     currency: state.editingShoppingId ? undefined : state.currency,
   };
 
   const finish = (msg) => {
+    const reopenDate = state.calendarReopenListDate;
     state.selectedCalendarDate = date;
     const [y, m] = date.split('-').map(Number);
     state.calendarYear = y;
     state.calendarMonth = m - 1;
+    state.editingShoppingId = null;
+    state.calendarReopenListDate = null;
+    state.calendarModalType = null;
     closeModal('shopping');
     refreshAll();
     showToast(msg);
-  };
-
-  const afterSave = (msg) => {
-    if (!shouldAddPantry) {
-      finish(msg);
-      return;
-    }
-    PantryIngredientService.addFromNames(ingredients, { recipeId, recipeName })
-      .then(({ added }) => {
-        if (isLoggedInAppUser()) {
-          const latest = ShoppingRecordRepository.getAll().find((r) => r.date === date && r.amount === amount);
-          if (latest) {
-            saveShoppingRecordToStore({ ...latest, pantryAdded: true }, latest.id).catch(() => undefined);
-          }
-        } else if (existing) {
-          ShoppingRecordRepository.update(existing.id, { pantryAdded: true });
-        }
-        finish(added ? `${msg} · 재료 ${added}개를 보유 재료에 추가했어요` : msg);
-      })
-      .catch(() => finish(msg));
+    if (reopenDate) reopenCalendarRecordListAfterEdit(reopenDate);
   };
 
   saveShoppingRecordToStore(payload, state.editingShoppingId)
-    .then(() => {
+    .then((saved) => {
+      upsertShoppingRecordLocal(saved);
       if (!isLoggedInAppUser()) notifyGuestPersonalDataNotPersisted('장보기 기록');
-      afterSave(state.editingShoppingId ? '장보기 기록이 수정되었어요' : `장보기 ${formatMoney(amount, state.currency)} 기록 완료!`);
+      finish(state.editingShoppingId ? '장보기 기록이 수정되었어요' : `장보기 ${formatMoney(amount, state.currency)} 기록 완료!`);
     })
     .catch((err) => showToast(err.message || '장보기 기록 저장에 실패했습니다.'));
 }
@@ -4401,9 +5358,52 @@ function plannerMealRecordLabel(entry) {
 }
 
 function buildPlannerMealMemo(date, slotId, entry) {
-  if (entry.memo) return entry.memo;
   const slot = plannerSlotInfo(slotId);
-  return `${slot.emoji} ${slot.label} · ${formatPlannerDayLabel(date)} 식단`;
+  const slotLabel = `${slot.emoji} ${slot.label}`;
+  if (entry.memo) return `${slotLabel} · ${entry.memo}`;
+  return `${slotLabel} · ${formatPlannerDayLabel(date)} 식단`;
+}
+
+const plannerRecordingKeys = new Set();
+
+function plannerRecordKey(dateKey, slotId) {
+  return `${dateKey}:${slotId}`;
+}
+
+function upsertMealLogLocal(log) {
+  if (!log) return null;
+  const normalized = {
+    ...log,
+    id: log.id || log.firestoreId,
+    firestoreId: log.firestoreId || log.id,
+    mealType: normalizeMealType(log.mealType),
+    cost: Number(log.cost) || 0,
+    currency: log.currency || DEFAULT_CURRENCY,
+    createdAt: log.createdAt || new Date().toISOString(),
+    updatedAt: log.updatedAt || new Date().toISOString(),
+  };
+  const existingIdx = MealLogRepository.getAll().findIndex(
+    (l) => l.id === normalized.id || l.firestoreId === normalized.firestoreId,
+  );
+  if (existingIdx >= 0) {
+    MealLogRepository._logs[existingIdx] = { ...MealLogRepository._logs[existingIdx], ...normalized };
+  } else {
+    MealLogRepository._logs.push(normalized);
+  }
+  return normalized;
+}
+
+function focusCalendarOnMealRecord(dateStr) {
+  if (!dateStr) return;
+  const [y, m] = dateStr.split('-').map(Number);
+  if (!y || !m) return;
+  state.calendarYear = y;
+  state.calendarMonth = m - 1;
+  state.selectedCalendarDate = dateStr;
+  renderCalendar();
+  if (state.view === 'calendar') {
+    selectCalendarDate(dateStr);
+  }
 }
 
 function plannerMealCardHTML(date, slot, animate = false) {
@@ -4429,18 +5429,18 @@ function plannerMealCardHTML(date, slot, animate = false) {
         <p class="planner-meal__slot">${slot.emoji} ${esc(slot.label)}</p>
         <button type="button" class="planner-meal__remove" data-planner-remove data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" aria-label="${esc(slot.label)} ${esc(recipe.name)} 삭제">×</button>
       </div>
-      <button type="button" class="planner-meal__body" data-planner-edit data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" aria-label="${esc(slot.label)} ${esc(recipe.name)} 수정">
-        <div class="planner-meal__row">
-          ${plannerMealThumbHTML(recipe)}
-          <div class="planner-meal__info">
-            <p class="planner-meal__name">${esc(recipe.name)}</p>
-            ${meta ? `<p class="planner-meal__meta">${esc(meta)}</p>` : ''}
-            ${matchLine}
+      <div class="planner-meal__content">
+        <button type="button" class="planner-meal__body" data-planner-edit data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" aria-label="${esc(slot.label)} ${esc(recipe.name)} 수정">
+          <div class="planner-meal__row">
+            ${plannerMealThumbHTML(recipe)}
+            <div class="planner-meal__info">
+              <p class="planner-meal__name">${esc(recipe.name)}</p>
+              ${meta ? `<p class="planner-meal__meta">${esc(meta)}</p>` : ''}
+              ${matchLine}
+            </div>
           </div>
-        </div>
-      </button>
-      <div class="planner-meal__actions">
-        <button type="button" class="planner-meal__record btn btn--ghost btn--sm${recordBtnClass}"
+        </button>
+        <button type="button" class="planner-meal__record${recordBtnClass}"
           data-planner-record data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}"
           ${entry.recorded ? 'disabled aria-disabled="true"' : ''}
           aria-label="${esc(slot.label)} ${esc(recipe.name)} ${plannerMealRecordLabel(entry)}">
@@ -4712,6 +5712,9 @@ async function recordPlannerMealToCalendar(dateKey, slotId) {
   const normalizedSlot = String(slotId || '').trim();
   if (!normalizedDate || !normalizedSlot) return;
 
+  const recordKey = plannerRecordKey(normalizedDate, normalizedSlot);
+  if (plannerRecordingKeys.has(recordKey)) return;
+
   const entry = MealPlanRepository.get(normalizedDate, normalizedSlot);
   if (entry.recorded) {
     showToast('이미 식사 기록이 완료된 식단이에요');
@@ -4722,6 +5725,15 @@ async function recordPlannerMealToCalendar(dateKey, slotId) {
   if (!recipe?.name) {
     showToast('기록할 식단 정보가 없어요');
     return;
+  }
+
+  plannerRecordingKeys.add(recordKey);
+  const recordBtn = dom.plannerGrid?.querySelector(
+    `[data-planner-record][data-meal-date="${normalizedDate}"][data-meal-slot="${normalizedSlot}"]`,
+  );
+  if (recordBtn) {
+    recordBtn.disabled = true;
+    recordBtn.classList.add('btn--loading');
   }
 
   const memo = buildPlannerMealMemo(normalizedDate, normalizedSlot, entry);
@@ -4752,34 +5764,28 @@ async function recordPlannerMealToCalendar(dateKey, slotId) {
   };
 
   try {
-    const log = await saveMealLogToStore(payload);
-    if (log && !MealLogRepository.getAll().some((l) => l.id === log.id || l.firestoreId === log.firestoreId)) {
-      MealLogRepository._logs.push({
-        ...log,
-        mealType: normalizeMealType(log.mealType),
-        cost: Number(log.cost) || 0,
-        currency: log.currency || DEFAULT_CURRENCY,
-      });
-    }
-
     markMealPlanLocalMutation();
+    const log = await saveMealLogToStore(payload);
+    upsertMealLogLocal(log);
+
     MealPlanRepository.set(normalizedDate, normalizedSlot, {
       ...entry,
       recorded: true,
     });
     await persistMealPlans();
 
-    state.selectedCalendarDate = normalizedDate;
-    const [y, m] = normalizedDate.split('-').map(Number);
-    state.calendarYear = y;
-    state.calendarMonth = m - 1;
-
+    focusCalendarOnMealRecord(normalizedDate);
     renderPlanner();
-    renderCalendar();
     showToast(`"${recipe.name}" 식사 기록을 추가했어요`);
   } catch (err) {
     console.error('[MealPlanner] recordPlannerMealToCalendar failed', { dateKey: normalizedDate, slotId: normalizedSlot, err });
     showToast(err?.message || '식사 기록에 실패했어요');
+    if (recordBtn) {
+      recordBtn.disabled = false;
+      recordBtn.classList.remove('btn--loading');
+    }
+  } finally {
+    plannerRecordingKeys.delete(recordKey);
   }
 }
 
@@ -4877,6 +5883,104 @@ function initPlannerSheets() {
   });
 }
 
+function findGroceryListItemByKey(key, grouped) {
+  for (const cat of GROCERY_CATEGORIES) {
+    const item = (grouped[cat.id] || []).find((entry) => entry.key === key);
+    if (item) return item;
+  }
+  return null;
+}
+
+function getGroceryItemIngredientName(item) {
+  if (!item) return '';
+  if (item.manual && item.manualId) {
+    const manual = GroceryRepository.getManualItems().find((entry) => entry.id === item.manualId);
+    return manual?.name || item.name;
+  }
+  return item.name;
+}
+
+function findShoppingRecordForGroceryItem(itemKey, meta) {
+  if (meta?.shoppingRecordId) {
+    const linked = ShoppingRecordRepository.getAll().find((r) => r.id === meta.shoppingRecordId);
+    if (linked) return linked;
+  }
+  return ShoppingRecordRepository.getAll().find((r) => r.groceryItemKey === itemKey) || null;
+}
+
+function upsertShoppingRecordLocal(record) {
+  if (!record?.id) return;
+  const existing = ShoppingRecordRepository.getAll().find((r) => r.id === record.id);
+  if (existing) {
+    ShoppingRecordRepository.update(record.id, record);
+    return;
+  }
+  ShoppingRecordRepository._records.push({
+    ...record,
+    createdAt: record.createdAt || new Date().toISOString(),
+    updatedAt: record.updatedAt || new Date().toISOString(),
+  });
+}
+
+async function syncGroceryItemToShoppingRecord(itemKey, item, { silent = false, force = false } = {}) {
+  const meta = GroceryRepository.getMeta(itemKey);
+  const amount = Number(meta.actualAmount);
+  const shouldRecord = force ? amount > 0 : (meta.checked && amount > 0);
+  const existing = findShoppingRecordForGroceryItem(itemKey, meta);
+
+  if (!shouldRecord) {
+    if (existing) {
+      await deleteShoppingRecordFromStore(existing.id);
+      if (isLoggedInAppUser()) ShoppingRecordRepository.remove(existing.id);
+      GroceryRepository.setShoppingRecordId(itemKey, '');
+      if (state.view === 'calendar') renderCalendar();
+    }
+    return null;
+  }
+
+  const ingredientName = getGroceryItemIngredientName(item);
+  const items = ingredientName ? [normalizeShoppingItem(ingredientName)] : [];
+  const metaActual = GroceryRepository.getMeta(itemKey).actualAmount;
+  const payload = {
+    type: 'shopping',
+    date: todayStr(),
+    amount,
+    store: '',
+    items,
+    ingredients: items.map((entry) => formatIngredientDisplay(entry)),
+    recipeId: null,
+    recipeName: '',
+    groceryItemKey: itemKey,
+    source: 'grocery-list',
+    currency: existing?.currency || state.currency,
+    ingredientsAdded: Boolean(existing?.ingredientsAdded),
+    pantryAdded: Boolean(existing?.ingredientsAdded),
+  };
+
+  const saved = await saveShoppingRecordToStore(payload, existing?.id);
+  upsertShoppingRecordLocal(saved);
+  GroceryRepository.setShoppingRecordId(itemKey, saved.id);
+  if (!silent && !existing) showToast('식사 달력에 장보기 지출이 기록됐어요');
+  if (state.view === 'calendar') renderCalendar();
+  return saved;
+}
+
+async function removeGroceryListItem(itemKey, grouped) {
+  const item = findGroceryListItemByKey(itemKey, grouped);
+  if (!item) return;
+  const meta = GroceryRepository.getMeta(itemKey);
+  const existing = findShoppingRecordForGroceryItem(itemKey, meta);
+  if (existing) {
+    await deleteShoppingRecordFromStore(existing.id);
+    if (isLoggedInAppUser()) ShoppingRecordRepository.remove(existing.id);
+  }
+  if (item.manual && item.manualId) GroceryRepository.removeManualItem(item.manualId);
+  else GroceryRepository.markItemCompleted(itemKey);
+  await persistGroceryState();
+  if (state.view === 'calendar') renderCalendar();
+  renderGroceryList();
+}
+
 function renderGroceryBudgetSummary(total) {
   if (!dom.groceryBudgetSummary) return;
   const budget = Number(GroceryRepository.getBudget()) || 0;
@@ -4896,8 +6000,9 @@ function renderGroceryBudgetSummary(total) {
   dom.groceryBudgetSummary.classList.toggle('budget-box__summary--over', diff < 0);
 }
 
-function renderGroceryList() {
+function renderGroceryList({ force = false } = {}) {
   if (!dom.groceryList) return;
+  if (!force && isGroceryListAmountEditing()) return;
 
   const dates = GroceryListService.getPlannerDates(state.plannerRange);
   const grouped = GroceryListService.computeMissing(dates);
@@ -4906,13 +6011,6 @@ function renderGroceryList() {
 
   dom.groceryEmpty.hidden = totalItems > 0;
   dom.groceryList.hidden = totalItems === 0;
-  dom.groceryList.classList.toggle('grocery-list--mart', state.martMode);
-  if (dom.martModeToggle) {
-    dom.martModeToggle.textContent = state.martMode ? '일반 모드' : '마트 모드';
-    dom.martModeToggle.classList.toggle('btn--primary', state.martMode);
-    dom.martModeToggle.classList.toggle('btn--outline', !state.martMode);
-    dom.martModeToggle.classList.remove('btn--ghost');
-  }
 
   renderGroceryBudgetSummary(totalCost);
   if (!totalItems) {
@@ -4930,16 +6028,24 @@ function renderGroceryList() {
       const meta = GroceryRepository.getMeta(item.key);
       const qty = !item.manual && item.count > 1 ? ` ×${item.count}` : '';
       const manualBadge = item.manual ? '<span class="grocery-item__badge">직접</span>' : '';
-      const priceField = state.martMode ? '' : `
-        <input type="number" class="grocery-item__price" data-price-key="${esc(item.key)}"
-          min="0" step="0.01" inputmode="decimal" placeholder="금액"
-          value="${meta.price !== '' && meta.price != null ? esc(String(meta.price)) : ''}">`;
+      const priceField = `
+        <input type="text" class="grocery-item__price" data-price-key="${esc(item.key)}"
+          inputmode="decimal" placeholder="예상금액"
+          value="${meta.price !== '' && meta.price != null ? esc(String(meta.price)) : ''}"
+          aria-label="${esc(item.name)} 예상금액">`;
+      const actualField = `
+        <input type="text" class="grocery-item__actual" data-actual-key="${esc(item.key)}"
+          inputmode="decimal" placeholder="실금액"
+          value="${meta.actualAmount !== '' && meta.actualAmount != null ? esc(String(meta.actualAmount)) : ''}"
+          aria-label="${esc(item.name)} 실금액">`;
       return `
-        <label class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
-          <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''}>
+        <div class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
+          <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''} aria-label="${esc(item.name)} 구매 완료 표시">
           <span class="grocery-item__name">${manualBadge}${esc(item.name)}${qty}</span>
           ${priceField}
-        </label>`;
+          ${actualField}
+          <button type="button" class="grocery-item__remove" data-remove-key="${esc(item.key)}" aria-label="${esc(item.name)} 삭제">×</button>
+        </div>`;
     }).join('');
     return `
       <section class="grocery-section">
@@ -4953,16 +6059,36 @@ function renderGroceryList() {
   dom.groceryList.querySelectorAll('.grocery-item__check').forEach((cb) => {
     cb.onchange = () => {
       GroceryRepository.setChecked(cb.dataset.checkKey, cb.checked);
-      persistGroceryState().catch(() => undefined);
-      renderGroceryList();
+      flushPersistGroceryState().catch(() => undefined);
+      renderGroceryList({ force: true });
     };
   });
-  dom.groceryList.querySelectorAll('.grocery-item__price').forEach((input) => {
-    input.onchange = () => {
-      GroceryRepository.setPrice(input.dataset.priceKey, input.value);
-      persistGroceryState().catch(() => undefined);
-      renderGroceryBudgetSummary(GroceryListService.estimateTotal(grouped));
+  dom.groceryList.querySelectorAll('.grocery-item__remove').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      removeGroceryListItem(btn.dataset.removeKey, grouped).catch(() => showToast('삭제에 실패했습니다.'));
     };
+  });
+}
+
+function initGroceryListAmountHandlers() {
+  if (!dom.groceryList || dom.groceryList.dataset.amountHandlersBound) return;
+  dom.groceryList.dataset.amountHandlersBound = '1';
+
+  dom.groceryList.addEventListener('input', (e) => {
+    if (!isGroceryAmountInput(e.target)) return;
+    syncGroceryAmountRow(e.target.closest('.grocery-item'), { schedulePersist: true });
+  });
+
+  dom.groceryList.addEventListener('focusout', (e) => {
+    if (!isGroceryAmountInput(e.target)) return;
+    const row = e.target.closest('.grocery-item');
+    syncGroceryAmountRow(row, { schedulePersist: false });
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (row?.contains(active) && isGroceryAmountInput(active)) return;
+      flushPersistGroceryState().catch(() => undefined);
+    }, 0);
   });
 }
 
@@ -5003,14 +6129,18 @@ function autoGenerateWeeklyPlan() {
   showToast('이번 주 식단을 자동으로 채웠어요');
 }
 
-function handleGroceryPurchaseComplete() {
+async function handleGroceryPurchaseComplete() {
   const dates = GroceryListService.getPlannerDates(state.plannerRange);
   const grouped = GroceryListService.computeMissing(dates);
+  const checkedItems = [];
   const names = [];
+  let shoppingCount = 0;
   for (const cat of GROCERY_CATEGORIES) {
     for (const item of grouped[cat.id] || []) {
       const meta = GroceryRepository.getMeta(item.key);
       if (!meta.checked) continue;
+      checkedItems.push(item);
+      if (Number(meta.actualAmount) > 0) shoppingCount += 1;
       if (item.manual) {
         names.push(item.name);
         continue;
@@ -5018,15 +6148,32 @@ function handleGroceryPurchaseComplete() {
       names.push(item.count > 1 ? `${item.name} ${item.count}개` : item.name);
     }
   }
-  if (!names.length) {
+  if (!checkedItems.length) {
     showToast('구매한 재료를 체크해 주세요');
     return;
   }
-  PantryIngredientService.addFromNames(names, { skipDuplicates: true })
-    .then(({ added }) => {
-      showToast(`${added}개 재료를 냉장고에 추가했어요`);
-    })
-    .catch(() => undefined);
+  try {
+    await Promise.all(checkedItems.map((item) => {
+      const meta = GroceryRepository.getMeta(item.key);
+      if (Number(meta.actualAmount) <= 0) return Promise.resolve();
+      return syncGroceryItemToShoppingRecord(item.key, item, { silent: true, force: true });
+    }));
+    const shoppingRecordIds = checkedItems
+      .map((item) => GroceryRepository.getMeta(item.key).shoppingRecordId)
+      .filter(Boolean);
+    const { added } = await PantryIngredientService.addFromNames(names, { skipDuplicates: true });
+    await markShoppingRecordsIngredientsAdded(shoppingRecordIds);
+    GroceryRepository.completeCheckedItems(checkedItems);
+    await persistGroceryState();
+    renderGroceryList();
+    if (state.view === 'calendar') renderCalendar();
+    const parts = [];
+    if (added) parts.push(`${added}개 재료 보유 재료에 추가`);
+    if (shoppingCount) parts.push(`장보기 지출 ${shoppingCount}건 기록`);
+    showToast(parts.length ? `구매 완료 · ${parts.join(' · ')}` : '구매 완료했어요');
+  } catch {
+    showToast('구매 완료 처리에 실패했습니다.');
+  }
 }
 
 // ===== Recipe Detail Modal =====
@@ -5937,6 +7084,7 @@ function updateBodyScrollLock() {
     || !dom.shoppingModal.hidden
     || (dom.groceryItemModal && !dom.groceryItemModal.hidden)
     || (dom.calendarDaySheet && !dom.calendarDaySheet.hidden)
+    || (dom.calendarExpenseSheet && !dom.calendarExpenseSheet.hidden)
     || (dom.plannerSlotSheet && !dom.plannerSlotSheet.hidden)
     || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
     || (dom.loginPromptModal && !dom.loginPromptModal.hidden);
@@ -5946,6 +7094,9 @@ function updateBodyScrollLock() {
 window.updateBodyScrollLock = updateBodyScrollLock;
 
 function openModal(type) {
+  if (['meal', 'shopping'].includes(type) && state.calendarModalType === 'recordList') {
+    closeCalendarDaySheet({ immediate: true });
+  }
   const m = {
     recipe: dom.recipeModal,
     form: dom.recipeFormModal,
@@ -5969,13 +7120,20 @@ function closeModal(type) {
   }[type];
   if (!m) return;
   m.hidden = true; m.setAttribute('aria-hidden', 'true');
+  if (type === 'meal' && (state.calendarModalType === 'editRecord' || state.calendarModalType === 'addRecord')) {
+    clearCalendarSubModalState();
+  }
+  if (type === 'shopping' && (state.calendarModalType === 'editShopping' || state.calendarModalType === 'addShopping')) {
+    clearCalendarSubModalState();
+  }
   updateBodyScrollLock();
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 function closeAllModals() {
   ['recipe', 'form', 'pantry', 'meal', 'shopping', 'grocery-item'].forEach(closeModal);
   closePlannerSheets();
-  closeCalendarDaySheet();
+  closeCalendarDaySheet({ immediate: true });
+  closeCalendarExpenseSheet();
   if (window.LoginRequiredModal?.isOpen()) window.LoginRequiredModal.close(true);
   closeImageLightbox();
 }
@@ -6072,17 +7230,18 @@ function init() {
   initRecipePickers();
   initVideoExtractUi();
   initPlannerSheets();
+  initGroceryListAmountHandlers();
+  initCalendarDaySheetGestures();
+  initHomeSearchDock();
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
+  dom.pantryChipsToggle?.addEventListener('click', () => {
+    setPantryChipsExpanded(!pantryChipsExpanded, { animate: true });
+  });
   dom.quickForm.addEventListener('submit', handleQuickAdd);
   dom.quickInput.addEventListener('compositionstart', () => { state.isComposing = true; });
   dom.quickInput.addEventListener('compositionend', () => { state.isComposing = false; });
-  dom.menuSearchInput.addEventListener('input', () => {
-    state.menuSearch = dom.menuSearchInput.value;
-    renderHome();
-  });
-  dom.homeFilterBtn?.addEventListener('click', () => toggleHomeFilterPanel());
   dom.homeRecipesSeeAll?.addEventListener('click', () => {
     dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -6092,8 +7251,24 @@ function init() {
     e.preventDefault();
     openRecipeForm();
   };
-  dom.openMealAddBtn.onclick = () => openMealModal(null, state.selectedCalendarDate || todayStr());
-  dom.openShoppingAddBtn.onclick = () => openShoppingModal(null, state.selectedCalendarDate || todayStr());
+  dom.openMealAddBtn.onclick = () => {
+    const defaultDate = state.selectedCalendarDate || todayStr();
+    if (state.view === 'calendar') {
+      state.calendarReopenListDate = defaultDate;
+      state.calendarModalType = 'addRecord';
+      closeCalendarDaySheet({ immediate: true });
+    }
+    openMealModal(null, defaultDate);
+  };
+  dom.openShoppingAddBtn.onclick = () => {
+    const defaultDate = state.selectedCalendarDate || todayStr();
+    if (state.view === 'calendar') {
+      state.calendarReopenListDate = defaultDate;
+      state.calendarModalType = 'addShopping';
+      closeCalendarDaySheet({ immediate: true });
+    }
+    openShoppingModal(null, defaultDate);
+  };
   dom.currencySelect.onchange = () => {
     state.currency = CURRENCY_OPTIONS[dom.currencySelect.value] ? dom.currencySelect.value : DEFAULT_CURRENCY;
     if (isLoggedInAppUser()) {
@@ -6110,11 +7285,7 @@ function init() {
     renderPlanner();
   });
   dom.plannerAutoBtn?.addEventListener('click', () => requireAppLogin(autoGenerateWeeklyPlan));
-  dom.martModeToggle?.addEventListener('click', () => {
-    state.martMode = !state.martMode;
-    renderGroceryList();
-  });
-  dom.groceryCompleteBtn?.addEventListener('click', () => requireAppLogin(handleGroceryPurchaseComplete));
+  dom.groceryCompleteBtn?.addEventListener('click', handleGroceryPurchaseComplete);
   dom.groceryAddItemBtn?.addEventListener('click', () => openGroceryItemModal());
   dom.groceryItemModalForm?.addEventListener('submit', handleGroceryItemModalSubmit);
   dom.groceryBudget?.addEventListener('change', () => {
@@ -6167,6 +7338,7 @@ function init() {
       const type = el.dataset.closeModal;
       if (type === 'login') window.LoginRequiredModal?.close(true);
       else if (type === 'calendar-day') closeCalendarDaySheet();
+      else if (type === 'calendar-expense') closeCalendarExpenseSheet();
       else if (type !== 'profile') closeModal(type);
     };
   });
@@ -6227,7 +7399,9 @@ function startApp() {
       state.monthlyFoodBudget = Number(settings.monthlyFoodBudget) || 0;
       StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
     }
-    if (settings.grocery) GroceryRepository.replaceState(settings.grocery);
+    if (settings.grocery && Date.now() - groceryLocalMutatedAt >= 2000) {
+      GroceryRepository.replaceState(settings.grocery);
+    }
     if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
     refreshAll();
   });
