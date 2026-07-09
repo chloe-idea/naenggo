@@ -13,6 +13,9 @@
     aiFeature: {
       title: '🔍 로그인하고 냉장GO를 시작해보세요',
     },
+    account: {
+      title: '👤 계정',
+    },
   };
 
   const COPY = {
@@ -52,7 +55,15 @@
     open(options = {}) {
       const normalized = normalizeOptions(options);
       if (isLoggedIn()) {
-        return normalized.redirectAfterLogin?.();
+        if (normalized.redirectAfterLogin) {
+          return normalized.redirectAfterLogin?.();
+        }
+        this.activePreset = 'account';
+        this.applyPreset(this.activePreset);
+        this.clearError();
+        this.syncUi();
+        this.show();
+        return;
       }
       if (normalized.redirectAfterLogin) this.redirectAfterLogin = normalized.redirectAfterLogin;
       this.activePreset = normalized.preset || 'default';
@@ -64,7 +75,10 @@
 
     close(clearRedirect = true) {
       if (clearRedirect) this.redirectAfterLogin = null;
+      this.activePreset = 'default';
+      this.applyPreset(this.activePreset);
       this.clearError();
+      this.syncUi();
       this.hide();
     },
 
@@ -113,8 +127,16 @@
     syncUi() {
       const quotaEl = $('login-prompt-quota');
       if (quotaEl) {
-        quotaEl.textContent = isLoggedIn() ? COPY.quotaChecking : COPY.quotaGuest;
+        quotaEl.textContent = COPY.quotaGuest;
       }
+      const googleBtn = $('login-prompt-google-btn');
+      const dismissBtn = $('login-prompt-dismiss-btn');
+      const benefits = document.querySelector('.login-prompt__benefits');
+      const desc = document.querySelector('.login-prompt__desc');
+      if (googleBtn) googleBtn.hidden = false;
+      if (dismissBtn) dismissBtn.hidden = false;
+      if (benefits) benefits.hidden = false;
+      if (desc) desc.hidden = false;
       this.syncGoogleButton();
     },
 
@@ -180,7 +202,10 @@
       const pendingAction = this.redirectAfterLogin;
       this.redirectAfterLogin = null;
 
-      if (this.isOpen()) {
+      const shouldCloseModal = this.isOpen()
+        && (pendingAction || this.activePreset !== 'account');
+
+      if (shouldCloseModal) {
         this.clearError();
         this.hide();
       }

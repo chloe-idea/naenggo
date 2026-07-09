@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-visual">
   <meta name="description" content="집에 있는 재료로 만들 수 있는 요리를 찾아보세요">
   <meta name="theme-color" content="#ff6b35">
   <meta name="mobile-web-app-capable" content="yes">
@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=108">
+  <link rel="stylesheet" href="style.css?v=117">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -193,10 +193,11 @@
           <div class="section__header">
             <h2 class="section__title">식단 플래너</h2>
             <div class="section__actions">
-              <select id="planner-range" class="planner-toolbar__select" aria-label="식단 보기">
-                <option value="week">주간</option>
-                <option value="month">월간</option>
-              </select>
+              <div class="planner-week-nav" aria-label="주차 이동">
+                <button type="button" id="planner-week-prev" class="planner-week-nav__btn" aria-label="이전 주">‹</button>
+                <span id="planner-week-label" class="planner-week-nav__label">7/6 - 7/12</span>
+                <button type="button" id="planner-week-next" class="planner-week-nav__btn" aria-label="다음 주">›</button>
+              </div>
               <button type="button" id="planner-auto-btn" class="btn btn--ghost btn--sm">이번 주 식단 자동 생성</button>
             </div>
           </div>
@@ -400,10 +401,6 @@
                   <option value="팩">팩</option><option value="캔">캔</option>
                 </select>
               </div>
-            </div>
-            <div class="form-field">
-              <label for="grocery-item-price" class="form-field__label">예상 금액 <span class="optional">(선택)</span></label>
-              <input type="number" id="grocery-item-price" class="form-field__input" min="0" step="0.01" inputmode="decimal" placeholder="예: 4.50">
             </div>
             <div class="form-actions">
               <button type="button" class="btn btn--ghost" data-close-modal="grocery-item">취소</button>
@@ -748,7 +745,7 @@
     </div>
 
     <!-- 로그인 유도 모달 -->
-    <div id="login-prompt-modal" class="modal login-prompt-modal" hidden aria-hidden="true">
+    <div id="login-prompt-modal" class="modal modal--center login-prompt-modal" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="login"></div>
       <div class="modal__panel login-prompt" role="dialog" aria-modal="true" aria-labelledby="login-prompt-title">
         <button type="button" class="modal__close" data-close-modal="login" aria-label="닫기">&times;</button>
@@ -819,6 +816,7 @@
       <div class="modal__backdrop" data-close-modal="planner-slot"></div>
       <div class="modal__panel planner-sheet" role="dialog" aria-modal="true" aria-labelledby="planner-slot-sheet-title">
         <div class="planner-sheet__handle" aria-hidden="true"></div>
+        <button type="button" class="planner-sheet__close" data-close-modal="planner-slot" aria-label="닫기">&times;</button>
         <h3 id="planner-slot-sheet-title" class="planner-sheet__title">월요일 7/6</h3>
         <div id="planner-slot-menu" class="planner-slot-menu"></div>
       </div>
@@ -829,6 +827,7 @@
       <div class="modal__backdrop" data-close-modal="planner-recipe"></div>
       <div class="modal__panel planner-sheet planner-sheet--recipe" role="dialog" aria-modal="true" aria-labelledby="planner-recipe-sheet-title">
         <div class="planner-sheet__handle" aria-hidden="true"></div>
+        <button type="button" class="planner-sheet__close" data-close-modal="planner-recipe" aria-label="닫기">&times;</button>
         <h3 id="planner-recipe-sheet-title" class="planner-sheet__title">아침 추가</h3>
         <div class="planner-recipe-search-wrap">
           <input type="search" id="planner-recipe-search" class="planner-recipe-search" placeholder="레시피 검색" autocomplete="off" aria-label="레시피 검색">
@@ -843,7 +842,7 @@
       </div>
     </div>
 
-    <div id="profile-menu-modal" class="modal modal--sheet" hidden aria-hidden="true">
+    <div id="profile-menu-modal" class="modal modal--center profile-menu-modal" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="profile"></div>
       <div class="modal__panel profile-menu" role="dialog" aria-modal="true" aria-labelledby="profile-menu-title">
         <button type="button" class="modal__close" data-close-modal="profile" aria-label="닫기">&times;</button>
@@ -940,7 +939,7 @@
       };
     })();
   </script>
-  <script type="module" src="js/firebase-bootstrap.js?v=59"></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=62"></script>
   <script src="js/video-extract-platform.js?v=54"></script>
   <script src="app-config.js?v=56"></script>
   <script src="nav-icons.js?v=47"></script>
@@ -948,8 +947,8 @@
   <script src="recipe-images.js?v=49"></script>
   <script src="recipes-builtin.js?v=47"></script>
   <script src="js/ingredient-emoji.js?v=1"></script>
-  <script src="js/login-required-modal.js?v=65"></script>
+  <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=103" defer></script>
+  <script src="script.js?v=113" defer></script>
 </body>
 </html>

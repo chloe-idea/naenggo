@@ -2191,6 +2191,21 @@ const MealPlanRepository = {
 
 const GroceryRepository = {
   _state: { budget: '', items: {}, manualItems: [], completedKeys: [] },
+  _byWeek: {},
+  _activeWeekKey: '',
+  _emptyWeekState() {
+    return { budget: '', items: {}, manualItems: [], completedKeys: [] };
+  },
+  _normalizeWeekState(state) {
+    return {
+      budget: state?.budget ?? '',
+      items: state?.items && typeof state.items === 'object' ? state.items : {},
+      manualItems: Array.isArray(state?.manualItems)
+        ? state.manualItems.map((item) => this._normalizeManualItem(item)).filter(Boolean)
+        : [],
+      completedKeys: Array.isArray(state?.completedKeys) ? [...state.completedKeys] : [],
+    };
+  },
   load() {
     this.clearSession();
     if (isGuestUser()) {
@@ -2206,23 +2221,44 @@ const GroceryRepository = {
   save() {
     if (!isGuestUser()) return;
     try {
-      localStorage.setItem(CONFIG.STORAGE.GROCERY, JSON.stringify(this._state));
+      localStorage.setItem(CONFIG.STORAGE.GROCERY, JSON.stringify(this.exportState()));
     } catch {
       // ignore quota errors
     }
   },
   clearSession() {
-    this._state = { budget: '', items: {}, manualItems: [], completedKeys: [] };
+    this._state = this._emptyWeekState();
+    this._byWeek = {};
+    this._activeWeekKey = '';
+  },
+  exportState() {
+    return {
+      activeWeekKey: this._activeWeekKey || '',
+      byWeek: this._byWeek,
+      // legacy fallback fields
+      ...this._state,
+    };
+  },
+  setActiveWeek(weekKey) {
+    const key = weekKey || getWeekKeyFromDateStr(todayStr());
+    this._activeWeekKey = key;
+    if (!this._byWeek[key]) this._byWeek[key] = this._emptyWeekState();
+    this._state = this._byWeek[key];
   },
   replaceState(state) {
-    this._state = {
-      budget: state?.budget ?? '',
-      items: state?.items && typeof state.items === 'object' ? state.items : {},
-      manualItems: Array.isArray(state?.manualItems)
-        ? state.manualItems.map((item) => this._normalizeManualItem(item)).filter(Boolean)
-        : [],
-      completedKeys: Array.isArray(state?.completedKeys) ? [...state.completedKeys] : [],
-    };
+    const byWeek = state?.byWeek && typeof state.byWeek === 'object' ? state.byWeek : null;
+    if (byWeek) {
+      this._byWeek = {};
+      Object.entries(byWeek).forEach(([weekKey, weekState]) => {
+        this._byWeek[weekKey] = this._normalizeWeekState(weekState);
+      });
+      this.setActiveWeek(state?.activeWeekKey || getWeekKeyFromDateStr(todayStr()));
+      return;
+    }
+    // legacy single-week payload migration
+    const weekKey = this._activeWeekKey || getWeekKeyFromDateStr(todayStr());
+    this._byWeek = { [weekKey]: this._normalizeWeekState(state) };
+    this.setActiveWeek(weekKey);
   },
   _normalizeManualItem(raw) {
     const name = String(raw?.name || '').trim();
@@ -2347,24 +2383,8 @@ const GroceryListService = {
   itemKey(name) {
     return MatchService.normalize(parseRecipeIngredient(name).name || name);
   },
-  getPlannerDates(range) {
-    const now = new Date();
-    if (range === 'month') {
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const days = new Date(year, month + 1, 0).getDate();
-      return Array.from({ length: days }, (_, i) => {
-        const d = new Date(year, month, i + 1);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      });
-    }
-    const start = new Date(now);
-    const day = start.getDay();
-    start.setDate(start.getDate() - (day === 0 ? 6 : day - 1));
-    return MealPlanRepository.getRange(
-      `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`,
-      7,
-    );
+  getPlannerDates(weekStart) {
+    return getWeekDates(weekStart || todayStr());
   },
   resolveEntry(text) {
     const trimmed = String(text || '').trim();
@@ -2781,14 +2801,15 @@ function syncGroceryAmountRow(row, { schedulePersist = true } = {}) {
   const key = row.querySelector('[data-price-key]')?.dataset.priceKey
     || row.querySelector('[data-actual-key]')?.dataset.actualKey;
   if (!key) return;
-  const price = row.querySelector('.grocery-item__price')?.value ?? '';
+  const priceInput = row.querySelector('.grocery-item__price');
+  const price = priceInput ? priceInput.value : GroceryRepository.getMeta(key).price;
   const actualAmount = row.querySelector('.grocery-item__actual')?.value ?? '';
   markGroceryLocalMutation();
   GroceryRepository.setItemAmounts(key, { price, actualAmount });
   const latestGrouped = GroceryListService.computeMissing(
-    GroceryListService.getPlannerDates(state.plannerRange),
+    GroceryListService.getPlannerDates(state.plannerWeekStart),
   );
-  renderGroceryBudgetSummary(GroceryListService.estimateTotal(latestGrouped));
+  renderGroceryBudgetSummary(latestGrouped);
   if (schedulePersist) schedulePersistGroceryState();
 }
 
@@ -2798,12 +2819,7 @@ async function persistGroceryState() {
     return;
   }
   if (!isLoggedInAppUser()) return;
-  await getFirestoreUserDataSync().settings.saveGroceryState({
-    budget: GroceryRepository.getBudget(),
-    items: GroceryRepository._state.items,
-    manualItems: GroceryRepository.getManualItems(),
-    completedKeys: GroceryRepository.getCompletedKeys(),
-  });
+  await getFirestoreUserDataSync().settings.saveGroceryState(GroceryRepository.exportState());
 }
 
 async function persistCurrencySetting() {
@@ -3334,6 +3350,7 @@ const state = {
   calendarYear: new Date().getFullYear(), calendarMonth: new Date().getMonth(),
   selectedCalendarDate: null, selectedMealType: 'home-cook', mealPhotoRemoved: false,
   calendarModalType: null,
+  calendarExpenseFilter: 'all',
   calendarReopenListDate: null,
   currency: CURRENCY_OPTIONS[StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)]
     ? StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)
@@ -3348,7 +3365,8 @@ const state = {
   videoExtractSessionUrl: null,
   videoDishMismatchAcknowledged: false,
   aiUsageRemaining: null,
-  plannerRange: 'week',
+  plannerWeekStart: toDateStr(getWeekStartDate(todayStr())),
+  plannerWeekKey: getWeekKeyFromDateStr(todayStr()),
   plannerAnimate: null,
   plannerSheet: { date: null, slot: null, action: 'add', tab: 'recommend', search: '' },
 };
@@ -3362,7 +3380,8 @@ const dom = {
     main: $('#view-main'), 'my-recipes': $('#view-my-recipes'),
     pantry: $('#view-pantry'), planner: $('#view-planner'), calendar: $('#view-calendar'),
   },
-  plannerRange: $('#planner-range'), plannerAutoBtn: $('#planner-auto-btn'), plannerGrid: $('#planner-grid'),
+  plannerWeekPrev: $('#planner-week-prev'), plannerWeekLabel: $('#planner-week-label'), plannerWeekNext: $('#planner-week-next'),
+  plannerAutoBtn: $('#planner-auto-btn'), plannerGrid: $('#planner-grid'),
   plannerGuestHint: $('#planner-guest-hint'),
   plannerSlotSheet: $('#planner-slot-sheet'), plannerSlotSheetTitle: $('#planner-slot-sheet-title'),
   plannerSlotMenu: $('#planner-slot-menu'),
@@ -3376,7 +3395,6 @@ const dom = {
   groceryItemModal: $('#grocery-item-modal'), groceryItemModalForm: $('#grocery-item-modal-form'),
   groceryItemModalTitle: $('#grocery-item-modal-title'), groceryItemName: $('#grocery-item-name'),
   groceryItemQuantity: $('#grocery-item-quantity'), groceryItemUnit: $('#grocery-item-unit'),
-  groceryItemPrice: $('#grocery-item-price'),
   tabItems: document.querySelectorAll('.tab-bar__item'),
   openPantryManageBtn: $('#open-pantry-manage-btn'),
   quickForm: $('#quick-ingredient-form'), quickInput: $('#quick-ingredient-input'),
@@ -3388,6 +3406,7 @@ const dom = {
   pantryChipsDivider: $('#pantry-chips-divider'),
   homeRecipesSubtitle: $('#home-recipes-subtitle'),
   menuSearchInput: $('#menu-search-input'),
+  homeSearchDock: $('.home-search-dock'),
   homeSearchFloat: $('#home-search-float'),
   homeSearchExpandArea: $('#home-search-expand-area'),
   homeTodayHero: $('#home-today-hero'),
@@ -3631,6 +3650,45 @@ function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+function parseDateStr(dateStr) {
+  const [y, m, d] = String(dateStr || '').split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+function toDateStr(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+function getWeekStartDate(dateLike) {
+  const base = dateLike instanceof Date ? new Date(dateLike) : parseDateStr(dateLike || todayStr());
+  const day = base.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  base.setDate(base.getDate() + diff);
+  base.setHours(0, 0, 0, 0);
+  return base;
+}
+function getWeekDates(startDateStr) {
+  const start = getWeekStartDate(startDateStr);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return toDateStr(d);
+  });
+}
+function getWeekKeyFromDateStr(dateStr) {
+  const start = getWeekStartDate(dateStr);
+  const thursday = new Date(start);
+  thursday.setDate(start.getDate() + 3);
+  const year = thursday.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const jan4WeekStart = getWeekStartDate(jan4);
+  const weekNo = Math.floor((start - jan4WeekStart) / 604800000) + 1;
+  return `${year}-W${String(weekNo).padStart(2, '0')}`;
+}
+function formatPlannerWeekLabel(startDateStr) {
+  const dates = getWeekDates(startDateStr);
+  const first = parseDateStr(dates[0]);
+  const last = parseDateStr(dates[6]);
+  return `${first.getMonth() + 1}/${first.getDate()} - ${last.getMonth() + 1}/${last.getDate()}`;
+}
 function formatDateLabel(dateStr) {
   const [y, m, d] = dateStr.split('-');
   return `${y}년 ${Number(m)}월 ${Number(d)}일`;
@@ -3683,6 +3741,7 @@ function switchView(view) {
   if (prevView === 'main' && view !== 'main') {
     toggleHomeFilterPanel(false);
     collapseHomeSearchDock();
+    setHomeSearchKeyboardActive(false);
   }
   if (dom.headerSubtitle) {
     dom.headerSubtitle.hidden = false;
@@ -3936,7 +3995,7 @@ function groceryAddButtonHTML(recipeId, { compact = false } = {}) {
 async function addRecipeMissingToGroceryList(recipeId) {
   const recipe = RecipeRepository.getById(recipeId);
   if (!recipe) return;
-  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
   const grouped = GroceryListService.computeMissing(dates);
   const { added, missingCount } = GroceryListService.addMissingIngredientsFromRecipe(recipe, grouped);
   if (!missingCount) {
@@ -4201,6 +4260,58 @@ function toggleHomeFilterPanel(force) {
 let homeSearchDockExpanded = false;
 let homeSearchBlurTimer = null;
 let homeSearchRenderTimer = null;
+let homeSearchKeyboardActive = false;
+let homeSearchViewportHandler = null;
+
+function shouldUseHomeSearchKeyboardMode() {
+  return window.matchMedia('(hover: none) and (pointer: coarse), (max-width: 480px)').matches;
+}
+
+function getHomeSearchFloatGapPx() {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--home-search-float-gap').trim();
+  const value = Number.parseFloat(raw);
+  if (!Number.isFinite(value)) return 6;
+  return raw.endsWith('rem') ? value * 16 : value;
+}
+
+function syncHomeSearchKeyboardPosition() {
+  if (!homeSearchKeyboardActive) return;
+  const gap = getHomeSearchFloatGapPx();
+  const vv = window.visualViewport;
+  if (!vv) {
+    document.documentElement.style.setProperty('--home-search-keyboard-bottom', `${gap}px`);
+    return;
+  }
+  const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  document.documentElement.style.setProperty('--home-search-keyboard-bottom', `${keyboardInset + gap}px`);
+}
+
+function setHomeSearchKeyboardActive(active) {
+  if (!shouldUseHomeSearchKeyboardMode()) active = false;
+  if (active) {
+    homeSearchKeyboardActive = true;
+    document.body.classList.add('home-search-keyboard-active');
+    syncHomeSearchKeyboardPosition();
+    if (!homeSearchViewportHandler && window.visualViewport) {
+      homeSearchViewportHandler = () => syncHomeSearchKeyboardPosition();
+      window.visualViewport.addEventListener('resize', homeSearchViewportHandler);
+      window.visualViewport.addEventListener('scroll', homeSearchViewportHandler);
+    }
+    return;
+  }
+  homeSearchKeyboardActive = false;
+  document.body.classList.remove('home-search-keyboard-active');
+  document.documentElement.style.removeProperty('--home-search-keyboard-bottom');
+  if (homeSearchViewportHandler && window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', homeSearchViewportHandler);
+    window.visualViewport.removeEventListener('scroll', homeSearchViewportHandler);
+    homeSearchViewportHandler = null;
+  }
+}
+
+function endHomeSearchKeyboardMode() {
+  setHomeSearchKeyboardActive(false);
+}
 
 function expandHomeSearchDock() {
   if (homeSearchDockExpanded) return;
@@ -4235,11 +4346,15 @@ function initHomeSearchDock() {
   dom.menuSearchInput.addEventListener('focus', () => {
     clearTimeout(homeSearchBlurTimer);
     expandHomeSearchDock();
+    setHomeSearchKeyboardActive(true);
   });
 
   dom.menuSearchInput.addEventListener('blur', () => {
     clearTimeout(homeSearchBlurTimer);
-    homeSearchBlurTimer = setTimeout(maybeCollapseHomeSearchDock, 160);
+    homeSearchBlurTimer = setTimeout(() => {
+      maybeCollapseHomeSearchDock();
+      endHomeSearchKeyboardMode();
+    }, 160);
   });
 
   dom.menuSearchInput.addEventListener('input', () => {
@@ -4256,6 +4371,7 @@ function initHomeSearchDock() {
       state.menuSearch = '';
       renderHome();
       maybeCollapseHomeSearchDock();
+      endHomeSearchKeyboardMode();
     }
   });
 
@@ -4264,6 +4380,7 @@ function initHomeSearchDock() {
       e.preventDefault();
       dom.menuSearchInput.blur();
       maybeCollapseHomeSearchDock();
+      endHomeSearchKeyboardMode();
     }
   });
 
@@ -4280,7 +4397,12 @@ function initHomeSearchDock() {
     dom.menuSearchInput?.blur();
     toggleHomeFilterPanel(false);
     collapseHomeSearchDock();
+    endHomeSearchKeyboardMode();
   }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    if (homeSearchKeyboardActive) syncHomeSearchKeyboardPosition();
+  });
 }
 
 function renderHome() {
@@ -4511,28 +4633,48 @@ function renderCalendarExpenseSheet() {
   const stats = getCalendarMonthStats(year, month);
   const entries = getCalendarMonthExpenseEntries(year, month);
   const breakdown = getCalendarMonthExpenseBreakdown(entries);
-  const grouped = groupExpenseEntriesByDate(entries);
+  const filter = state.calendarExpenseFilter || 'all';
+  const filteredEntries = filter === 'all'
+    ? entries
+    : entries.filter((entry) => entry.category === filter);
+  const grouped = groupExpenseEntriesByDate(filteredEntries);
 
   if (dom.calendarExpenseSummary) {
     const chips = breakdown.map((item) => `
-      <span class="calendar-expense-chip">
+      <button type="button" class="calendar-expense-chip${filter === item.key ? ' calendar-expense-chip--active' : ''}" data-expense-filter="${esc(item.key)}">
         <span class="calendar-expense-chip__label">${item.emoji} ${esc(item.label)}</span>
         <strong class="calendar-expense-chip__amount">${esc(formatMoneyTotalsByCurrency(item.totals))}</strong>
-      </span>`).join('');
+      </button>`).join('');
+    const allChip = `<button type="button" class="calendar-expense-chip${filter === 'all' ? ' calendar-expense-chip--active' : ''}" data-expense-filter="all">
+      <span class="calendar-expense-chip__label">전체</span>
+      <strong class="calendar-expense-chip__amount">${esc(stats.totalFoodCost)}</strong>
+    </button>`;
     dom.calendarExpenseSummary.innerHTML = `
       <div class="calendar-expense-total">
         <p class="calendar-expense-total__label">이번 달 총 지출</p>
         <p class="calendar-expense-total__amount">${esc(stats.totalFoodCost)}</p>
       </div>
-      ${chips ? `<div class="calendar-expense-chips">${chips}</div>` : ''}`;
+      ${(chips || allChip) ? `<div class="calendar-expense-chips">${allChip}${chips}</div>` : ''}`;
+    dom.calendarExpenseSummary.querySelectorAll('[data-expense-filter]').forEach((btn) => {
+      btn.onclick = () => {
+        const next = btn.dataset.expenseFilter || 'all';
+        if (state.calendarExpenseFilter === next) return;
+        state.calendarExpenseFilter = next;
+        renderCalendarExpenseSheet();
+      };
+    });
   }
 
-  if (!entries.length) {
+  if (!filteredEntries.length) {
     if (dom.calendarExpenseList) dom.calendarExpenseList.innerHTML = '';
     if (dom.calendarExpenseEmpty) {
       dom.calendarExpenseEmpty.hidden = false;
       const emptyText = dom.calendarExpenseEmpty.querySelector('.empty-state__text');
-      if (emptyText) emptyText.textContent = '이번 달 기록된 지출이 없어요';
+      if (emptyText) {
+        emptyText.textContent = filter === 'all'
+          ? '이번 달 기록된 지출이 없어요'
+          : '선택한 항목의 지출이 없어요';
+      }
     }
     return;
   }
@@ -4573,6 +4715,7 @@ function closeCalendarExpenseSheet() {
 
 function openCalendarExpenseSheet() {
   if (!dom.calendarExpenseSheet) return;
+  state.calendarExpenseFilter = 'all';
   renderCalendarExpenseSheet();
   dom.calendarExpenseSheet.hidden = false;
   dom.calendarExpenseSheet.setAttribute('aria-hidden', 'false');
@@ -5564,12 +5707,45 @@ async function removePlannerMeal(dateKey, mealType) {
   await commitDelete();
 }
 
-function closePlannerSheets() {
-  [dom.plannerSlotSheet, dom.plannerRecipeSheet].forEach((sheet) => {
-    if (!sheet) return;
-    sheet.hidden = true;
-    sheet.setAttribute('aria-hidden', 'true');
-  });
+function finishClosePlannerSheet(sheet) {
+  if (!sheet) return;
+  const panel = sheet.querySelector('.planner-sheet');
+  if (panel) {
+    panel.style.transform = '';
+    panel.classList.remove('planner-sheet--closing');
+  }
+  sheet.hidden = true;
+  sheet.setAttribute('aria-hidden', 'true');
+}
+
+function closePlannerSheet(sheet, { immediate = false } = {}) {
+  if (!sheet || sheet.hidden) return;
+  const panel = sheet.querySelector('.planner-sheet');
+  if (immediate || !panel) {
+    finishClosePlannerSheet(sheet);
+    return;
+  }
+  if (panel.classList.contains('planner-sheet--closing')) return;
+  panel.classList.add('planner-sheet--closing');
+  let closed = false;
+  const done = () => {
+    if (closed) return;
+    closed = true;
+    panel.removeEventListener('animationend', onEnd);
+    finishClosePlannerSheet(sheet);
+  };
+  const onEnd = (e) => {
+    if (e.target !== panel) return;
+    done();
+  };
+  panel.addEventListener('animationend', onEnd);
+  window.setTimeout(done, 280);
+}
+
+function closePlannerSheets({ immediate = false } = {}) {
+  dom.plannerRecipeSearch?.blur();
+  closePlannerSheet(dom.plannerSlotSheet, { immediate });
+  closePlannerSheet(dom.plannerRecipeSheet, { immediate });
   updateBodyScrollLock();
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
@@ -5583,6 +5759,7 @@ function openPlannerSlotSheet(date) {
   if (dom.plannerSlotSheetTitle) dom.plannerSlotSheetTitle.textContent = formatPlannerDayLabel(date);
   renderPlannerSlotMenu(date);
   if (!dom.plannerSlotSheet) return;
+  dom.plannerSlotSheet.querySelector('.planner-sheet')?.classList.remove('planner-sheet--closing');
   dom.plannerSlotSheet.hidden = false;
   dom.plannerSlotSheet.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
@@ -5692,10 +5869,46 @@ function openPlannerRecipeSheet(date, slotId, action) {
     dom.plannerSlotSheet.setAttribute('aria-hidden', 'true');
   }
   if (!dom.plannerRecipeSheet) return;
+  dom.plannerRecipeSheet.querySelector('.planner-sheet')?.classList.remove('planner-sheet--closing');
   dom.plannerRecipeSheet.hidden = false;
   dom.plannerRecipeSheet.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
-  dom.plannerRecipeSearch?.focus();
+  const isMobileInput = window.matchMedia?.('(hover: none), (pointer: coarse), (max-width: 480px)')?.matches;
+  if (!isMobileInput) dom.plannerRecipeSearch?.focus();
+}
+
+function initPlannerSheetGestures(sheet) {
+  const modal = sheet;
+  const panel = modal?.querySelector('.planner-sheet');
+  const handle = panel?.querySelector('.planner-sheet__handle');
+  if (!modal || !panel || !handle || panel.dataset.swipeBound) return;
+  panel.dataset.swipeBound = '1';
+
+  let startY = 0;
+  let dragging = false;
+
+  handle.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    dragging = true;
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', (e) => {
+    if (!dragging) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) panel.style.transform = `translateY(${Math.min(dy, 140)}px)`;
+  }, { passive: true });
+
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const dy = (e.changedTouches?.[0]?.clientY ?? startY) - startY;
+    panel.style.transform = '';
+    if (dy > 72) closePlannerSheets();
+  };
+
+  panel.addEventListener('touchend', endDrag, { passive: true });
+  panel.addEventListener('touchcancel', endDrag, { passive: true });
 }
 
 function confirmPlannerRecipe(recipe) {
@@ -5853,21 +6066,30 @@ function renderPlanner() {
   const guest = isGuestUser();
   if (dom.plannerGuestHint) dom.plannerGuestHint.hidden = !guest;
 
-  const dates = GroceryListService.getPlannerDates(state.plannerRange);
-  const isMonth = state.plannerRange === 'month';
-  dom.plannerGrid.classList.toggle('planner-grid--month', isMonth);
-  dom.plannerAutoBtn.hidden = isMonth;
+  const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
+  dom.plannerGrid.classList.remove('planner-grid--month');
+  dom.plannerAutoBtn.hidden = false;
 
   dom.plannerGrid.innerHTML = dates.map((date) => plannerDayCardHTML(date)).join('');
   state.plannerAnimate = null;
 
-  if (dom.plannerRange) dom.plannerRange.value = state.plannerRange;
+  if (dom.plannerWeekLabel) dom.plannerWeekLabel.textContent = formatPlannerWeekLabel(state.plannerWeekStart);
   if (dom.groceryBudget) dom.groceryBudget.value = GroceryRepository.getBudget();
   renderGroceryList();
 }
 
+function setPlannerWeek(weekStartDateStr) {
+  const start = toDateStr(getWeekStartDate(weekStartDateStr));
+  state.plannerWeekStart = start;
+  state.plannerWeekKey = getWeekKeyFromDateStr(start);
+  GroceryRepository.setActiveWeek(state.plannerWeekKey);
+  renderPlanner();
+}
+
 function initPlannerSheets() {
   initPlannerGridDelegation();
+  initPlannerSheetGestures(dom.plannerSlotSheet);
+  initPlannerSheetGestures(dom.plannerRecipeSheet);
   dom.plannerRecipeTabs?.querySelectorAll('[data-planner-tab]').forEach((btn) => {
     btn.onclick = () => {
       state.plannerSheet.tab = btn.dataset.plannerTab;
@@ -5981,22 +6203,24 @@ async function removeGroceryListItem(itemKey, grouped) {
   renderGroceryList();
 }
 
-function renderGroceryBudgetSummary(total) {
+function computeGroceryActualTotal(grouped) {
+  let total = 0;
+  for (const cat of GROCERY_CATEGORIES) {
+    for (const item of grouped[cat.id] || []) {
+      const amount = Number(GroceryRepository.getMeta(item.key).actualAmount) || 0;
+      total += amount;
+    }
+  }
+  return total;
+}
+
+function renderGroceryBudgetSummary(grouped) {
   if (!dom.groceryBudgetSummary) return;
   const budget = Number(GroceryRepository.getBudget()) || 0;
-  if (!budget && !total) {
-    dom.groceryBudgetSummary.textContent = '';
-    return;
-  }
-  if (!budget) {
-    dom.groceryBudgetSummary.textContent = `예상 ${formatMoney(total)}`;
-    return;
-  }
-  const diff = budget - total;
-  const diffLabel = diff >= 0
-    ? `여유 ${formatMoney(diff)}`
-    : `${formatMoney(Math.abs(diff))} 초과`;
-  dom.groceryBudgetSummary.textContent = `예상 ${formatMoney(total)} · ${diffLabel}`;
+  const used = computeGroceryActualTotal(grouped);
+  const diff = budget - used;
+  const diffLabel = diff >= 0 ? `여유 ${formatMoney(diff)}` : `여유 -${formatMoney(Math.abs(diff))}`;
+  dom.groceryBudgetSummary.textContent = `${diffLabel} · 사용 ${formatMoney(used)}`;
   dom.groceryBudgetSummary.classList.toggle('budget-box__summary--over', diff < 0);
 }
 
@@ -6004,15 +6228,13 @@ function renderGroceryList({ force = false } = {}) {
   if (!dom.groceryList) return;
   if (!force && isGroceryListAmountEditing()) return;
 
-  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
   const grouped = GroceryListService.computeMissing(dates);
   const totalItems = GROCERY_CATEGORIES.reduce((n, c) => n + (grouped[c.id]?.length || 0), 0);
-  const totalCost = GroceryListService.estimateTotal(grouped);
-
   dom.groceryEmpty.hidden = totalItems > 0;
   dom.groceryList.hidden = totalItems === 0;
 
-  renderGroceryBudgetSummary(totalCost);
+  renderGroceryBudgetSummary(grouped);
   if (!totalItems) {
     dom.groceryList.innerHTML = '';
     return;
@@ -6028,11 +6250,6 @@ function renderGroceryList({ force = false } = {}) {
       const meta = GroceryRepository.getMeta(item.key);
       const qty = !item.manual && item.count > 1 ? ` ×${item.count}` : '';
       const manualBadge = item.manual ? '<span class="grocery-item__badge">직접</span>' : '';
-      const priceField = `
-        <input type="text" class="grocery-item__price" data-price-key="${esc(item.key)}"
-          inputmode="decimal" placeholder="예상금액"
-          value="${meta.price !== '' && meta.price != null ? esc(String(meta.price)) : ''}"
-          aria-label="${esc(item.name)} 예상금액">`;
       const actualField = `
         <input type="text" class="grocery-item__actual" data-actual-key="${esc(item.key)}"
           inputmode="decimal" placeholder="실금액"
@@ -6042,7 +6259,6 @@ function renderGroceryList({ force = false } = {}) {
         <div class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
           <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''} aria-label="${esc(item.name)} 구매 완료 표시">
           <span class="grocery-item__name">${manualBadge}${esc(item.name)}${qty}</span>
-          ${priceField}
           ${actualField}
           <button type="button" class="grocery-item__remove" data-remove-key="${esc(item.key)}" aria-label="${esc(item.name)} 삭제">×</button>
         </div>`;
@@ -6093,7 +6309,7 @@ function initGroceryListAmountHandlers() {
 }
 
 function autoGenerateWeeklyPlan() {
-  const dates = GroceryListService.getPlannerDates('week');
+  const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
   const recipes = RecipeRepository.getRecommendableRecipes();
   const usedIds = new Set();
   const slotPrefs = {
@@ -6130,7 +6346,7 @@ function autoGenerateWeeklyPlan() {
 }
 
 async function handleGroceryPurchaseComplete() {
-  const dates = GroceryListService.getPlannerDates(state.plannerRange);
+  const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
   const grouped = GroceryListService.computeMissing(dates);
   const checkedItems = [];
   const names = [];
@@ -6940,7 +7156,7 @@ function handleGroceryItemModalSubmit(e) {
     name,
     quantity: dom.groceryItemQuantity?.value.trim() || '',
     unit: dom.groceryItemUnit?.value || '',
-    price: dom.groceryItemPrice?.value ?? '',
+    price: '',
   });
   if (!item) return;
   persistGroceryState().catch(() => undefined);
@@ -7226,6 +7442,7 @@ function init() {
   ShoppingRecordRepository.load();
   MealPlanRepository.load();
   GroceryRepository.load();
+  setPlannerWeek(state.plannerWeekStart);
   dom.currencySelect.value = state.currency;
   initRecipePickers();
   initVideoExtractUi();
@@ -7280,9 +7497,15 @@ function init() {
   };
   dom.calendarPrev.onclick = () => changeCalendarMonth(-1);
   dom.calendarNext.onclick = () => changeCalendarMonth(1);
-  dom.plannerRange?.addEventListener('change', () => {
-    state.plannerRange = dom.plannerRange.value === 'month' ? 'month' : 'week';
-    renderPlanner();
+  dom.plannerWeekPrev?.addEventListener('click', () => {
+    const d = parseDateStr(state.plannerWeekStart);
+    d.setDate(d.getDate() - 7);
+    setPlannerWeek(toDateStr(d));
+  });
+  dom.plannerWeekNext?.addEventListener('click', () => {
+    const d = parseDateStr(state.plannerWeekStart);
+    d.setDate(d.getDate() + 7);
+    setPlannerWeek(toDateStr(d));
   });
   dom.plannerAutoBtn?.addEventListener('click', () => requireAppLogin(autoGenerateWeeklyPlan));
   dom.groceryCompleteBtn?.addEventListener('click', handleGroceryPurchaseComplete);
@@ -7292,9 +7515,9 @@ function init() {
     const pendingBudget = dom.groceryBudget.value;
     GroceryRepository.setBudget(pendingBudget);
     persistGroceryState().catch(() => undefined);
-    renderGroceryBudgetSummary(GroceryListService.estimateTotal(
-      GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerRange)),
-    ));
+    renderGroceryBudgetSummary(
+      GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerWeekStart)),
+    );
   });
   dom.pantryModalForm.addEventListener('submit', handlePantryModalSubmit);
   dom.mealModalForm.addEventListener('submit', handleMealModalSubmit);
@@ -7401,6 +7624,7 @@ function startApp() {
     }
     if (settings.grocery && Date.now() - groceryLocalMutatedAt >= 2000) {
       GroceryRepository.replaceState(settings.grocery);
+      GroceryRepository.setActiveWeek(state.plannerWeekKey);
     }
     if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
     refreshAll();

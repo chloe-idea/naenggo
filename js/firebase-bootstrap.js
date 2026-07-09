@@ -22,6 +22,7 @@ let pendingAuthUid = undefined;
 let logoutInProgress = false;
 let dataLoadingFallbackTimer = null;
 let cachedUserProfile = null;
+let authBootstrapSafetyTimer = null;
 
 const authState = {
   authLoading: true,
@@ -600,6 +601,9 @@ async function signInWithGoogleFlow(event) {
       renderAuthUi(user);
       window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
       console.log('POPUP_LOGIN_SUCCESS', user.uid);
+    } else {
+      // redirect 로그인 경로(iOS)에서는 페이지 이동 전까지 로딩 상태를 해제
+      patchAuthState({ isLoggingIn: false });
     }
   } catch (err) {
     console.error('[firebase-bootstrap] Google login failed:', err?.code, err?.message, err);
@@ -706,6 +710,13 @@ async function bootstrap() {
   bindAuthUi();
   syncAuthUi();
   patchAuthState({ authLoading: true, isLoggingIn: false, dataLoading: false, isLoggingOut: false });
+  if (authBootstrapSafetyTimer) clearTimeout(authBootstrapSafetyTimer);
+  authBootstrapSafetyTimer = window.setTimeout(() => {
+    if (!authState.authLoading) return;
+    console.warn('[firebase-bootstrap] auth init timeout fallback');
+    patchAuthState({ authLoading: false, isLoggingIn: false });
+    setGoogleButtonEnabled(isFirebaseConfigured());
+  }, 5000);
 
   try {
     await AuthService.init(handleAuthChange);
@@ -721,6 +732,11 @@ async function bootstrap() {
     showAuthError(formatAuthError(err));
     setGoogleButtonEnabled(false);
     throw err;
+  } finally {
+    if (authBootstrapSafetyTimer) {
+      clearTimeout(authBootstrapSafetyTimer);
+      authBootstrapSafetyTimer = null;
+    }
   }
 
   window.FirebaseServices = {

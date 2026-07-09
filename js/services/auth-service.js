@@ -1,9 +1,11 @@
 /**
- * Firebase Authentication (Google 로그인 — popup 전용)
+ * Firebase Authentication (Google 로그인 — popup + iOS redirect fallback)
  */
 import {
   onAuthStateChanged,
+  getRedirectResult,
   signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import {
@@ -16,6 +18,17 @@ import { formatAuthError, logAuthError } from './auth-errors.js';
 
 let currentUser = null;
 const listeners = new Set();
+
+function isIosBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /iPhone|iPad|iPod/i.test(ua);
+}
+
+function shouldUseRedirectLogin() {
+  // 기본은 popup 우선, iOS에서 popup 실패 시 redirect fallback
+  return false;
+}
 
 function notifyListeners(user) {
   currentUser = user;
@@ -42,6 +55,16 @@ export const AuthService = {
       else currentUser = null;
       notifyListeners(user);
     });
+
+    try {
+      const redirectResult = await getRedirectResult(auth);
+      if (redirectResult?.user) {
+        console.log('[AuthService] getRedirectResult success:', redirectResult.user.email || redirectResult.user.uid);
+      }
+    } catch (err) {
+      logAuthError('getRedirectResult failed', err);
+      window.dispatchEvent(new CustomEvent('auth-error', { detail: formatAuthError(err) }));
+    }
 
     return unsubscribe;
   },
@@ -71,16 +94,31 @@ export const AuthService = {
 
   async signInWithGoogle() {
     const { auth: authInstance, googleProvider: provider } = assertAuthReady();
-    console.log('[AuthService] signInWithPopup start');
+    const useRedirect = shouldUseRedirectLogin();
+    console.log(`[AuthService] signInWithGoogle start (${useRedirect ? 'redirect' : 'popup'})`);
 
     try {
+      if (useRedirect) {
+        await signInWithRedirect(authInstance, provider);
+        return null;
+      }
       const result = await signInWithPopup(authInstance, provider);
       console.log('[AuthService] signInWithPopup success:', result.user?.email);
       currentUser = result.user;
       notifyListeners(result.user);
       return result.user;
     } catch (err) {
-      logAuthError('signInWithPopup failed', err);
+      const code = String(err?.code || '');
+      const shouldFallbackToRedirect = isIosBrowser()
+        && (code === 'auth/popup-blocked'
+          || code === 'auth/popup-closed-by-user'
+          || code === 'auth/cancelled-popup-request');
+      if (shouldFallbackToRedirect) {
+        console.warn('[AuthService] popup failed on iOS, fallback to redirect:', code);
+        await signInWithRedirect(authInstance, provider);
+        return null;
+      }
+      logAuthError(`signInWithGoogle(${useRedirect ? 'redirect' : 'popup'}) failed`, err);
       const formatted = formatAuthError(err);
       const wrapped = new Error(formatted.message);
       wrapped.code = formatted.code;

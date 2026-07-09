@@ -33,14 +33,15 @@
   --font: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
   --max-width: 480px;
   --tab-bar-height: 3.75rem;
+  --tab-bar-dock-offset: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
   --tab-bar-space: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
-  --home-search-float-gap: 0.375rem;
+  --home-search-float-gap: 0.625rem;
   --home-search-collapsed-inner: 3rem;
   --home-search-collapsed-shell-pad: 0.125rem;
   --home-search-float-inner: var(--home-search-collapsed-inner);
   --home-search-float-shell-pad: var(--home-search-collapsed-shell-pad);
   --home-search-float-wrapper: calc(var(--home-search-collapsed-inner) + var(--home-search-collapsed-shell-pad) * 2);
-  --home-search-bottom-offset: calc(var(--tab-bar-space) + var(--home-search-float-gap));
+  --home-search-bottom-offset: calc(var(--tab-bar-dock-offset) + var(--home-search-float-gap));
   --home-search-reserved-space: calc(var(--home-search-float-gap) + var(--home-search-float-wrapper) + 0.375rem);
   --home-search-expanded-reserved: calc(var(--home-search-float-gap) + var(--home-search-float-wrapper) + min(38vh, 14rem) + 0.75rem);
   --form-bottom-space: calc(7.5rem + env(safe-area-inset-bottom, 0px));
@@ -271,19 +272,13 @@ body.body-app {
   border-radius: var(--radius-md);
 }
 
-/* ===== Login Prompt Modal ===== */
-.login-prompt-modal {
-  align-items: center;
-  justify-content: center;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
-}
-
+/* ===== Login Prompt Modal (content) ===== */
 .login-prompt-modal .modal__backdrop {
   animation: login-prompt-fade-in 0.28s ease;
 }
 
 .login-prompt-modal:not([hidden]) .login-prompt {
-  animation: login-prompt-scale-in 0.28s ease;
+  animation: modal-center-in 0.28s ease;
 }
 
 @keyframes login-prompt-fade-in {
@@ -291,7 +286,7 @@ body.body-app {
   to { opacity: 1; }
 }
 
-@keyframes login-prompt-scale-in {
+@keyframes modal-center-in {
   from {
     opacity: 0;
     transform: translateY(12px) scale(0.96);
@@ -303,18 +298,8 @@ body.body-app {
 }
 
 .login-prompt-modal .login-prompt {
-  width: 100%;
-  max-width: 22rem;
-  max-height: 88dvh;
-  height: auto;
-  margin: 0;
-  padding: 1.375rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
-  border-radius: var(--radius-xl);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  scroll-padding-bottom: 1.5rem;
+  padding: 1.375rem 1.25rem 1.25rem;
   box-shadow: 0 16px 48px rgba(15, 23, 42, 0.14);
-  animation: login-prompt-scale-in 0.28s ease;
 }
 
 .login-prompt__title {
@@ -764,7 +749,7 @@ textarea {
 
 /* ===== Profile Menu ===== */
 .profile-menu {
-  padding: 1rem 1rem var(--form-bottom-space);
+  padding: 1.375rem 1.25rem 1.25rem;
 }
 
 .profile-menu__header {
@@ -971,6 +956,12 @@ body.home-search-filter-open #view-main:not([hidden]) {
   margin: 0;
   padding: 0;
   pointer-events: none;
+  transition: bottom 0.2s ease;
+}
+
+body.home-search-keyboard-active .home-search-dock {
+  bottom: var(--home-search-keyboard-bottom, var(--home-search-float-gap));
+  z-index: 1101;
 }
 
 .home-search-float {
@@ -3263,6 +3254,46 @@ body.home-search-filter-open #view-main:not([hidden]) {
   to { transform: translateY(0); }
 }
 
+/* Centered modals — 로그인·프로필 (하단 탭바 위 정중앙) */
+.modal.modal--center {
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    calc(1rem + var(--tab-bar-space))
+    max(1rem, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+
+.modal.modal--center .modal__panel {
+  position: relative;
+  width: 100%;
+  max-width: 22rem;
+  max-height: min(
+    88dvh,
+    calc(100dvh - var(--tab-bar-space) - 2rem - env(safe-area-inset-top, 0px))
+  );
+  height: auto;
+  margin: 0 auto;
+  align-self: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-xl);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: 1rem;
+  animation: modal-center-in 0.28s ease;
+}
+
+.modal.modal--center .modal__backdrop {
+  animation: login-prompt-fade-in 0.28s ease;
+}
+
+.profile-menu-modal:not([hidden]) .profile-menu {
+  animation: modal-center-in 0.28s ease;
+}
+
 .modal__close {
   position: absolute;
   top: 0.75rem;
@@ -4680,6 +4711,26 @@ body.home-search-filter-open #view-main:not([hidden]) {
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
   backface-visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease,
+    visibility 0.2s ease;
+}
+
+@media (hover: none), (max-width: 480px) {
+  body.home-search-keyboard-active .tab-bar {
+    transform: translate3d(0, calc(100% + 1rem), 0);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    max-height: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top: none;
+    box-shadow: none;
+  }
 }
 
 .tab-bar__item {
@@ -5155,11 +5206,20 @@ body.home-search-filter-open #view-main:not([hidden]) {
   border: 1px solid rgba(0, 0, 0, 0.06);
   font-size: 0.6875rem;
   color: var(--color-text-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .calendar-expense-chip__amount {
   color: var(--color-text);
   font-weight: 700;
+}
+
+.calendar-expense-chip--active {
+  border-color: rgba(255, 107, 53, 0.35);
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
 }
 
 .calendar-expense-list {
@@ -5583,7 +5643,7 @@ body.home-search-filter-open #view-main:not([hidden]) {
 /* ===== PWA / standalone — 하단 탭바 여백 추가 보강 ===== */
 @media (display-mode: standalone), (display-mode: fullscreen) {
   :root {
-    --tab-bar-space: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+    --tab-bar-space: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
     --form-bottom-space: calc(8rem + env(safe-area-inset-bottom, 0px));
   }
 }
@@ -5631,6 +5691,38 @@ body.home-search-filter-open #view-main:not([hidden]) {
   font: inherit;
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.planner-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 1.875rem;
+  padding: 0.1875rem 0.375rem;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+}
+
+.planner-week-nav__btn {
+  width: 1.375rem;
+  height: 1.375rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.planner-week-nav__label {
+  min-width: 6.75rem;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 #view-planner {
@@ -5943,8 +6035,43 @@ body.home-search-filter-open #view-main:not([hidden]) {
   color: var(--color-text);
 }
 
+.planner-sheet__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 3;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.planner-sheet__close:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--color-text);
+}
+
 .planner-sheet--recipe {
   max-height: 88dvh;
+}
+
+.modal--sheet .modal__panel.planner-sheet.planner-sheet--closing {
+  animation: plannerSheetSlideDown 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+@keyframes plannerSheetSlideDown {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
 }
 
 .planner-slot-menu {
@@ -5962,11 +6089,13 @@ body.home-search-filter-open #view-main:not([hidden]) {
   border-radius: var(--radius-md);
   background: var(--color-bg);
   font: inherit;
-  font-size: 0.9375rem;
+  font-size: 16px;
   font-weight: 600;
   text-align: left;
   color: var(--color-text);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
@@ -5991,7 +6120,8 @@ body.home-search-filter-open #view-main:not([hidden]) {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-full);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 16px;
+  line-height: 1.25;
   background: var(--color-surface);
 }
 
@@ -6044,6 +6174,8 @@ body.home-search-filter-open #view-main:not([hidden]) {
   background: var(--color-bg);
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: box-shadow 0.15s ease, transform 0.1s ease;
 }
 
