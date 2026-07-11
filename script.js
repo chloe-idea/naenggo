@@ -99,6 +99,13 @@ function normalizeMealType(type) {
   return MEAL_TYPES.some((t) => t.id === type) ? type : 'home-cook';
 }
 
+
+function isHomeCookMealType(type) {
+  const raw = String(type || '').toLowerCase();
+  if (raw === 'home-cooked' || raw === 'cooking') return true;
+  return normalizeMealType(type) === 'home-cook';
+}
+
 function mealTypeInfo(type) {
   return MEAL_TYPES.find((t) => t.id === normalizeMealType(type)) || MEAL_TYPES[0];
 }
@@ -1553,11 +1560,14 @@ const DishTypeService = {
 // ===== Seed Recipes =====
 function resolveRecipeImage(data) {
   if (typeof RecipeImageService !== 'undefined') {
+    const name = data.name || data.title || '';
     return RecipeImageService.resolveForStorage({
-      name: data.name,
-      title: data.title,
+      name,
+      title: data.title || name,
+      slug: data.slug || data.id,
+      id: data.id,
       category: data.category,
-      dishType: data.dishType || DishTypeService.infer(data.name),
+      dishType: data.dishType || DishTypeService.infer(name),
       image: data.image,
       imageUrl: data.imageUrl,
       thumbnailUrl: data.thumbnailUrl,
@@ -1567,20 +1577,27 @@ function resolveRecipeImage(data) {
 }
 
 function seed(id, data) {
-  const cat = CATEGORY_MAP[data.category || 'korean'];
+  const cat = CATEGORY_MAP[data.category || 'korean'] || CATEGORY_MAP.korean;
+  const name = data.name || data.title || '';
+  const slug = String(data.slug || data.id || `recipe-${id}`).trim().replace(/^builtin-/, '') || `recipe-${id}`;
+  const steps = Array.isArray(data.steps) ? data.steps : (Array.isArray(data.instructions) ? data.instructions : []);
+  const cookTime = Number(data.cookTime ?? data.cookingTime) || 20;
+  const tags = Array.isArray(data.tags) && data.tags.length ? data.tags : [...cat.tags];
   return {
-    id: `builtin-${id}`,
-    name: data.name,
-    ingredients: data.ingredients,
-    steps: data.steps,
-    cookTime: data.cookTime,
-    difficulty: data.difficulty,
+    id: `builtin-${slug}`,
+    slug,
+    name,
+    ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+    steps,
+    cookTime: Math.max(1, cookTime),
+    difficulty: data.difficulty || '쉬움',
     category: data.category || 'korean',
-    dishType: data.dishType || DishTypeService.infer(data.name),
-    cuisine: cat.cuisine,
-    tags: cat.tags,
-    dietTags: cat.dietTags,
-    image: resolveRecipeImage(data),
+    dishType: data.dishType || DishTypeService.infer(name),
+    cuisine: data.cuisine || cat.cuisine,
+    tags: [...tags],
+    dietTags: Array.isArray(data.dietTags) ? [...data.dietTags] : [...cat.dietTags],
+    substitutions: Array.isArray(data.substitutions) ? data.substitutions : (data.substitutes || []),
+    image: resolveRecipeImage({ ...data, name, slug, title: data.title || name }),
     calories: data.calories ?? null,
     memo: '',
     authorId: 'system',
@@ -4761,9 +4778,8 @@ function getCalendarMonthStats(year, month) {
 }
 
 function getCalendarDayIcons(meals, shoppingRecords) {
-  const order = ['home-cook', 'eat-out', 'delivery', 'snack', 'shopping'];
+  const order = ['eat-out', 'delivery', 'snack', 'shopping'];
   const iconByKey = {
-    'home-cook': mealTypeInfo('home-cook').emoji,
     'eat-out': mealTypeInfo('eat-out').emoji,
     delivery: mealTypeInfo('delivery').emoji,
     snack: mealTypeInfo('snack').emoji,
@@ -4771,6 +4787,7 @@ function getCalendarDayIcons(meals, shoppingRecords) {
   };
   const present = new Set();
   meals.forEach((log) => {
+    if (isHomeCookMealType(log.mealType)) return;
     const type = normalizeMealType(log.mealType);
     if (iconByKey[type]) present.add(type);
   });
@@ -4778,34 +4795,96 @@ function getCalendarDayIcons(meals, shoppingRecords) {
   return order.filter((key) => present.has(key)).map((key) => iconByKey[key]);
 }
 
+function buildCalendarDayEntriesHTML(meals, shoppingRecords) {
+  const homeCooks = meals.filter((log) => isHomeCookMealType(log.mealType));
+  const icons = getCalendarDayIcons(meals, shoppingRecords);
+  const parts = [];
+
+  if (homeCooks.length) {
+    const firstName = homeCooks[0].name || '직접 요리';
+    const emoji = mealTypeInfo('home-cook').emoji;
+    parts.push(
+      `<span class="calendar-day__dish" title="${esc(firstName)}">${emoji} <span class="calendar-day__dish-name">${esc(firstName)}</span></span>`,
+    );
+    if (homeCooks.length > 1) {
+      parts.push(`<span class="calendar-day__more">+${homeCooks.length - 1}</span>`);
+    }
+  }
+
+  if (icons.length) {
+    parts.push(`<span class="calendar-day__icons" aria-hidden="true">${icons.join('')}</span>`);
+  }
+
+  if (!parts.length) return '';
+  return `<div class="calendar-day__entries">${parts.join('')}</div>`;
+}
+
+function buildBudgetProgressHTML(primaryTotal, budget, currencyCode) {
+  if (budget <= 0) return '';
+  const ratio = primaryTotal / budget;
+  const displayPct = Math.round(ratio * 100);
+  const barPct = Math.min(100, displayPct);
+  const isOver = primaryTotal > budget;
+  let barClass = '';
+  if (isOver) barClass = ' calendar-spend-card__progress-bar--over';
+  else if (ratio >= 0.9) barClass = ' calendar-spend-card__progress-bar--warn';
+
+  return `
+    <div class="calendar-spend-card__progress">
+      <div class="calendar-spend-card__progress-track" aria-hidden="true">
+        <span class="calendar-spend-card__progress-bar${barClass}" style="width:${barPct}%"></span>
+        <span class="calendar-spend-card__progress-label">${displayPct}%</span>
+      </div>
+    </div>`;
+}
+
+function buildBudgetFooterHTML(primaryTotal, budget, currencyCode) {
+  const budgetValue = Number(budget) || 0;
+  let badgeHTML = '<span class="calendar-spend-card__footer-spacer" aria-hidden="true"></span>';
+  if (budgetValue > 0) {
+    const isOver = primaryTotal > budgetValue;
+    const deltaAmount = isOver
+      ? formatMoney(primaryTotal - budgetValue, currencyCode)
+      : formatMoney(budgetValue - primaryTotal, currencyCode);
+    const deltaLabel = isOver ? `초과 금액 ${deltaAmount}` : `남은 예산 ${deltaAmount}`;
+    const deltaClass = isOver
+      ? 'calendar-spend-card__delta-text--over'
+      : 'calendar-spend-card__delta-text--remain';
+    badgeHTML = `<span class="calendar-spend-card__delta-text ${deltaClass}">${esc(deltaLabel)}</span>`;
+  }
+
+  return `
+    <div class="calendar-spend-card__footer">
+      ${badgeHTML}
+      <div class="calendar-spend-card__budget-field">
+        <label for="monthly-food-budget" class="calendar-spend-card__budget-label">월 예산</label>
+        <input type="number" id="monthly-food-budget" class="calendar-spend-card__budget-input"
+          min="0" step="0.01" inputmode="decimal"
+          placeholder="예: 500000"
+          value="${budgetValue > 0 ? esc(String(budgetValue)) : ''}" aria-label="이번 달 식비 예산">
+      </div>
+    </div>`;
+}
+
 function renderMealStats() {
   const year = state.calendarYear;
   const month = state.calendarMonth + 1;
-  const { counts, totalFoodCost, primaryTotal } = getCalendarMonthStats(year, month);
+  const { counts, primaryTotal, primaryCode } = getCalendarMonthStats(year, month);
   const budget = Number(state.monthlyFoodBudget) || 0;
-  const progressPct = budget > 0 ? Math.min(100, Math.round((primaryTotal / budget) * 100)) : 0;
-  const progressHTML = budget > 0 ? `
-    <div class="calendar-spend-card__progress">
-      <div class="calendar-spend-card__progress-track" aria-hidden="true">
-        <span class="calendar-spend-card__progress-bar" style="width:${progressPct}%"></span>
-      </div>
-      <span class="calendar-spend-card__progress-text">목표 대비 ${progressPct}%</span>
-    </div>` : '';
+  const progressHTML = buildBudgetProgressHTML(primaryTotal, budget, primaryCode);
+  const footerHTML = buildBudgetFooterHTML(primaryTotal, budget, primaryCode);
 
   dom.mealStats.innerHTML = `
     <div class="calendar-summary__spend calendar-spend-card">
       <button type="button" class="calendar-spend-card__trigger" data-open-calendar-expense aria-label="이번 달 지출 내역 보기">
-        <p class="calendar-spend-card__label">💰 이번 달 식비</p>
-        <p class="calendar-spend-card__amount">${totalFoodCost}</p>
+        <div class="calendar-spend-card__head">
+          <span class="calendar-spend-card__label">💰 이번 달 식비</span>
+          <span class="calendar-spend-card__hint">내역 보기</span>
+        </div>
+        <p class="calendar-spend-card__amount">${esc(formatMoney(primaryTotal, primaryCode))}</p>
         ${progressHTML}
-        <span class="calendar-spend-card__hint">내역 보기</span>
       </button>
-      <div class="calendar-spend-card__goal">
-        <label for="monthly-food-budget" class="calendar-spend-card__goal-label">월 목표</label>
-        <input type="number" id="monthly-food-budget" class="calendar-spend-card__goal-input"
-          min="0" step="0.01" inputmode="decimal" placeholder="예: 500000"
-          value="${budget > 0 ? esc(String(budget)) : ''}" aria-label="이번 달 식비 목표">
-      </div>
+      ${footerHTML}
     </div>
     <div class="calendar-summary__counts calendar-counts">
       <span class="calendar-counts__item">🍳 직접요리 <strong>${counts['home-cook']}회</strong></span>
@@ -4877,18 +4956,17 @@ function renderCalendar() {
     const dateStr = `${prefix}-${String(d).padStart(2, '0')}`;
     const meals = logsByDate[dateStr] || [];
     const shopping = shoppingByDate[dateStr] || [];
-    const icons = getCalendarDayIcons(meals, shopping);
+    const entriesHTML = buildCalendarDayEntriesHTML(meals, shopping);
+    const hasEntries = Boolean(entriesHTML);
     const classes = ['calendar-day'];
     if (dateStr === today) classes.push('calendar-day--today');
     if (dateStr === state.selectedCalendarDate) classes.push('calendar-day--selected');
-    if (icons.length) classes.push('calendar-day--has-meals');
-    const iconsHTML = icons.length
-      ? `<span class="calendar-day__icons" aria-hidden="true">${icons.join('')}</span>`
-      : '';
+    if (hasEntries) classes.push('calendar-day--has-meals');
+    const recordCount = meals.length + shopping.length;
     html += `
-      <button type="button" class="${classes.join(' ')}" data-date="${dateStr}" aria-label="${d}일${icons.length ? `, 기록 ${icons.length}종` : ''}">
+      <button type="button" class="${classes.join(' ')}" data-date="${dateStr}" aria-label="${d}일${recordCount ? `, 기록 ${recordCount}건` : ''}">
         <span class="calendar-day__num">${d}</span>
-        ${iconsHTML}
+        ${entriesHTML}
       </button>`;
   }
 
