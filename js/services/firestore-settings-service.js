@@ -23,9 +23,49 @@ function settingsDoc(uid) {
 const DEFAULT_SETTINGS = {
   currency: 'KRW',
   monthlyFoodBudget: 0,
-  grocery: { budget: '', items: {}, manualItems: [], completedKeys: [] },
+  grocery: {
+    activeWeekKey: '',
+    byWeek: {},
+    budget: '',
+    items: {},
+    manualItems: [],
+    completedKeys: [],
+    purchasedLedger: [],
+  },
   savedRecipeIds: [],
 };
+
+/** Firestore grocery → 앱 상태. byWeek 주차 구조를 유지한다. */
+function normalizeGroceryFromFirestore(grocery) {
+  if (!grocery || typeof grocery !== 'object') {
+    return { ...DEFAULT_SETTINGS.grocery, byWeek: {}, items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] };
+  }
+
+  const byWeek = grocery.byWeek && typeof grocery.byWeek === 'object' ? grocery.byWeek : null;
+  if (byWeek && Object.keys(byWeek).length > 0) {
+    const out = {
+      activeWeekKey: String(grocery.activeWeekKey || ''),
+      byWeek,
+    };
+    if (Array.isArray(grocery.purchasedLedger)) out.purchasedLedger = grocery.purchasedLedger;
+    if (Array.isArray(grocery.purchasedRecords)) out.purchasedRecords = grocery.purchasedRecords;
+    return out;
+  }
+
+  // 레거시 단일 주차 형식
+  return {
+    activeWeekKey: String(grocery.activeWeekKey || ''),
+    budget: grocery.budget ?? grocery.weeklyBudget ?? '',
+    items: (grocery.items && typeof grocery.items === 'object')
+      ? grocery.items
+      : ((grocery.groceryItems && typeof grocery.groceryItems === 'object') ? grocery.groceryItems : {}),
+    manualItems: Array.isArray(grocery.manualItems) ? grocery.manualItems : [],
+    completedKeys: Array.isArray(grocery.completedKeys) ? grocery.completedKeys : [],
+    purchasedLedger: Array.isArray(grocery.purchasedLedger)
+      ? grocery.purchasedLedger
+      : (Array.isArray(grocery.purchasedRecords) ? grocery.purchasedRecords : []),
+  };
+}
 
 export const FirestoreSettingsService = {
   stopSync() {
@@ -39,7 +79,11 @@ export const FirestoreSettingsService = {
     this.stopSync();
     const uid = auth?.currentUser?.uid;
     if (!uid || !db) {
-      onSettings?.({ ...DEFAULT_SETTINGS });
+      onSettings?.({
+        ...DEFAULT_SETTINGS,
+        grocery: { ...DEFAULT_SETTINGS.grocery, byWeek: {}, items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] },
+        savedRecipeIds: [],
+      });
       return null;
     }
     snapshotUnsubscribe = onSnapshot(
@@ -49,14 +93,7 @@ export const FirestoreSettingsService = {
         onSettings?.({
           currency: data.currency || DEFAULT_SETTINGS.currency,
           monthlyFoodBudget: Number(data.monthlyFoodBudget) || 0,
-          grocery: {
-            budget: data.grocery?.budget ?? '',
-            items: data.grocery?.items && typeof data.grocery.items === 'object'
-              ? data.grocery.items
-              : {},
-            manualItems: Array.isArray(data.grocery?.manualItems) ? data.grocery.manualItems : [],
-            completedKeys: Array.isArray(data.grocery?.completedKeys) ? data.grocery.completedKeys : [],
-          },
+          grocery: normalizeGroceryFromFirestore(data.grocery),
           savedRecipeIds: Array.isArray(data.savedRecipeIds) ? data.savedRecipeIds : [],
         });
       },

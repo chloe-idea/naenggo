@@ -2236,6 +2236,7 @@ const GroceryRepository = {
       quantity: String(entry?.quantity ?? '').trim(),
       purchasedAt: entry?.purchasedAt || '',
       weekKey: String(entry?.weekKey || weekKey || ''),
+      shoppingRecordId: String(entry?.shoppingRecordId || '').trim(),
       status: 'purchased',
     };
   },
@@ -2351,11 +2352,10 @@ const GroceryRepository = {
     const byWeek = state?.byWeek && typeof state.byWeek === 'object' ? state.byWeek : null;
     const weekEntries = byWeek ? Object.entries(byWeek) : [];
     if (weekEntries.length) {
-      this._byWeek = {};
+      // 주차 단위로 병합 — 스냅샷에 없는 다른 주차 데이터를 지우지 않음
       weekEntries.forEach(([weekKey, weekState]) => {
         const normalizedKey = normalizeGroceryWeekKey(weekKey);
         const normalized = this._normalizeWeekState({ ...weekState, weekKey: normalizedKey });
-        // 동일 주차로 병합 (레거시 ISO 키와 날짜 키 충돌 시 데이터 유지)
         if (this._byWeek[normalizedKey]) {
           const prev = this._byWeek[normalizedKey];
           this._byWeek[normalizedKey] = this._normalizeWeekState({
@@ -2377,7 +2377,9 @@ const GroceryRepository = {
           this._byWeek[normalizedKey] = normalized;
         }
       });
-      const activeKey = normalizeGroceryWeekKey(state?.activeWeekKey || todayStr());
+      const activeKey = normalizeGroceryWeekKey(
+        state?.activeWeekKey || this._activeWeekKey || todayStr(),
+      );
       this.setActiveWeek(activeKey);
       if (Array.isArray(state?.purchasedLedger) && state.purchasedLedger.length
         && this.getPurchasedLedger().length === 0) {
@@ -2385,8 +2387,9 @@ const GroceryRepository = {
       }
       return;
     }
+    // 레거시 단일 주차: 해당 week만 갱신하고 다른 주차는 유지
     const weekKey = normalizeGroceryWeekKey(state?.activeWeekKey || this._activeWeekKey || todayStr());
-    this._byWeek = { [weekKey]: this._normalizeWeekState({ ...state, weekKey }) };
+    this._byWeek[weekKey] = this._normalizeWeekState({ ...state, weekKey });
     this.setActiveWeek(weekKey);
   },
   _normalizeManualItem(raw) {
@@ -2454,12 +2457,83 @@ const GroceryRepository = {
   },
   setBudget(budget) {
     this._state.budget = budget;
+    markGroceryLocalMutation();
     this.save();
   },
   getBudget() { return this._state.budget || ''; },
   getPurchasedLedger() {
     this._syncActiveWeekToByWeek();
     return Array.isArray(this._state.purchasedLedger) ? [...this._state.purchasedLedger] : [];
+  },
+  /**
+   * 식사달력 장보기 기록 삭제 시 해당 주차 구매완료(사용금액) 원장에서 제거
+   * @returns {boolean} 항목이 제거되었는지
+   */
+  removePurchasedLedgerForShoppingRecord(record) {
+    if (!record) return false;
+    const weekKey = getWeekKeyFromDateStr(record.date || todayStr());
+    const prevWeek = this._activeWeekKey;
+    this.setActiveWeek(weekKey);
+
+    const recordId = String(record.id || '').trim();
+    const groceryKey = String(record.groceryItemKey || '').trim();
+    const amount = parseGroceryAmount(record.amount);
+    const names = new Set(
+      (Array.isArray(record.items) ? record.items : [])
+        .map((item) => MatchService.normalize(item?.name || ''))
+        .filter(Boolean),
+    );
+
+    if (!Array.isArray(this._state.purchasedLedger)) this._state.purchasedLedger = [];
+    const before = this._state.purchasedLedger.length;
+    let manualMatched = false;
+    this._state.purchasedLedger = this._state.purchasedLedger.filter((entry) => {
+      if (recordId && (entry.shoppingRecordId === recordId || entry.id === recordId)) return false;
+      if (groceryKey && (entry.key === groceryKey || entry.id === groceryKey)) return false;
+      // groceryItemKey 없는 수동 기록: 이름+금액이 일치하는 원장 1건만 제거
+      if (!groceryKey && !manualMatched && names.size) {
+        const entryName = MatchService.normalize(entry.name || '');
+        const entryAmount = parseGroceryAmount(entry.actualPrice ?? entry.actualAmount);
+        if (names.has(entryName) && entryAmount === amount) {
+          manualMatched = true;
+          return false;
+        }
+      }
+      return true;
+    });
+    const ledgerRemoved = this._state.purchasedLedger.length !== before;
+
+    let metaUpdated = false;
+    if (groceryKey && this._state.items?.[groceryKey]) {
+      const meta = this._state.items[groceryKey];
+      const linked = !recordId || meta.shoppingRecordId === recordId || !meta.shoppingRecordId;
+      if (linked) {
+        this._state.items[groceryKey] = {
+          ...meta,
+          shoppingRecordId: '',
+          checked: false,
+          actualAmount: '',
+        };
+        metaUpdated = true;
+      }
+    } else if (recordId) {
+      Object.keys(this._state.items || {}).forEach((key) => {
+        const meta = this._state.items[key];
+        if (meta?.shoppingRecordId !== recordId) return;
+        this._state.items[key] = { ...meta, shoppingRecordId: '', checked: false, actualAmount: '' };
+        metaUpdated = true;
+      });
+    }
+
+    const changed = ledgerRemoved || metaUpdated;
+    if (changed) {
+      markGroceryLocalMutation();
+      this.save();
+    }
+
+    const restoreKey = state.plannerWeekKey || prevWeek;
+    if (restoreKey) this.setActiveWeek(restoreKey);
+    return changed;
   },
   upsertPurchasedLedgerEntry(entry) {
     this._syncActiveWeekToByWeek();
@@ -2508,6 +2582,7 @@ const GroceryRepository = {
       quantity,
       purchasedAt: meta.purchasedAt || new Date().toISOString(),
       weekKey: this._activeWeekKey || getWeekKeyFromDateStr(todayStr()),
+      shoppingRecordId: meta.shoppingRecordId || '',
       status: 'purchased',
     });
   },
@@ -2934,14 +3009,27 @@ async function saveShoppingRecordToStore(payload, editingId = null) {
 }
 
 async function deleteShoppingRecordFromStore(recordId) {
+  const record = ShoppingRecordRepository.getAll().find((r) => r.id === recordId);
   if (!isLoggedInAppUser()) {
     ShoppingRecordRepository.remove(recordId);
     notifyGuestPersonalDataNotPersisted('장보기 기록');
+    if (record) await syncGroceryWeekAfterShoppingRecordRemoved(record);
     return;
   }
-  const record = ShoppingRecordRepository.getAll().find((r) => r.id === recordId);
   if (!record) return;
   await getFirestoreUserDataSync().shopping.deleteRecord(record.firestoreId || recordId);
+  ShoppingRecordRepository.remove(recordId);
+  await syncGroceryWeekAfterShoppingRecordRemoved(record);
+}
+
+/** 식사달력 장보기 삭제 → 해당 주차 사용금액(구매완료 원장)에서 차감 */
+async function syncGroceryWeekAfterShoppingRecordRemoved(record) {
+  if (!record) return;
+  GroceryRepository.removePurchasedLedgerForShoppingRecord(record);
+  await persistGroceryState();
+  if (dom.groceryList || dom.groceryBudgetSummary) {
+    renderGroceryList({ force: true });
+  }
 }
 
 async function persistMealPlans() {
@@ -6349,6 +6437,10 @@ function renderPlanner() {
 
 /** 주차 변경 전 DOM에 남은 예산·실금액을 현재 weekKey에 반영 */
 function flushGroceryDomIntoActiveWeek() {
+  // 플래너에 보이는 주차와 repo active week를 맞춘 뒤 저장
+  if (state.plannerWeekStart) {
+    GroceryRepository.setActiveWeek(getWeekKeyFromDateStr(state.plannerWeekStart));
+  }
   if (dom.groceryBudget) {
     GroceryRepository.setBudget(dom.groceryBudget.value);
   }
@@ -6358,12 +6450,13 @@ function flushGroceryDomIntoActiveWeek() {
   GroceryRepository._syncActiveWeekToByWeek();
 }
 
-function setPlannerWeek(weekStartDateStr) {
-  flushGroceryDomIntoActiveWeek();
+function setPlannerWeek(weekStartDateStr, { flush = true } = {}) {
+  if (flush) flushGroceryDomIntoActiveWeek();
   const start = toDateStr(getWeekStartDate(weekStartDateStr));
   state.plannerWeekStart = start;
   state.plannerWeekKey = getWeekKeyFromDateStr(start);
   GroceryRepository.setActiveWeek(state.plannerWeekKey);
+  markGroceryLocalMutation();
   persistGroceryState().catch(() => undefined);
   renderPlanner();
 }
@@ -7751,7 +7844,8 @@ function init() {
   ShoppingRecordRepository.load();
   MealPlanRepository.load();
   GroceryRepository.load();
-  setPlannerWeek(state.plannerWeekStart);
+  // 초기화 시 아직 비어 있는 DOM 예산으로 저장값을 덮어쓰지 않음
+  setPlannerWeek(state.plannerWeekStart, { flush: false });
   dom.currencySelect.value = state.currency;
   initRecipePickers();
   initVideoExtractUi();
@@ -7822,6 +7916,7 @@ function init() {
   dom.groceryItemModalForm?.addEventListener('submit', handleGroceryItemModalSubmit);
   dom.groceryBudget?.addEventListener('change', () => {
     const pendingBudget = dom.groceryBudget.value;
+    markGroceryLocalMutation();
     GroceryRepository.setBudget(pendingBudget);
     persistGroceryState().catch(() => undefined);
     renderGroceryBudgetSummary(
@@ -7933,7 +8028,9 @@ function startApp() {
     }
     if (settings.grocery && Date.now() - groceryLocalMutatedAt >= 2000) {
       GroceryRepository.replaceState(settings.grocery);
-      GroceryRepository.setActiveWeek(state.plannerWeekKey);
+      if (state.plannerWeekKey) {
+        GroceryRepository.setActiveWeek(state.plannerWeekKey);
+      }
     }
     if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
     refreshAll();
