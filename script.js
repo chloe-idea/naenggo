@@ -2170,7 +2170,19 @@ const MealPlanRepository = {
     this._plans = {};
   },
   replaceAll(plans) {
-    this._plans = plans && typeof plans === 'object' ? plans : {};
+    try {
+      this._plans = JSON.parse(JSON.stringify(plans && typeof plans === 'object' ? plans : {}));
+    } catch {
+      this._plans = {};
+    }
+  },
+  /** 저장용 깊은 복사 — 스냅샷/클리어와 참조가 섞이지 않게 */
+  exportPlans() {
+    try {
+      return JSON.parse(JSON.stringify(this._plans || {}));
+    } catch {
+      return {};
+    }
   },
   get(date, slot) {
     const raw = this._plans?.[date]?.[slot] || {};
@@ -2464,6 +2476,32 @@ const GroceryRepository = {
   getPurchasedLedger() {
     this._syncActiveWeekToByWeek();
     return Array.isArray(this._state.purchasedLedger) ? [...this._state.purchasedLedger] : [];
+  },
+  /** purchaseId(id|key)로 현재 주차 purchasedRecord 1건 삭제 */
+  removePurchasedLedgerById(purchaseId) {
+    this._syncActiveWeekToByWeek();
+    const id = String(purchaseId || '').trim();
+    if (!id || !Array.isArray(this._state.purchasedLedger)) return null;
+    const entry = this._state.purchasedLedger.find(
+      (item) => item.id === id || item.key === id,
+    );
+    if (!entry) return null;
+    this._state.purchasedLedger = this._state.purchasedLedger.filter(
+      (item) => item.id !== entry.id && item.key !== entry.key,
+    );
+    const groceryKey = entry.key || entry.id;
+    if (groceryKey && this._state.items?.[groceryKey]) {
+      const meta = this._state.items[groceryKey];
+      this._state.items[groceryKey] = {
+        ...meta,
+        shoppingRecordId: '',
+        checked: false,
+        actualAmount: '',
+      };
+    }
+    markGroceryLocalMutation();
+    this.save();
+    return { ...entry };
   },
   /**
    * 식사달력 장보기 기록 삭제 시 해당 주차 구매완료(사용금액) 원장에서 제거
@@ -2839,6 +2877,7 @@ function clearAllUserDataState() {
   ShoppingRecordRepository.clearSession();
   MealPlanRepository.clearSession();
   GroceryRepository.clearSession();
+  mealPlanLocalMutatedAt = 0;
 }
 
 function clearUserData() {
@@ -3008,18 +3047,18 @@ async function saveShoppingRecordToStore(payload, editingId = null) {
   return { ...merged, id: recordId, firestoreId: recordId };
 }
 
-async function deleteShoppingRecordFromStore(recordId) {
+async function deleteShoppingRecordFromStore(recordId, { syncGrocery = true } = {}) {
   const record = ShoppingRecordRepository.getAll().find((r) => r.id === recordId);
   if (!isLoggedInAppUser()) {
     ShoppingRecordRepository.remove(recordId);
     notifyGuestPersonalDataNotPersisted('장보기 기록');
-    if (record) await syncGroceryWeekAfterShoppingRecordRemoved(record);
+    if (syncGrocery && record) await syncGroceryWeekAfterShoppingRecordRemoved(record);
     return;
   }
   if (!record) return;
   await getFirestoreUserDataSync().shopping.deleteRecord(record.firestoreId || recordId);
   ShoppingRecordRepository.remove(recordId);
-  await syncGroceryWeekAfterShoppingRecordRemoved(record);
+  if (syncGrocery) await syncGroceryWeekAfterShoppingRecordRemoved(record);
 }
 
 /** 식사달력 장보기 삭제 → 해당 주차 사용금액(구매완료 원장)에서 차감 */
@@ -3041,7 +3080,9 @@ async function persistMealPlans() {
   if (!sync?.mealPlans?.savePlans) {
     throw new Error('Firestore 동기화를 사용할 수 없습니다.');
   }
-  await sync.mealPlans.savePlans(MealPlanRepository._plans);
+  markMealPlanLocalMutation();
+  const plansSnapshot = MealPlanRepository.exportPlans();
+  await sync.mealPlans.savePlans(plansSnapshot);
 }
 
 /** 로컬 식단 변경 직후 Firestore snapshot이 이전 데이터로 덮어쓰는 것을 방지 */
@@ -3049,6 +3090,10 @@ let mealPlanLocalMutatedAt = 0;
 
 function markMealPlanLocalMutation() {
   mealPlanLocalMutatedAt = Date.now();
+}
+
+function hasMealPlanLocalData() {
+  return Object.keys(MealPlanRepository._plans || {}).length > 0;
 }
 
 /** 로컬 장보기 금액 입력 직후 Firestore snapshot이 덮어쓰거나 리스트가 리렌더되는 것을 방지 */
@@ -3675,11 +3720,14 @@ const dom = {
   plannerRecipeList: $('#planner-recipe-list'), plannerRecipeEmpty: $('#planner-recipe-empty'),
   groceryCompleteBtn: $('#grocery-complete-btn'),
   groceryAddItemBtn: $('#grocery-add-item-btn'),
+  groceryBudgetBox: $('#grocery-budget-box'),
   groceryBudget: $('#grocery-budget'), groceryBudgetSummary: $('#grocery-budget-summary'),
   groceryList: $('#grocery-list'), groceryEmpty: $('#grocery-empty'),
   groceryItemModal: $('#grocery-item-modal'), groceryItemModalForm: $('#grocery-item-modal-form'),
   groceryItemModalTitle: $('#grocery-item-modal-title'), groceryItemName: $('#grocery-item-name'),
   groceryItemQuantity: $('#grocery-item-quantity'), groceryItemUnit: $('#grocery-item-unit'),
+  grocerySpendSheet: $('#grocery-spend-sheet'), grocerySpendSheetTitle: $('#grocery-spend-sheet-title'),
+  grocerySpendList: $('#grocery-spend-list'), grocerySpendEmpty: $('#grocery-spend-empty'),
   tabItems: document.querySelectorAll('.tab-bar__item'),
   openPantryManageBtn: $('#open-pantry-manage-btn'),
   quickForm: $('#quick-ingredient-form'), quickInput: $('#quick-ingredient-input'),
@@ -4308,6 +4356,125 @@ async function addRecipeMissingToGroceryList(recipeId) {
 }
 
 // ===== Render: Recipe Card =====
+function shortIngredientLabel(text) {
+  return getIngredientMatchName(text) || formatIngredientDisplay(text) || String(text || '').trim();
+}
+
+/** 홈 카드 추천 태그 (최대 3개). 임박 배지는 상단 전용으로 태그와 중복하지 않음 */
+function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost }) {
+  const tags = [];
+  const soon = (expiryBoost != null ? expiryBoost : RecommendationService.getExpiryBoost(matchedPantryNames || [])) > 0;
+  const text = [
+    recipe?.name,
+    ...(recipe?.tags || []),
+    ...(recipe?.dietTags || []),
+    recipe?.dishType,
+    ...(recipe?.ingredients || []).map(formatIngredientDisplay),
+  ].filter(Boolean).join(' ');
+
+  if (Number(recipe?.cookTime) > 0 && Number(recipe.cookTime) <= 15) tags.push('⏰ 15분 이하');
+  if (RecommendationService.isHighProtein(recipe)) tags.push('🥩 고단백');
+  if (RecommendationService.isDiet(recipe)) tags.push('🥗 다이어트');
+  if (/매운|매콤|고추|청양|할라피|spicy|마라|불닭/.test(text)) tags.push('🌶 매운맛');
+  if (/야식|심야/.test(text) || recipe?.dishType === 'snack') tags.push('🍺 야식 추천');
+  if (/안주|술안주|맥주|소주|치킨|마른안주/.test(text)) tags.push('🍺 술안주');
+  if (recipe?.dishType === 'salad' || /도시락|런치박스|lunchbox/.test(text)) tags.push('🍱 도시락');
+  if (recipe?.dishType === 'breakfast' || /아침|브런치|모닝/.test(text)) tags.push('🍳 아침 추천');
+  if (/한\s*끼|덮밥|국밥|정식|백반|식사/.test(text) || ['rice', 'noodle', 'soup'].includes(recipe?.dishType)) {
+    tags.push('🍚 한 끼 식사');
+  }
+  if (/아이|키즈|유아|어린이|아기/.test(text)) tags.push('👶 아이도 좋아해요');
+  // 임박은 상단 배지로 표시 — 태그 자리가 남으면 보강
+  if (soon && tags.length < 3) tags.push('🥬 임박 재료 활용');
+
+  return [...new Set(tags)].slice(0, 3);
+}
+
+function homeRecipeStatusHTML({ missing }) {
+  const missingCount = missing?.length || 0;
+  if (missingCount === 0) {
+    return '<p class="recipe-card__status recipe-card__status--ready">🟢 바로 가능</p>';
+  }
+  return `<p class="recipe-card__status recipe-card__status--short">🟠 재료 ${missingCount}개 부족</p>`;
+}
+
+function homeRecipeShortageHTML(recipe, missing) {
+  if (!missing?.length) return '';
+  const names = missing.map(shortIngredientLabel).filter(Boolean);
+  const list = names.map((name) => `<li class="recipe-card__shortage-item">${esc(name)}</li>`).join('');
+  return `
+    <div class="recipe-card__shortage">
+      <div class="recipe-card__shortage-head">
+        <span class="recipe-card__shortage-label">부족</span>
+        ${groceryAddButtonHTML(recipe.id, { compact: true })}
+      </div>
+      <ul class="recipe-card__shortage-list">${list}</ul>
+    </div>`;
+}
+
+function homeRecipeSubsHTML(substituted) {
+  if (!substituted?.length) return '';
+  const rows = substituted.slice(0, 3).map((s) => {
+    const required = shortIngredientLabel(s.required);
+    const owned = shortIngredientLabel(s.owned);
+    return `<li class="recipe-card__sub-item">${esc(required)} → ${esc(owned)}</li>`;
+  }).join('');
+  return `
+    <div class="recipe-card__subs">
+      <p class="recipe-card__subs-label">대체 가능</p>
+      <ul class="recipe-card__subs-list">${rows}</ul>
+    </div>`;
+}
+
+function homeRecipeTagsHTML(tags) {
+  if (!tags?.length) return '';
+  return `<div class="recipe-card__tags">${tags.map((t) => `<span class="recipe-card__tag">${esc(t)}</span>`).join('')}</div>`;
+}
+
+/** 홈 화면 전용 레시피 카드 — 결정에 필요한 정보만 표시 */
+function homeRecipeCardHTML(result) {
+  const recipe = result.recipe;
+  const missing = result.missing || [];
+  const substituted = result.substituted || [];
+  const matchedPantryNames = result.matchedPantryNames || [];
+  const soon = (result.expiryBoost != null
+    ? result.expiryBoost
+    : RecommendationService.getExpiryBoost(matchedPantryNames)) > 0;
+  const saved = SavedRecipeRepository.isSaved(recipe.id);
+  const tags = getHomeRecipeRecommendTags({
+    recipe,
+    matchedPantryNames,
+    expiryBoost: result.expiryBoost,
+  });
+  const img = recipeCardImageHTML(recipe);
+  const saveBtn = `<button type="button" class="recipe-card__action-btn recipe-card__action-btn--bookmark${saved ? ' recipe-card__action-btn--saved' : ''}" data-save-id="${esc(recipe.id)}" data-auth-required aria-label="${saved ? '저장 해제' : '레시피 저장'}">${saved ? '♥' : '♡'}</button>`;
+
+  return `
+    <div class="recipe-card recipe-card--home" role="button" tabindex="0" data-rid="${esc(recipe.id)}">
+      <div class="recipe-card__image-wrap">${img}</div>
+      <div class="recipe-card__body">
+        ${soon ? '<p class="recipe-card__expiry-badge">🥬 임박 재료 활용</p>' : ''}
+        <div class="recipe-card__top">
+          <div class="recipe-card__title-wrap">
+            <span class="recipe-card__name">${esc(recipe.name)}</span>
+          </div>
+          <div class="recipe-card__header-end">
+            <div class="recipe-card__actions-row">${saveBtn}</div>
+          </div>
+        </div>
+        <div class="recipe-card__meta">
+          <span>⏱ ${esc(String(recipe.cookTime || '-'))}분</span>
+          <span>·</span>
+          <span>📊 ${esc(recipe.difficulty || '-')}</span>
+        </div>
+        ${homeRecipeStatusHTML({ missing })}
+        ${homeRecipeShortageHTML(recipe, missing)}
+        ${homeRecipeSubsHTML(substituted)}
+        ${homeRecipeTagsHTML(tags)}
+      </div>
+    </div>`;
+}
+
 function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryNames, exact, substituted, recommendationReason, showAuthor, showVisibility, showCardSave, showCardMealLog, showCardFork, showSaveCount, hideMatchBadge, hideOrigin, hideReason, hideExpiryHint, showMissingLine, showCommunityBadge }) {
   const badge = !hideMatchBadge && matchPercent != null ? (matchPercent >= 70 ? 'high' : matchPercent >= 40 ? 'mid' : 'low') : null;
   const img = recipeCardImageHTML(recipe);
@@ -4389,7 +4556,7 @@ function bindRecipeCards(container, results) {
       requireAppLogin(() => {
         const nowSaved = SavedRecipeRepository.toggle(saveId);
         persistSavedRecipeIds().catch(() => undefined);
-        showToast(nowSaved ? '레시피를 저장했어요 ⭐' : '저장을 해제했어요');
+        showToast(nowSaved ? '레시피를 저장했어요' : '저장을 해제했어요');
         renderCurrentView();
       });
     };
@@ -4727,14 +4894,7 @@ function renderHome() {
     bindHomeNaengtul(dom.homeTodayHero, naengtulResults);
   }
 
-  dom.recipeList.innerHTML = results.map((r) => recipeCardHTML({
-    ...r,
-    showMissingLine: true,
-    showCardSave: isPublicCommunityRecipe(r.recipe),
-    showCardFork: true,
-    showAuthor: isPublicCommunityRecipe(r.recipe),
-    showCommunityBadge: isPublicCommunityRecipe(r.recipe),
-  })).join('');
+  dom.recipeList.innerHTML = results.map((r) => homeRecipeCardHTML(r)).join('');
   bindRecipeCards(dom.recipeList, results);
   updateHomeRecipesSubtitle();
   syncAuthGateUi();
@@ -5977,11 +6137,12 @@ function setPlannerMeal(date, slotId, data, { animate = false } = {}) {
   markMealPlanLocalMutation();
   MealPlanRepository.set(date, slotId, data);
   if (animate) state.plannerAnimate = { date, slot: slotId };
-  persistMealPlans().catch((err) => {
-    console.error('[MealPlanner] persist failed after set', { date, slotId, err });
-  });
   renderPlanner();
   renderGroceryList();
+  persistMealPlans().catch((err) => {
+    console.error('[MealPlanner] persist failed after set', { date, slotId, err });
+    showToast(err?.message || '식단 저장에 실패했어요. 다시 시도해 주세요.');
+  });
 }
 
 function applyMealPlanSlotRemoval(dateKey, mealType) {
@@ -6548,7 +6709,7 @@ async function syncGroceryItemToShoppingRecord(itemKey, item, { silent = false, 
     recipeId: null,
     recipeName: '',
     groceryItemKey: itemKey,
-    source: 'grocery-list',
+    source: 'grocery',
     currency: existing?.currency || state.currency,
     ingredientsAdded: Boolean(existing?.ingredientsAdded),
     pantryAdded: Boolean(existing?.ingredientsAdded),
@@ -6612,6 +6773,143 @@ function renderGroceryBudgetSummary(grouped) {
     : `${formatMoney(Math.abs(diff))} 초과`;
   dom.groceryBudgetSummary.textContent = `${diffLabel} · 사용 ${formatMoney(used)}`;
   dom.groceryBudgetSummary.classList.toggle('budget-box__summary--over', diff < 0);
+}
+
+function isGroceryLinkedShoppingSource(source) {
+  const value = String(source || '').trim().toLowerCase();
+  return value === 'grocery' || value === 'grocery-list';
+}
+
+function formatGroceryPurchaseDateLabel(entry) {
+  const raw = String(entry?.purchasedAt || entry?.date || '').trim();
+  if (!raw) return '';
+  const date = raw.includes('T') ? new Date(raw) : parseDateStr(raw.slice(0, 10));
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function getActiveWeekPurchasedRecords() {
+  if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
+  return GroceryRepository.getPurchasedLedger()
+    .filter((entry) => {
+      const entryWeek = entry.weekKey
+        ? normalizeGroceryWeekKey(entry.weekKey)
+        : (state.plannerWeekKey || '');
+      if (entryWeek && state.plannerWeekKey && entryWeek !== state.plannerWeekKey) return false;
+      return true;
+    })
+    .sort((a, b) => String(b.purchasedAt || '').localeCompare(String(a.purchasedAt || '')));
+}
+
+function renderGrocerySpendRecordRow(entry) {
+  const purchaseId = entry.id || entry.key;
+  const name = entry.name || '장보기';
+  const amount = formatMoney(parseGroceryAmount(entry.actualPrice ?? entry.actualAmount));
+  const dateLabel = formatGroceryPurchaseDateLabel(entry);
+  const qty = String(entry.quantity || '').trim();
+  const parts = [name, amount];
+  if (dateLabel) parts.push(dateLabel);
+  const title = parts.join(' · ');
+  const sub = qty ? `<p class="day-record-row__sub">수량 ${esc(qty)}</p>` : '';
+  return `
+    <li class="day-record-row" data-purchase-id="${esc(purchaseId)}">
+      <div class="day-record-row__main">
+        <span class="day-record-row__icon" aria-hidden="true">🛒</span>
+        <div class="day-record-row__content">
+          <div class="day-record-row__top">
+            <span class="day-record-row__title">${esc(title)}</span>
+          </div>
+          ${sub}
+        </div>
+      </div>
+      <div class="day-record-row__aside">
+        <div class="day-record-row__actions">
+          <button type="button" class="day-record-row__link day-record-row__link--danger" data-del-purchase="${esc(purchaseId)}">삭제</button>
+        </div>
+      </div>
+    </li>`;
+}
+
+function renderGrocerySpendSheet() {
+  if (!dom.grocerySpendList) return;
+  if (dom.grocerySpendSheetTitle) dom.grocerySpendSheetTitle.textContent = '이번 주 사용 내역';
+  const records = getActiveWeekPurchasedRecords();
+  const hasRecords = records.length > 0;
+  if (dom.grocerySpendEmpty) dom.grocerySpendEmpty.hidden = hasRecords;
+  if (!hasRecords) {
+    dom.grocerySpendList.innerHTML = '';
+    const emptyText = dom.grocerySpendEmpty?.querySelector('.empty-state__text');
+    if (emptyText) emptyText.textContent = '이번 주에 기록된 장보기 내역이 없어요.';
+    return;
+  }
+  dom.grocerySpendList.innerHTML = records.map(renderGrocerySpendRecordRow).join('');
+  dom.grocerySpendList.querySelectorAll('[data-del-purchase]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      deleteGroceryPurchasedRecord(btn.dataset.delPurchase).catch((err) => {
+        showToast(err?.message || '삭제에 실패했습니다.');
+      });
+    };
+  });
+}
+
+function closeGrocerySpendSheet() {
+  if (!dom.grocerySpendSheet) return;
+  dom.grocerySpendSheet.hidden = true;
+  dom.grocerySpendSheet.setAttribute('aria-hidden', 'true');
+  updateBodyScrollLock();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function openGrocerySpendSheet() {
+  if (!dom.grocerySpendSheet) return;
+  if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
+  renderGrocerySpendSheet();
+  dom.grocerySpendSheet.hidden = false;
+  dom.grocerySpendSheet.setAttribute('aria-hidden', 'false');
+  updateBodyScrollLock();
+  window.dispatchEvent(new CustomEvent('ui-modal-change'));
+}
+
+function findLinkedGroceryShoppingRecords(entry) {
+  if (!entry) return [];
+  const purchaseId = String(entry.id || entry.key || '').trim();
+  const groceryKey = String(entry.key || entry.id || '').trim();
+  const shoppingRecordId = String(entry.shoppingRecordId || '').trim();
+  return ShoppingRecordRepository.getAll().filter((record) => {
+    if (!isGroceryLinkedShoppingSource(record.source)) return false;
+    if (shoppingRecordId && record.id === shoppingRecordId) return true;
+    if (groceryKey && record.groceryItemKey === groceryKey) return true;
+    if (purchaseId && record.id === purchaseId) return true;
+    return false;
+  });
+}
+
+async function deleteLinkedGroceryShoppingRecords(entry) {
+  const linked = findLinkedGroceryShoppingRecords(entry);
+  for (const record of linked) {
+    await deleteShoppingRecordFromStore(record.id, { syncGrocery: false });
+  }
+  return linked.length;
+}
+
+async function deleteGroceryPurchasedRecord(purchaseId) {
+  const confirmed = confirm(
+    '이 장보기 내역을 삭제할까요?\n이번 주 사용금액과 연결된 식비 기록에서도 함께 제외됩니다.',
+  );
+  if (!confirmed) return;
+  if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
+  const entry = GroceryRepository.removePurchasedLedgerById(purchaseId);
+  if (!entry) {
+    showToast('내역을 찾을 수 없어요');
+    return;
+  }
+  await deleteLinkedGroceryShoppingRecords(entry);
+  await persistGroceryState();
+  renderGrocerySpendSheet();
+  renderGroceryList({ force: true });
+  if (state.view === 'calendar') renderCalendar();
+  showToast('장보기 내역을 삭제했어요');
 }
 
 function renderGroceryList({ force = false } = {}) {
@@ -6732,6 +7030,7 @@ function autoGenerateWeeklyPlan() {
   markMealPlanLocalMutation();
   persistMealPlans().catch((err) => {
     console.error('[MealPlanner] autoGenerate persist failed', err);
+    showToast(err?.message || '식단 저장에 실패했어요. 다시 시도해 주세요.');
   });
   renderPlanner();
   showToast('이번 주 식단을 자동으로 채웠어요');
@@ -7703,6 +8002,7 @@ function updateBodyScrollLock() {
     || (dom.groceryItemModal && !dom.groceryItemModal.hidden)
     || (dom.calendarDaySheet && !dom.calendarDaySheet.hidden)
     || (dom.calendarExpenseSheet && !dom.calendarExpenseSheet.hidden)
+    || (dom.grocerySpendSheet && !dom.grocerySpendSheet.hidden)
     || (dom.plannerSlotSheet && !dom.plannerSlotSheet.hidden)
     || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
     || (dom.loginPromptModal && !dom.loginPromptModal.hidden);
@@ -7752,6 +8052,7 @@ function closeAllModals() {
   closePlannerSheets();
   closeCalendarDaySheet({ immediate: true });
   closeCalendarExpenseSheet();
+  closeGrocerySpendSheet();
   if (window.LoginRequiredModal?.isOpen()) window.LoginRequiredModal.close(true);
   closeImageLightbox();
 }
@@ -7914,6 +8215,19 @@ function init() {
   dom.groceryCompleteBtn?.addEventListener('click', handleGroceryPurchaseComplete);
   dom.groceryAddItemBtn?.addEventListener('click', () => openGroceryItemModal());
   dom.groceryItemModalForm?.addEventListener('submit', handleGroceryItemModalSubmit);
+  const openGrocerySpendFromBudget = (e) => {
+    if (e.target.closest('#grocery-budget, .budget-box__input')) return;
+    e.preventDefault();
+    openGrocerySpendSheet();
+  };
+  dom.groceryBudgetBox?.addEventListener('click', openGrocerySpendFromBudget);
+  dom.groceryBudgetBox?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (e.target.closest('#grocery-budget, .budget-box__input')) return;
+    e.preventDefault();
+    openGrocerySpendSheet();
+  });
+  dom.groceryBudget?.addEventListener('click', (e) => e.stopPropagation());
   dom.groceryBudget?.addEventListener('change', () => {
     const pendingBudget = dom.groceryBudget.value;
     markGroceryLocalMutation();
@@ -7966,6 +8280,7 @@ function init() {
       if (type === 'login') window.LoginRequiredModal?.close(true);
       else if (type === 'calendar-day') closeCalendarDaySheet();
       else if (type === 'calendar-expense') closeCalendarExpenseSheet();
+      else if (type === 'grocery-spend') closeGrocerySpendSheet();
       else if (type !== 'profile') closeModal(type);
     };
   });
@@ -8006,8 +8321,12 @@ function startApp() {
   });
   window.addEventListener('meal-plans-firestore-sync', (e) => {
     if (!isLoggedInAppUser()) return;
-    if (Date.now() - mealPlanLocalMutatedAt < 2000) return;
-    MealPlanRepository.replaceAll(e.detail?.plans || {});
+    const incoming = e.detail?.plans && typeof e.detail.plans === 'object' ? e.detail.plans : {};
+    const localHasData = hasMealPlanLocalData();
+    // 로컬이 비어 있으면(로그인 직후) 항상 Firestore 적용.
+    // 로컬 수정 직후 짧은 구간만 예전 스냅샷 덮어쓰기를 막는다.
+    if (localHasData && Date.now() - mealPlanLocalMutatedAt < 5000) return;
+    MealPlanRepository.replaceAll(incoming);
     refreshAll();
   });
   window.addEventListener('shopping-firestore-sync', (e) => {
