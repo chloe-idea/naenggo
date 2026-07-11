@@ -1469,7 +1469,9 @@ const FreshFoodService = {
 };
 
 // ===== Storage Adapter (→ Supabase/Firebase 교체) =====
-/** 재료·레시피·장보기·식사 등 사용자 데이터 — localStorage 미사용 (게스트=메모리, 로그인=Firestore) */
+/** 재료·레시피·장보기·식사 등 사용자 데이터 — localStorage 미사용
+ *  로그인: Firestore만 / 게스트 장보기: 메모리만 (새로고침 시 소멸, 로그인 시 이전 안 함)
+ */
 const USER_DATA_LOCAL_STORAGE_KEYS = [
   CONFIG.STORAGE.PANTRY,
   CONFIG.STORAGE.LEGACY_PANTRY,
@@ -2285,28 +2287,13 @@ const GroceryRepository = {
     this._state = this._emptyWeekState();
   },
   load() {
+    // 게스트=메모리만, 로그인=Firestore 스냅샷으로 채움. localStorage 미사용.
     this.clearSession();
-    if (isGuestUser()) {
-      try {
-        const raw = localStorage.getItem(CONFIG.STORAGE.GROCERY);
-        if (raw) this.replaceState(JSON.parse(raw));
-      } catch {
-        // ignore corrupt guest grocery cache
-      }
-    }
     return this._state;
   },
   save() {
+    // 주차 작업본만 메모리 byWeek에 커밋. 디스크/Firestore 쓰기는 persistGroceryState가 담당.
     this._syncActiveWeekToByWeek();
-    if (!isGuestUser()) return;
-    try {
-      localStorage.setItem(CONFIG.STORAGE.GROCERY, JSON.stringify({
-        activeWeekKey: this._activeWeekKey || '',
-        byWeek: this._byWeek,
-      }));
-    } catch {
-      // ignore quota errors
-    }
   },
   _syncActiveWeekToByWeek() {
     const key = normalizeGroceryWeekKey(this._activeWeekKey || todayStr());
@@ -2321,10 +2308,16 @@ const GroceryRepository = {
   },
   exportState() {
     this._syncActiveWeekToByWeek();
-    return {
-      activeWeekKey: this._activeWeekKey || '',
-      byWeek: this._byWeek,
-    };
+    // 저장 시 정규화된 월요일 키만 보내 ISO(2026-W29) 중복이 Firestore에 남지 않게 한다.
+    const byWeek = {};
+    Object.entries(this._byWeek || {}).forEach(([weekKey, weekState]) => {
+      const key = normalizeGroceryWeekKey(weekKey);
+      byWeek[key] = this._cloneWeekState({ ...weekState, weekKey: key });
+    });
+    const activeWeekKey = normalizeGroceryWeekKey(this._activeWeekKey || todayStr());
+    this._byWeek = byWeek;
+    this._activeWeekKey = activeWeekKey;
+    return { activeWeekKey, byWeek };
   },
   setActiveWeek(weekKey) {
     const key = normalizeGroceryWeekKey(weekKey || todayStr());
@@ -2360,35 +2353,53 @@ const GroceryRepository = {
     this._state = this._cloneWeekState(this._byWeek[key]);
     this._state.weekKey = key;
   },
-  replaceState(state) {
+  replaceState(state, { strategy = 'replace' } = {}) {
     const byWeek = state?.byWeek && typeof state.byWeek === 'object' ? state.byWeek : null;
     const weekEntries = byWeek ? Object.entries(byWeek) : [];
     if (weekEntries.length) {
-      // 주차 단위로 병합 — 스냅샷에 없는 다른 주차 데이터를 지우지 않음
-      weekEntries.forEach(([weekKey, weekState]) => {
-        const normalizedKey = normalizeGroceryWeekKey(weekKey);
-        const normalized = this._normalizeWeekState({ ...weekState, weekKey: normalizedKey });
-        if (this._byWeek[normalizedKey]) {
-          const prev = this._byWeek[normalizedKey];
-          this._byWeek[normalizedKey] = this._normalizeWeekState({
-            ...prev,
-            ...normalized,
-            budget: normalized.budget !== '' && normalized.budget != null ? normalized.budget : prev.budget,
-            items: { ...prev.items, ...normalized.items },
-            manualItems: normalized.manualItems.length ? normalized.manualItems : prev.manualItems,
-            completedKeys: [...new Set([...(prev.completedKeys || []), ...(normalized.completedKeys || [])])],
-            purchasedLedger: [
-              ...(prev.purchasedLedger || []),
-              ...(normalized.purchasedLedger || []).filter(
-                (entry) => !(prev.purchasedLedger || []).some((p) => p.key === entry.key || p.id === entry.id),
-              ),
-            ],
-            weekKey: normalizedKey,
-          });
-        } else {
-          this._byWeek[normalizedKey] = normalized;
-        }
+      // 같은 주로 정규화되는 키가 여러 개면 날짜 키(YYYY-MM-DD)가 마지막에 오도록 정렬
+      weekEntries.sort(([a], [b]) => {
+        const aCanon = /^\d{4}-\d{2}-\d{2}$/.test(a) ? 1 : 0;
+        const bCanon = /^\d{4}-\d{2}-\d{2}$/.test(b) ? 1 : 0;
+        return aCanon - bCanon;
       });
+
+      if (strategy === 'replace') {
+        // Firestore 스냅샷이 기준 — 주차별 budget/ledger를 통째로 교체 (오래된 원장 병합 금지)
+        const nextByWeek = {};
+        weekEntries.forEach(([weekKey, weekState]) => {
+          const normalizedKey = normalizeGroceryWeekKey(weekKey);
+          nextByWeek[normalizedKey] = this._normalizeWeekState({ ...weekState, weekKey: normalizedKey });
+        });
+        this._byWeek = nextByWeek;
+      } else {
+        // 주차 단위로 병합 — 스냅샷에 없는 다른 주차 데이터를 지우지 않음
+        weekEntries.forEach(([weekKey, weekState]) => {
+          const normalizedKey = normalizeGroceryWeekKey(weekKey);
+          const normalized = this._normalizeWeekState({ ...weekState, weekKey: normalizedKey });
+          if (this._byWeek[normalizedKey]) {
+            const prev = this._byWeek[normalizedKey];
+            this._byWeek[normalizedKey] = this._normalizeWeekState({
+              ...prev,
+              ...normalized,
+              budget: normalized.budget !== '' && normalized.budget != null ? normalized.budget : prev.budget,
+              items: { ...prev.items, ...normalized.items },
+              manualItems: normalized.manualItems.length ? normalized.manualItems : prev.manualItems,
+              completedKeys: [...new Set([...(prev.completedKeys || []), ...(normalized.completedKeys || [])])],
+              purchasedLedger: [
+                ...(prev.purchasedLedger || []),
+                ...(normalized.purchasedLedger || []).filter(
+                  (entry) => !(prev.purchasedLedger || []).some((p) => p.key === entry.key || p.id === entry.id),
+                ),
+              ],
+              weekKey: normalizedKey,
+            });
+          } else {
+            this._byWeek[normalizedKey] = normalized;
+          }
+        });
+      }
+
       const activeKey = normalizeGroceryWeekKey(
         state?.activeWeekKey || this._activeWeekKey || todayStr(),
       );
@@ -2878,6 +2889,8 @@ function clearAllUserDataState() {
   MealPlanRepository.clearSession();
   GroceryRepository.clearSession();
   mealPlanLocalMutatedAt = 0;
+  groceryLocalMutatedAt = 0;
+  resetGroceryFirestoreReady();
 }
 
 function clearUserData() {
@@ -3099,16 +3112,32 @@ function hasMealPlanLocalData() {
 /** 로컬 장보기 금액 입력 직후 Firestore snapshot이 덮어쓰거나 리스트가 리렌더되는 것을 방지 */
 let groceryLocalMutatedAt = 0;
 let groceryPersistTimer = null;
+/** 로그인 사용자: settings 스냅샷을 한 번 적용하기 전에는 빈 state를 Firestore에 쓰지 않음 */
+let groceryFirestoreReady = false;
 
 function markGroceryLocalMutation() {
   groceryLocalMutatedAt = Date.now();
+}
+
+function markGroceryFirestoreReady() {
+  groceryFirestoreReady = true;
+}
+
+function resetGroceryFirestoreReady() {
+  groceryFirestoreReady = false;
 }
 
 function schedulePersistGroceryState() {
   if (!isGuestUser() && !isLoggedInAppUser()) return;
   clearTimeout(groceryPersistTimer);
   groceryPersistTimer = setTimeout(() => {
-    persistGroceryState().catch(() => undefined);
+    persistGroceryState().catch((error) => {
+      console.error('Failed to save grocery week', {
+        uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
+        weekKey: GroceryRepository._activeWeekKey || state.plannerWeekKey || '',
+        error,
+      });
+    });
   }, 800);
 }
 
@@ -3144,12 +3173,38 @@ function syncGroceryAmountRow(row, { schedulePersist = true } = {}) {
 }
 
 async function persistGroceryState() {
+  // 게스트: 메모리(session)만 유지 — localStorage/Firestore 미사용, 로그인 시 이전 안 함
   if (isGuestUser()) {
     GroceryRepository.save();
     return;
   }
   if (!isLoggedInAppUser()) return;
-  await getFirestoreUserDataSync().settings.saveGroceryState(GroceryRepository.exportState());
+  // 새로고침 직후 빈 기본값이 Firestore를 덮어쓰지 않도록, 스냅샷 적용 전 저장 금지
+  if (!groceryFirestoreReady) return;
+
+  markGroceryLocalMutation();
+  const payload = GroceryRepository.exportState();
+  const weekKey = payload.activeWeekKey
+    || GroceryRepository._activeWeekKey
+    || state.plannerWeekKey
+    || '';
+  const uid = window.FirebaseServices?.auth?.currentUser?.uid
+    || window.__authGateState?.user?.uid
+    || null;
+  try {
+    await getFirestoreUserDataSync().settings.saveGroceryState(payload);
+  } catch (error) {
+    console.error('Failed to save grocery week', {
+      uid,
+      weekKey,
+      data: payload?.byWeek?.[weekKey] || payload,
+      error: {
+        code: error?.code || '',
+        message: error?.message || String(error),
+      },
+    });
+    throw error;
+  }
 }
 
 async function persistCurrencySetting() {
@@ -6645,14 +6700,23 @@ function flushGroceryDomIntoActiveWeek() {
   GroceryRepository._syncActiveWeekToByWeek();
 }
 
-function setPlannerWeek(weekStartDateStr, { flush = true } = {}) {
+function setPlannerWeek(weekStartDateStr, { flush = true, persist = true } = {}) {
   if (flush) flushGroceryDomIntoActiveWeek();
   const start = toDateStr(getWeekStartDate(weekStartDateStr));
   state.plannerWeekStart = start;
   state.plannerWeekKey = getWeekKeyFromDateStr(start);
   GroceryRepository.setActiveWeek(state.plannerWeekKey);
-  markGroceryLocalMutation();
-  persistGroceryState().catch(() => undefined);
+  // init·스냅샷 적용 전에는 빈 주차로 저장/덮어쓰기 방지 플래그를 올리지 않음
+  if (persist && (isGuestUser() || groceryFirestoreReady)) {
+    markGroceryLocalMutation();
+    persistGroceryState().catch((error) => {
+      console.error('Failed to save grocery week', {
+        uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
+        weekKey: state.plannerWeekKey,
+        error,
+      });
+    });
+  }
   renderPlanner();
 }
 
@@ -6999,7 +7063,13 @@ function renderGroceryList({ force = false } = {}) {
       const row = cb.closest('.grocery-item');
       if (row) syncGroceryAmountRow(row, { schedulePersist: false });
       GroceryRepository.setChecked(cb.dataset.checkKey, cb.checked);
-      flushPersistGroceryState().catch(() => undefined);
+      flushPersistGroceryState().catch((error) => {
+        console.error('Failed to save grocery week', {
+          uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
+          weekKey: GroceryRepository._activeWeekKey || state.plannerWeekKey || '',
+          error,
+        });
+      });
       renderGroceryList({ force: true });
     };
   });
@@ -7027,7 +7097,13 @@ function initGroceryListAmountHandlers() {
     window.setTimeout(() => {
       const active = document.activeElement;
       if (row?.contains(active) && isGroceryAmountInput(active)) return;
-      flushPersistGroceryState().catch(() => undefined);
+      flushPersistGroceryState().catch((error) => {
+        console.error('Failed to save grocery week', {
+          uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
+          weekKey: GroceryRepository._activeWeekKey || state.plannerWeekKey || '',
+          error,
+        });
+      });
     }, 0);
   });
 }
@@ -7894,7 +7970,14 @@ function handleGroceryItemModalSubmit(e) {
     price: '',
   });
   if (!item) return;
-  persistGroceryState().catch(() => undefined);
+  persistGroceryState().catch((error) => {
+    console.error('Failed to save grocery week', {
+      uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
+      weekKey: GroceryRepository._activeWeekKey || state.plannerWeekKey || '',
+      data: item,
+      error,
+    });
+  });
   closeModal('grocery-item');
   renderGroceryList();
   showToast('장보기 목록에 추가했어요');
@@ -8179,8 +8262,8 @@ function init() {
   ShoppingRecordRepository.load();
   MealPlanRepository.load();
   GroceryRepository.load();
-  // 초기화 시 아직 비어 있는 DOM 예산으로 저장값을 덮어쓰지 않음
-  setPlannerWeek(state.plannerWeekStart, { flush: false });
+  // 초기화: 빈 메모리 state를 Firestore에 쓰지 않음 (스냅샷 적용 후 저장 허용)
+  setPlannerWeek(state.plannerWeekStart, { flush: false, persist: false });
   dom.currencySelect.value = state.currency;
   initRecipePickers();
   initVideoExtractUi();
@@ -8262,15 +8345,25 @@ function init() {
     openGrocerySpendSheet();
   });
   dom.groceryBudget?.addEventListener('click', (e) => e.stopPropagation());
-  dom.groceryBudget?.addEventListener('change', () => {
+  const commitGroceryBudget = () => {
+    if (!dom.groceryBudget) return;
     const pendingBudget = dom.groceryBudget.value;
     markGroceryLocalMutation();
     GroceryRepository.setBudget(pendingBudget);
-    persistGroceryState().catch(() => undefined);
+    persistGroceryState().catch((error) => {
+      console.error('Failed to save grocery week', {
+        uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
+        weekKey: GroceryRepository._activeWeekKey || state.plannerWeekKey || '',
+        data: { budget: pendingBudget },
+        error,
+      });
+    });
     renderGroceryBudgetSummary(
       GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerWeekStart)),
     );
-  });
+  };
+  dom.groceryBudget?.addEventListener('change', commitGroceryBudget);
+  dom.groceryBudget?.addEventListener('blur', commitGroceryBudget);
   dom.pantryModalForm.addEventListener('submit', handlePantryModalSubmit);
   dom.mealModalForm.addEventListener('submit', handleMealModalSubmit);
   dom.shoppingModalForm.addEventListener('submit', handleShoppingModalSubmit);
@@ -8379,11 +8472,16 @@ function startApp() {
       state.monthlyFoodBudget = Number(settings.monthlyFoodBudget) || 0;
       StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
     }
-    if (settings.grocery && Date.now() - groceryLocalMutatedAt >= 2000) {
-      GroceryRepository.replaceState(settings.grocery);
-      if (state.plannerWeekKey) {
-        GroceryRepository.setActiveWeek(state.plannerWeekKey);
+    if (settings.grocery) {
+      const allowRemote = !groceryFirestoreReady || Date.now() - groceryLocalMutatedAt >= 2000;
+      if (allowRemote) {
+        // 첫 스냅샷은 항상 적용(빈 초기 state 위에 덮어씀). 이후엔 로컬 편집 직후 2초 가드.
+        GroceryRepository.replaceState(settings.grocery, { strategy: 'replace' });
+        if (state.plannerWeekKey) {
+          GroceryRepository.setActiveWeek(state.plannerWeekKey);
+        }
       }
+      markGroceryFirestoreReady();
     }
     if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
     refreshAll();
