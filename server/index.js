@@ -26,6 +26,15 @@ app.use('/api', extractInstagramRecipeRouter);
 app.use('/api', aiUsageRouter);
 app.use('/api', openaiHealthRouter);
 
+app.use('/images/recipes', express.static(path.join(ROOT, 'public/images/recipes'), {
+  maxAge: '7d',
+  setHeaders(res, filePath) {
+    if (/\.(webp|png|jpe?g)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=604800');
+    }
+  },
+}));
+
 app.use(express.static(ROOT, {
   index: 'index.html',
   setHeaders(res, filePath) {

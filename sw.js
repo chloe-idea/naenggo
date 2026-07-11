@@ -2,13 +2,20 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v111';
+const CACHE_NAME = 'naengjanggo-v152';
+
+const RECIPE_IMAGE_SLUGS = [
+  'sweet-potato-fries', 'potato-fries', 'sweet-potato-sticks', 'egg-white-omelet', 'potato-pancake', 'potato-cheese-bake', 'egg-in-hell',
+  'tuna-rice-ball', 'sesame-seaweed-fried-rice', 'natto-rice-bowl', 'scrambled-eggs', 'tuna-mayo-rice-ball', 'spam-rice-ball',
+  'kimchi-rice-ball', 'cheese-rice-ball', 'ramen', 'tofu-salad', 'tuna-salad', 'egg-soup-diet',
+  'onion-egg-stir-fry', 'onion-stir-fry', 'onion-egg-rice-bowl', 'cheese-pancake', 'cold-pasta', 'ramen-snack',
+];
 
 const ASSETS = [
   'index.html',
   'app-config.js?v=47',
-  'style.css?v=117',
-  'script.js?v=113',
+  'style.css?v=141',
+  'script.js?v=142',
   'js/firebase.js',
   'js/firebase-config.js',
   'js/firebase-bootstrap.js?v=62',
@@ -22,23 +29,16 @@ const ASSETS = [
   'js/login-required-modal.js?v=67',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
-  'recipe-images.js?v=49',
-  'recipes-builtin.js?v=30',
+  'recipe-images.js?v=57',
+  'js/data/builtin-recipes.js?v=1',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-512-maskable.png',
   'icons/icon-180.png',
-  'src/assets/recipe-images/default.png',
-  'src/assets/recipe-images/egg.png',
-  'src/assets/recipe-images/tomato-egg.png',
-  'src/assets/recipe-images/pasta.png',
-  'src/assets/recipe-images/stew.png',
-  'src/assets/recipe-images/rice.png',
-  'src/assets/recipe-images/potato.png',
-  'src/assets/recipe-images/noodle.png',
-  'src/assets/recipe-images/soup.png',
-  'src/assets/recipe-images/stir-fry.png',
+  'images/recipes/default-recipe.webp',
+  'images/recipes/default-recipe.png',
+  ...RECIPE_IMAGE_SLUGS.map((slug) => `images/recipes/${slug}.webp`),
 ];
 
 function assetUrl(path) {

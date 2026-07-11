@@ -10,17 +10,49 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    // 커뮤니티 공개 레시피 — 누구나 읽기, 작성자만 쓰기
+    function isActiveAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.active == true;
+    }
+
+    function isRecipeDocumentOwner(data) {
+      return data.ownerId == request.auth.uid
+        || data.authorId == request.auth.uid;
+    }
+
+    // 운영자 등록 — 본인 문서 읽기만 허용 (쓰기는 콘솔에서 수동 등록)
+    match /admins/{uid} {
+      allow read: if isOwner(uid);
+      allow write: if false;
+    }
+
+    // 기본 레시피 — 누구나 읽기, 활성 운영자만 쓰기
+    match /builtinRecipes/{recipeId} {
+      allow read: if true;
+      allow create, update, delete: if isActiveAdmin();
+    }
+
+    match /builtinRecipeTombstones/{recipeId} {
+      allow read: if true;
+      allow create, update, delete: if isActiveAdmin();
+    }
+
+    // 커뮤니티 공개 레시피 — 작성자 또는 운영자만 수정/삭제
     match /publicRecipes/{recipeId} {
       allow read: if true;
       allow create: if isSignedIn()
         && request.resource.data.authorId == request.auth.uid
         && request.resource.data.isPublic == true;
-      allow update: if isSignedIn()
-        && resource.data.authorId == request.auth.uid
-        && request.resource.data.authorId == request.auth.uid;
-      allow delete: if isSignedIn()
-        && resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        (resource.data.authorId == request.auth.uid
+          && request.resource.data.authorId == request.auth.uid)
+        || isActiveAdmin()
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.authorId == request.auth.uid
+        || isActiveAdmin()
+      );
     }
 
     // users/{uid} 프로필 문서
@@ -34,13 +66,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // 개인 서브컬렉션 — 로그인 사용자 본인만 (top-level match)
     match /users/{uid}/ingredients/{ingredientId} {
       allow read, write: if isOwner(uid);
     }
 
     match /users/{uid}/myRecipes/{recipeId} {
-      allow read, write: if isOwner(uid);
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid)
+        && isRecipeDocumentOwner(request.resource.data);
+      allow update: if isOwner(uid)
+        && isRecipeDocumentOwner(resource.data)
+        && isRecipeDocumentOwner(request.resource.data);
+      allow delete: if isOwner(uid)
+        && isRecipeDocumentOwner(resource.data);
     }
 
     match /users/{uid}/mealPlans/{planId} {

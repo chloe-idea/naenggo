@@ -15,6 +15,7 @@ import {
 import { db, auth } from '../firebase.js';
 import { timestampToIso, nowIso } from './firestore-timestamp.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
+import { FirestoreUserService } from './firestore-user-service.js';
 import {
   runFirestoreWrite,
   publicRecipePath,
@@ -53,8 +54,13 @@ function mapPublicRecipe(docSnap) {
     memo: data.memo || '',
     sourceUrl: data.sourceUrl || null,
     sourcePlatform: data.sourcePlatform || null,
-    authorId: data.authorId || '',
+    authorId: data.authorId || data.userId || '',
+    userId: data.userId || data.authorId || '',
     authorName: data.authorName || '',
+    displayName: data.displayName || data.authorName || '',
+    nickname: data.nickname || '',
+    profileImage: data.profileImage || '',
+    authorGooglePhotoURL: data.authorGooglePhotoURL || '',
     visibility: 'public',
     source: data.source || 'user',
     isPublic: data.isPublic !== false,
@@ -102,6 +108,12 @@ export const FirestorePublicRecipesService = {
 
     const ref = publicRecipeDoc(recipeId);
     const savePath = publicRecipePath(recipeId);
+    const profile = await FirestoreUserService.getUserDocument(authUser.uid);
+    const nickname = String(profile?.displayName || '').trim();
+    const displayName = String(authUser.displayName || authUser.email?.split('@')[0] || '').trim();
+    const profileImage = String(profile?.profileImage || '').trim();
+    const authorGooglePhotoURL = String(authUser.photoURL || '').trim();
+    const authorLabel = nickname || displayName || '회원';
     const payload = {
       name: recipe.name,
       ingredients: recipe.ingredients || [],
@@ -121,7 +133,12 @@ export const FirestorePublicRecipesService = {
       sourceUrl: recipe.sourceUrl || null,
       sourcePlatform: recipe.sourcePlatform || null,
       authorId: authUser.uid,
-      authorName: recipe.authorName || authUser.displayName || '회원',
+      userId: authUser.uid,
+      authorName: authorLabel,
+      displayName,
+      nickname,
+      profileImage,
+      authorGooglePhotoURL,
       source: recipe.source || 'user',
       isPublic: true,
       myRecipeId: recipeId,
@@ -154,17 +171,19 @@ export const FirestorePublicRecipesService = {
     return recipeId;
   },
 
-  async unpublish(recipeId, uid = null) {
+  async unpublish(recipeId, uid = null, options = {}) {
     if (!db || !recipeId) return;
     const ref = publicRecipeDoc(recipeId);
     if (!ref) return;
     const savePath = publicRecipePath(recipeId);
     const authUid = uid || auth?.currentUser?.uid || null;
+    const allowAdmin = options?.allowAdmin === true;
 
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
 
-    if (snap.data()?.authorId && authUid && snap.data().authorId !== authUid) {
+    const isOwner = snap.data()?.authorId && authUid && snap.data().authorId === authUid;
+    if (!isOwner && !allowAdmin) {
       console.warn('[FirestorePublicRecipesService] unpublish skipped — not owner', { recipeId, authUid });
       return;
     }
@@ -174,7 +193,7 @@ export const FirestorePublicRecipesService = {
       authUid,
       savePath,
       () => deleteDoc(ref),
-      { recipeId },
+      { recipeId, allowAdmin },
     );
   },
 };

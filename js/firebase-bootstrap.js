@@ -6,6 +6,8 @@ import { FirestoreUserService, resolveProfileAvatar } from './services/firestore
 import { FirestoreIngredientService } from './services/firestore-ingredient-service.js';
 import { migrateLegacyPantryToFirestore } from './services/pantry-local-migration.js';
 import { AnalysisQuotaService } from './services/analysis-quota-service.js';
+import { AdminService } from './services/admin-service.js';
+import { FirestoreBuiltinRecipesService } from './services/firestore-builtin-recipes-service.js';
 import { FirestoreUserDataSync } from './services/firestore-user-data-sync.js';
 import { formatAuthError } from './services/auth-errors.js';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
@@ -313,6 +315,12 @@ function refreshProfileQuota() {
         quotaEl.classList.remove('profile-menu__quota--exhausted');
         return;
       }
+      if (usage.unlimited || AdminService.isAdmin()) {
+        quotaEl.textContent = '관리자 계정 · 분석 무제한';
+        quotaEl.classList.remove('profile-menu__quota--exhausted');
+        window.dispatchEvent(new CustomEvent('analysis-quota-updated', { detail: usage }));
+        return;
+      }
       if (usage.remaining > 0) {
         quotaEl.textContent = `이번 주 남은 무료 분석 ${usage.remaining}회`;
         quotaEl.classList.remove('profile-menu__quota--exhausted');
@@ -477,6 +485,19 @@ async function syncUserData(user) {
   }
 }
 
+function startBuiltinRecipesSync() {
+  FirestoreBuiltinRecipesService.startSync(
+    ({ recipes, tombstones }) => {
+      window.dispatchEvent(new CustomEvent('builtin-recipes-firestore-sync', {
+        detail: { recipes, tombstones },
+      }));
+    },
+    (err) => {
+      console.error('[firebase-bootstrap] builtin recipes sync failed:', err?.code, err?.message, err);
+    },
+  );
+}
+
 function startPublicRecipesSync() {
   FirestoreUserDataSync.startPublicSync(
     (recipes) => {
@@ -494,6 +515,11 @@ async function handleSignedInUser(user) {
   patchAuthState({ isLoggingIn: false, authLoading: false, user });
   renderAuthUi(user);
 
+  AdminService.startSync(uid);
+  window.dispatchEvent(new CustomEvent('admin-status-changed', {
+    detail: AdminService.getState(),
+  }));
+
   window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
 
   await syncUserData(user);
@@ -509,6 +535,7 @@ async function handleSignedInUser(user) {
 
 async function handleSignedOutUser() {
   logoutInProgress = false;
+  AdminService.stopSync();
   FirestoreUserDataSync.stopAll();
   syncedUid = null;
   cachedUserProfile = null;
@@ -744,8 +771,10 @@ async function bootstrap() {
     auth,
     db,
     AuthService,
+    AdminService,
     FirestoreUserService,
     FirestoreIngredientService,
+    FirestoreBuiltinRecipesService,
     FirestoreUserDataSync,
     AnalysisQuotaService,
     refreshHeaderQuota,
@@ -754,6 +783,7 @@ async function bootstrap() {
   };
 
   if (isFirebaseConfigured()) {
+    startBuiltinRecipesSync();
     startPublicRecipesSync();
   }
 

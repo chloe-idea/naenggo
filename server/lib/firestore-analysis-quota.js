@@ -4,6 +4,11 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken,
 } from './firebase-admin.js';
+import {
+  ADMIN_UNLIMITED_USAGE,
+  isActiveAdminUid,
+  recordAdminAnalysisUsage,
+} from './firestore-admin.js';
 
 export const FREE_ANALYSIS_LIMIT = Math.max(
   1,
@@ -32,6 +37,10 @@ export async function ensureFirestoreUser(uid, profile = {}) {
 }
 
 export async function getFirestoreAnalysisUsage(uid) {
+  if (await isActiveAdminUid(uid)) {
+    return { ...ADMIN_UNLIMITED_USAGE };
+  }
+
   const ref = usersRef(uid);
   const snap = await ref.get();
   if (!snap.exists) {
@@ -55,6 +64,10 @@ export async function getFirestoreAnalysisUsage(uid) {
 }
 
 export async function assertCanUseFirestoreAnalysis(uid) {
+  if (await isActiveAdminUid(uid)) {
+    return { ...ADMIN_UNLIMITED_USAGE };
+  }
+
   const usage = await getFirestoreAnalysisUsage(uid);
   if (usage.remaining <= 0) {
     const err = new Error('무료 AI 분석 횟수를 모두 사용했습니다. 로그인 계정의 분석 한도를 확인해 주세요.');
@@ -66,6 +79,10 @@ export async function assertCanUseFirestoreAnalysis(uid) {
 }
 
 export async function recordFirestoreAnalysisUsage(uid) {
+  if (await isActiveAdminUid(uid)) {
+    return recordAdminAnalysisUsage(uid);
+  }
+
   const ref = usersRef(uid);
   await getFirestoreAdmin().runTransaction(async (tx) => {
     const snap = await tx.get(ref);

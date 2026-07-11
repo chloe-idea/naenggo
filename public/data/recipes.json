@@ -1,0 +1,6395 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-10",
+  "recipes": [
+    {
+      "id": "kimchi-stew",
+      "slug": "kimchi-stew",
+      "title": "김치찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "김치",
+        "두부",
+        "대파",
+        "마늘",
+        "고춧가루"
+      ],
+      "cookingTime": 30,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "김치를 볶습니다.",
+        "물과 양념을 넣고 끓입니다.",
+        "두부와 대파를 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "soybean-paste-stew",
+      "slug": "soybean-paste-stew",
+      "title": "된장찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "된장",
+        "두부",
+        "감자",
+        "양파",
+        "대파"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "된장을 풀어 끓입니다.",
+        "감자와 양파를 넣습니다.",
+        "두부와 대파를 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "soft-tofu-stew",
+      "slug": "soft-tofu-stew",
+      "title": "순두부찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "순두부",
+        "계란",
+        "대파",
+        "마늘",
+        "고춧가루"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "양념장을 만듭니다.",
+        "순두부와 물을 넣고 끓입니다.",
+        "계란과 대파를 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "kimchi-fried-rice",
+      "slug": "kimchi-fried-rice",
+      "title": "김치볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "김치",
+        "계란",
+        "대파",
+        "참기름"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "김치를 볶습니다.",
+        "밥을 넣고 볶습니다.",
+        "계란을 넣고 마무리합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-5",
+      "slug": "recipe-5",
+      "title": "감자조림",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "감자",
+        "양파",
+        "간장",
+        "설탕",
+        "물"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "감자를 썰어 준비합니다.",
+        "양념과 함께 졸여 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "steamed-egg",
+      "slug": "steamed-egg",
+      "title": "계란찜",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "계란",
+        "대파",
+        "간장",
+        "물",
+        "참기름"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 150,
+      "instructions": [
+        "계란물을 만듭니다.",
+        "약불에 쪄 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-7",
+      "slug": "recipe-7",
+      "title": "계란후라이밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "밥",
+        "계란",
+        "간장",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "계란을 프라이합니다.",
+        "밥과 간장을 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-8",
+      "slug": "recipe-8",
+      "title": "두부조림",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "두부",
+        "양파",
+        "간장",
+        "마늘",
+        "대파"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "두부를 구워 줍니다.",
+        "양념과 함께 졸입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-9",
+      "slug": "recipe-9",
+      "title": "두부김치",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "두부",
+        "김치",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "두부를 썰어 준비합니다.",
+        "김치와 함께 먹기 좋게 담습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "kimchi-pancake",
+      "slug": "kimchi-pancake",
+      "title": "김치전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "김치",
+        "밀가루",
+        "계란",
+        "대파",
+        "식용유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "반죽을 만듭니다.",
+        "팬에 지져 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "potato-pancake",
+      "slug": "potato-pancake",
+      "title": "감자전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "감자",
+        "계란",
+        "소금",
+        "식용유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 260,
+      "instructions": [
+        "감자를 갈아 물기를 뺍니다.",
+        "팬에 얇게 부쳐 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-12",
+      "slug": "recipe-12",
+      "title": "계란국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "계란",
+        "대파",
+        "멸치육수",
+        "간장"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 80,
+      "instructions": [
+        "육수를 끓입니다.",
+        "계란을 풀어 넣고 대파를 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-13",
+      "slug": "recipe-13",
+      "title": "미역국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "미역",
+        "참기름",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 120,
+      "instructions": [
+        "미역을 불립니다.",
+        "참기름에 볶아 끓여 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-14",
+      "slug": "recipe-14",
+      "title": "콩나물국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "콩나물",
+        "대파",
+        "마늘",
+        "멸치육수"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 60,
+      "instructions": [
+        "육수를 끓입니다.",
+        "콩나물을 넣고 끓여 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-15",
+      "slug": "recipe-15",
+      "title": "시금치나물",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "시금치",
+        "마늘",
+        "참기름",
+        "간장"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 50,
+      "instructions": [
+        "시금치를 데칩니다.",
+        "양념에 무쳐 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-16",
+      "slug": "recipe-16",
+      "title": "콩나물무침",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "콩나물",
+        "대파",
+        "마늘",
+        "고춧가루"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 45,
+      "instructions": [
+        "콩나물을 데칩니다.",
+        "양념에 무쳐 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-17",
+      "slug": "recipe-17",
+      "title": "깍두기무침",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "깍두기",
+        "참기름",
+        "깨"
+      ],
+      "cookingTime": 5,
+      "difficulty": "쉬움",
+      "calories": 30,
+      "instructions": [
+        "깍두기를 준비합니다.",
+        "참기름과 깨를 넣어 무칩니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-18",
+      "slug": "recipe-18",
+      "title": "오이무침",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "오이",
+        "고춧가루",
+        "마늘",
+        "식초"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 35,
+      "instructions": [
+        "오이를 썰어 준비합니다.",
+        "양념에 버무립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-19",
+      "slug": "recipe-19",
+      "title": "무생채",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "무",
+        "고춧가루",
+        "식초",
+        "설탕"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 40,
+      "instructions": [
+        "무를 채 썰어 준비합니다.",
+        "양념에 무쳐 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-20",
+      "slug": "recipe-20",
+      "title": "잔치국수",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "대파",
+        "계란",
+        "김",
+        "간장"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "국수를 삶습니다.",
+        "육수에 양념을 넣고 면을 담습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-21",
+      "slug": "recipe-21",
+      "title": "비빔국수",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "고추장",
+        "양파",
+        "오이",
+        "계란"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "국수를 삶습니다.",
+        "양념과 채소를 넣고 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-22",
+      "slug": "recipe-22",
+      "title": "냉면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "냉면",
+        "오이",
+        "계란",
+        "식초",
+        "설탕"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "면을 삶아 찬물에 헹굽니다.",
+        "육수와 고명을 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-23",
+      "slug": "recipe-23",
+      "title": "수제비",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "밀가루",
+        "감자",
+        "대파",
+        "간장",
+        "멸치육수"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "반죽을 만듭니다.",
+        "끓는 육수에 떼어 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-24",
+      "slug": "recipe-24",
+      "title": "라볶이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "떡",
+        "라면",
+        "고추장",
+        "양파",
+        "대파"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "양념에 끓입니다.",
+        "떡과 라면을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tteokbokki",
+      "slug": "tteokbokki",
+      "title": "떡볶이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "snack",
+      "ingredients": [
+        "떡",
+        "고추장",
+        "양파",
+        "대파",
+        "설탕"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "양념장을 끓입니다.",
+        "떡을 넣고 졸여 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-26",
+      "slug": "recipe-26",
+      "title": "김치볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "김치",
+        "대파",
+        "마늘",
+        "참기름"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "김치를 볶습니다.",
+        "대파를 넣고 마무리합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-27",
+      "slug": "recipe-27",
+      "title": "멸치볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "멸치",
+        "고추장",
+        "마늘",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 150,
+      "instructions": [
+        "멸치를 볶습니다.",
+        "양념을 넣고 졸입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-28",
+      "slug": "recipe-28",
+      "title": "어묵볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "어묵",
+        "양파",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "어묵을 썰어 준비합니다.",
+        "양념에 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-29",
+      "slug": "recipe-29",
+      "title": "햄야채볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "햄",
+        "양파",
+        "당근",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "채소와 햄을 썰어 준비합니다.",
+        "간장에 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-30",
+      "slug": "recipe-30",
+      "title": "소시지야채볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "소시지",
+        "양파",
+        "고추",
+        "케첩"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "재료를 썰어 준비합니다.",
+        "볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-31",
+      "slug": "recipe-31",
+      "title": "스팸볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "스팸",
+        "양파",
+        "고추",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "스팸을 썰어 볶습니다.",
+        "양파와 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-32",
+      "slug": "recipe-32",
+      "title": "참치볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "참치",
+        "양파",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "양파를 볶습니다.",
+        "참치와 양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-33",
+      "slug": "recipe-33",
+      "title": "계란장조림",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "계란",
+        "간장",
+        "대파",
+        "물",
+        "설탕"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "계란을 삶습니다.",
+        "간장 양념에 졸여 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-34",
+      "slug": "recipe-34",
+      "title": "감자탕",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "감자",
+        "대파",
+        "마늘",
+        "고춧가루"
+      ],
+      "cookingTime": 35,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "감자를 넣고 끓입니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-35",
+      "slug": "recipe-35",
+      "title": "불고기덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "소고기",
+        "양파",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "고기를 볶습니다.",
+        "밥 위에 올려 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tuna-mayo-rice",
+      "slug": "tuna-mayo-rice",
+      "title": "참치마요덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "마요네즈",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "참치와 마요를 섞습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "soy-sauce-egg-rice",
+      "slug": "soy-sauce-egg-rice",
+      "title": "간장계란밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "밥",
+        "계란",
+        "간장",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "계란을 프라이합니다.",
+        "밥과 간장을 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-38",
+      "slug": "recipe-38",
+      "title": "스팸마요덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "마요네즈",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 520,
+      "instructions": [
+        "스팸을 구워 썰어 줍니다.",
+        "마요와 섞어 밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-39",
+      "slug": "recipe-39",
+      "title": "김치참치덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "김치",
+        "참치",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 430,
+      "instructions": [
+        "김치와 참치를 볶습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-40",
+      "slug": "recipe-40",
+      "title": "두부덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "두부",
+        "간장",
+        "대파",
+        "참기름"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "두부를 구워 양념합니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-41",
+      "slug": "recipe-41",
+      "title": "햄덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "햄",
+        "양파",
+        "간장",
+        "계란"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "햄과 양파를 볶습니다.",
+        "밥 위에 올리고 계란을 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-42",
+      "slug": "recipe-42",
+      "title": "소시지덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "소시지",
+        "양파",
+        "케첩",
+        "계란"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 440,
+      "instructions": [
+        "소시지를 볶습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-43",
+      "slug": "recipe-43",
+      "title": "치즈스팸덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "치즈",
+        "간장",
+        "마요네즈"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 550,
+      "instructions": [
+        "스팸을 구워 줍비합니다.",
+        "치즈와 함께 밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-44",
+      "slug": "recipe-44",
+      "title": "참치김덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "김",
+        "참기름",
+        "간장"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "참치와 김을 섞습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-45",
+      "slug": "recipe-45",
+      "title": "계란덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "계란",
+        "대파",
+        "간장",
+        "설탕"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 390,
+      "instructions": [
+        "계란을 스크램블합니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "omurice",
+      "slug": "omurice",
+      "title": "오므라이스",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "계란",
+        "양파",
+        "케첩",
+        "햄"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "볶음밥을 만듭니다.",
+        "계란으로 감싸 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-47",
+      "slug": "recipe-47",
+      "title": "치킨마요덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "닭가슴살",
+        "마요네즈",
+        "간장",
+        "양파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 460,
+      "instructions": [
+        "닭가슴살을 볶습니다.",
+        "마요와 함께 밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-48",
+      "slug": "recipe-48",
+      "title": "고추장참치덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "고추장",
+        "대파",
+        "참기름"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 410,
+      "instructions": [
+        "참치와 고추장을 섞습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-49",
+      "slug": "recipe-49",
+      "title": "김치두부덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "김치",
+        "두부",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "김치와 두부를 볶습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-50",
+      "slug": "recipe-50",
+      "title": "치즈계란덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "계란",
+        "치즈",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 430,
+      "instructions": [
+        "계란을 스크램블합니다.",
+        "치즈를 올려 밥과 함께 담습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-51",
+      "slug": "recipe-51",
+      "title": "스팸계란덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "계란",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 500,
+      "instructions": [
+        "스팸을 구워 줍니다.",
+        "계란과 함께 밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-52",
+      "slug": "recipe-52",
+      "title": "참치야채덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "양파",
+        "당근",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "야채와 참치를 볶습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-53",
+      "slug": "recipe-53",
+      "title": "간장버터계란밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "밥",
+        "계란",
+        "버터",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "계란을 프라이합니다.",
+        "버터와 간장을 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "egg-fried-rice",
+      "slug": "egg-fried-rice",
+      "title": "계란볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "계란",
+        "양파",
+        "대파",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "계란을 스크램블합니다.",
+        "밥과 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-55",
+      "slug": "recipe-55",
+      "title": "참치볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "참치",
+        "양파",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "참치와 양파를 볶습니다.",
+        "밥을 넣고 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-56",
+      "slug": "recipe-56",
+      "title": "스팸볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "양파",
+        "계란",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "스팸을 볶습니다.",
+        "밥과 계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-57",
+      "slug": "recipe-57",
+      "title": "햄볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "햄",
+        "양파",
+        "계란",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 440,
+      "instructions": [
+        "햄과 채소를 볶습니다.",
+        "밥을 넣고 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-58",
+      "slug": "recipe-58",
+      "title": "소시지볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "소시지",
+        "양파",
+        "케첩",
+        "계란"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 460,
+      "instructions": [
+        "소시지를 볶습니다.",
+        "밥과 섞어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-59",
+      "slug": "recipe-59",
+      "title": "치즈볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "치즈",
+        "계란",
+        "햄",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 470,
+      "instructions": [
+        "볶음밥을 만듭니다.",
+        "치즈를 넣어 녹입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-60",
+      "slug": "recipe-60",
+      "title": "김치참치볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "김치",
+        "참치",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 440,
+      "instructions": [
+        "김치와 참치를 볶습니다.",
+        "밥을 넣고 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-61",
+      "slug": "recipe-61",
+      "title": "버터간장볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "버터",
+        "간장",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 430,
+      "instructions": [
+        "버터에 밥을 볶습니다.",
+        "간장으로 간해 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-62",
+      "slug": "recipe-62",
+      "title": "나물볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "시금치",
+        "당근",
+        "계란",
+        "참기름"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "나물을 준비합니다.",
+        "밥과 함께 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-63",
+      "slug": "recipe-63",
+      "title": "두부볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "두부",
+        "양파",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 390,
+      "instructions": [
+        "두부를 으깨 볶습니다.",
+        "밥과 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-64",
+      "slug": "recipe-64",
+      "title": "고추장볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "고추장",
+        "양파",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "고추장에 재료를 볶습니다.",
+        "밥을 넣고 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "sesame-seaweed-fried-rice",
+      "slug": "sesame-seaweed-fried-rice",
+      "title": "참기름김볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "김",
+        "참기름",
+        "계란",
+        "소금"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "김을 넣고 볶습니다.",
+        "참기름으로 마무리합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-66",
+      "slug": "recipe-66",
+      "title": "마늘볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "마늘",
+        "계란",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 410,
+      "instructions": [
+        "마늘을 볶습니다.",
+        "밥과 계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-67",
+      "slug": "recipe-67",
+      "title": "야채볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "양파",
+        "당근",
+        "계란",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 360,
+      "instructions": [
+        "채소를 볶습니다.",
+        "밥을 넣고 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-68",
+      "slug": "recipe-68",
+      "title": "스팸김치볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "김치",
+        "계란",
+        "참기름"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 470,
+      "instructions": [
+        "스팸과 김치를 볶습니다.",
+        "밥을 넣고 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-69",
+      "slug": "recipe-69",
+      "title": "참치김치볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "참치",
+        "김치",
+        "대파",
+        "고춧가루"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 430,
+      "instructions": [
+        "김치와 참치를 볶습니다.",
+        "밥을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-70",
+      "slug": "recipe-70",
+      "title": "간장새우볶음밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "fried-rice",
+      "ingredients": [
+        "밥",
+        "새우",
+        "계란",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "새우를 볶습니다.",
+        "밥과 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "ramen",
+      "slug": "ramen",
+      "title": "라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "계란",
+        "대파",
+        "물"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 500,
+      "instructions": [
+        "물을 끓입니다.",
+        "면과 스프를 넣고 끓입니다.",
+        "계란과 대파를 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-72",
+      "slug": "recipe-72",
+      "title": "계란라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "계란",
+        "치즈",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 520,
+      "instructions": [
+        "라면을 끓입니다.",
+        "계란과 치즈를 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-73",
+      "slug": "recipe-73",
+      "title": "치즈라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "치즈",
+        "계란",
+        "우유"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 550,
+      "instructions": [
+        "라면을 끓입니다.",
+        "치즈와 우유를 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-74",
+      "slug": "recipe-74",
+      "title": "김치라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "김치",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "김치를 볶습니다.",
+        "라면을 넣고 끓입니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-75",
+      "slug": "recipe-75",
+      "title": "참치라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "참치",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 490,
+      "instructions": [
+        "라면을 끓입니다.",
+        "참치와 계란을 넣습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-76",
+      "slug": "recipe-76",
+      "title": "스팸라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "스팸",
+        "계란",
+        "치즈"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 530,
+      "instructions": [
+        "라면을 끓입니다.",
+        "스팸과 치즈를 넣습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-77",
+      "slug": "recipe-77",
+      "title": "비빔면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "비빔면",
+        "계란",
+        "오이",
+        "고추장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "면을 삶습니다.",
+        "양념과 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "stir-fried-udon",
+      "slug": "stir-fried-udon",
+      "title": "볶음우동",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "우동",
+        "양파",
+        "간장",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "야채를 볶습니다.",
+        "우동과 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-79",
+      "slug": "recipe-79",
+      "title": "잔치면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "간장",
+        "대파",
+        "계란"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "면을 삶습니다.",
+        "양념과 함께 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-80",
+      "slug": "recipe-80",
+      "title": "쫄면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "쫄면",
+        "고추장",
+        "오이",
+        "계란"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 390,
+      "instructions": [
+        "면을 삶습니다.",
+        "양념에 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-81",
+      "slug": "recipe-81",
+      "title": "라면사리볶음",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "양파",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "라면사리를 삶습니다.",
+        "양념에 볶아 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-82",
+      "slug": "recipe-82",
+      "title": "우유라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "우유",
+        "치즈",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "우유와 물로 끓입니다.",
+        "치즈를 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-83",
+      "slug": "recipe-83",
+      "title": "마요라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "마요네즈",
+        "계란",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 510,
+      "instructions": [
+        "라면을 끓입니다.",
+        "마요와 계란을 곁들입니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-84",
+      "slug": "recipe-84",
+      "title": "된장라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "된장",
+        "두부",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 460,
+      "instructions": [
+        "된장을 풀어 끓입니다.",
+        "라면과 두부를 넣습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "cold-pasta",
+      "slug": "cold-pasta",
+      "title": "냉파스타",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "noodle",
+      "ingredients": [
+        "스파게티",
+        "오이",
+        "토마토",
+        "올리브유"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "면을 삶습니다.",
+        "채소와 섞어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-86",
+      "slug": "recipe-86",
+      "title": "간장비빔국수",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "간장",
+        "대파",
+        "참기름"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 370,
+      "instructions": [
+        "면을 삶습니다.",
+        "양념에 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-87",
+      "slug": "recipe-87",
+      "title": "떡라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "떡",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 520,
+      "instructions": [
+        "떡과 라면을 함께 끓입니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-88",
+      "slug": "recipe-88",
+      "title": "카레라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "카레가루",
+        "양파",
+        "감자"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 490,
+      "instructions": [
+        "카레를 끓입니다.",
+        "라면을 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-89",
+      "slug": "recipe-89",
+      "title": "버터간장라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "버터",
+        "간장",
+        "계란"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "라면을 끓입니다.",
+        "버터와 간장을 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-90",
+      "slug": "recipe-90",
+      "title": "순두부라면",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "순두부",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 470,
+      "instructions": [
+        "라면을 끓입니다.",
+        "순두부와 계란을 넣습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-91",
+      "slug": "recipe-91",
+      "title": "토스트",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "식빵",
+        "버터",
+        "잼"
+      ],
+      "cookingTime": 5,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "식빵을 굽습니다.",
+        "버터와 잼을 발라 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-92",
+      "slug": "recipe-92",
+      "title": "프렌치토스트",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "식빵",
+        "계란",
+        "우유",
+        "버터"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "계란물에 식빵을 담급니다.",
+        "팬에 구워 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-93",
+      "slug": "recipe-93",
+      "title": "계란토스트",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "식빵",
+        "계란",
+        "치즈",
+        "버터"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "식빵에 계란과 치즈를 올립니다.",
+        "오ven 또는 팬에 구워 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-94",
+      "slug": "recipe-94",
+      "title": "치즈토스트",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "식빵",
+        "치즈",
+        "버터",
+        "햄"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "재료를 올려 굽습니다.",
+        "치즈가 녹으면 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "potato-fries",
+      "slug": "potato-fries",
+      "title": "감자튀김",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "감자",
+        "식용유",
+        "소금"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "감자를 썰어 튀깁니다.",
+        "소금을 뿌려 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-96",
+      "slug": "recipe-96",
+      "title": "스크램블에그",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "계란",
+        "우유",
+        "버터",
+        "소금"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 150,
+      "instructions": [
+        "계란을 풀어 스크램블합니다.",
+        "완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-97",
+      "slug": "recipe-97",
+      "title": "에그마요샌드위치",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "sandwich",
+      "ingredients": [
+        "식빵",
+        "계란",
+        "마요네즈",
+        "양상추"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "계란삶과 마요를 섞습니다.",
+        "식빵 사이에 넣습니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-98",
+      "slug": "recipe-98",
+      "title": "참치샌드위치",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "sandwich",
+      "ingredients": [
+        "식빵",
+        "참치",
+        "마요네즈",
+        "양상추"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "참치 마요를 만듭니다.",
+        "식빵 사이에 넣습니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-99",
+      "slug": "recipe-99",
+      "title": "햄치즈샌드위치",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "sandwich",
+      "ingredients": [
+        "식빵",
+        "햄",
+        "치즈",
+        "버터"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "재료를 올려 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-100",
+      "slug": "recipe-100",
+      "title": "떡구이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "snack",
+      "ingredients": [
+        "떡",
+        "고추장",
+        "설탕"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "떡을 굽습니다.",
+        "양념을 발라 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-101",
+      "slug": "recipe-101",
+      "title": "치즈떡볶이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "snack",
+      "ingredients": [
+        "떡",
+        "고추장",
+        "치즈",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "떡볶이를 끓입니다.",
+        "치즈를 올려 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "ramen-snack",
+      "slug": "ramen-snack",
+      "title": "라면땅",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "간장",
+        "설탕",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "라면을 부숴 볶습니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-103",
+      "slug": "recipe-103",
+      "title": "식빵피자",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "식빵",
+        "치즈",
+        "토마토소스",
+        "햄"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "식빵에 토핑을 올립니다.",
+        "오ven 또는 팬에 구워 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "potato-cheese-bake",
+      "slug": "potato-cheese-bake",
+      "title": "감자치즈구이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "감자",
+        "치즈",
+        "버터",
+        "소금"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "감자를 슬라이스합니다.",
+        "치즈와 함께 구워 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-105",
+      "slug": "recipe-105",
+      "title": "김치치즈전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "김치",
+        "치즈",
+        "밀가루",
+        "계란"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "반죽을 만들어 지집니다.",
+        "치즈를 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-106",
+      "slug": "recipe-106",
+      "title": "버터구이식빵",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "식빵",
+        "버터",
+        "설탕"
+      ],
+      "cookingTime": 5,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "식빵에 버터를 바릅니다.",
+        "굽거나 팬에 구워 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-107",
+      "slug": "recipe-107",
+      "title": "우유시리얼",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "snack",
+      "ingredients": [
+        "시리얼",
+        "우유"
+      ],
+      "cookingTime": 3,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "그릇에 시리얼을 담습니다.",
+        "우유를 부어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-108",
+      "slug": "recipe-108",
+      "title": "바나나우유스무디",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "drink",
+      "ingredients": [
+        "바나나",
+        "우유",
+        "꿀"
+      ],
+      "cookingTime": 5,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "모든 재료를 갈아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-109",
+      "slug": "recipe-109",
+      "title": "핫도그",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "snack",
+      "ingredients": [
+        "핫도그빵",
+        "소시지",
+        "케첩",
+        "양파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "소시지를 구워 빵에 넣습니다.",
+        "양념을 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-110",
+      "slug": "recipe-110",
+      "title": "닭가슴살볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "high-protein",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "닭가슴살",
+        "양파",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "닭가슴살을 볶습니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "scrambled-eggs",
+      "slug": "scrambled-eggs",
+      "title": "에그스크램블",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "계란",
+        "우유",
+        "소금",
+        "버터"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "계란을 스크램블합니다.",
+        "완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-112",
+      "slug": "recipe-112",
+      "title": "오트밀죽",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "drink",
+      "ingredients": [
+        "오트밀",
+        "우유",
+        "꿀",
+        "바나나"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "오트밀을 끓입니다.",
+        "토핑을 올려 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tofu-salad",
+      "slug": "tofu-salad",
+      "title": "두부샐러드",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "salad",
+      "ingredients": [
+        "두부",
+        "양상추",
+        "토마토",
+        "올리브유"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "두부를 구워 줍니다.",
+        "채소와 함께 담습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "egg-white-omelet",
+      "slug": "egg-white-omelet",
+      "title": "계란흰자오믈렛",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "default",
+      "ingredients": [
+        "계란",
+        "우유",
+        "소금",
+        "식용유"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 120,
+      "instructions": [
+        "계란을 풀어 지집니다.",
+        "완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tuna-salad",
+      "slug": "tuna-salad",
+      "title": "참치샐러드",
+      "image": null,
+      "cuisine": "한식",
+      "category": "high-protein",
+      "dishType": "salad",
+      "ingredients": [
+        "참치",
+        "양상추",
+        "토마토",
+        "올리브유"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "참치와 채소를 섞습니다.",
+        "드레싱을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "chicken-salad",
+      "slug": "chicken-salad",
+      "title": "닭가슴살샐러드",
+      "image": null,
+      "cuisine": "한식",
+      "category": "high-protein",
+      "dishType": "salad",
+      "ingredients": [
+        "닭가슴살",
+        "양상추",
+        "오이",
+        "올리브유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "닭가슴살을 구워 썰어 줍니다.",
+        "샐러드와 함께 담습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-117",
+      "slug": "recipe-117",
+      "title": "두부스테이크",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "default",
+      "ingredients": [
+        "두부",
+        "간장",
+        "마늘",
+        "올리브유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "두부를 두껍게 썰어 구웁니다.",
+        "양념을 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-118",
+      "slug": "recipe-118",
+      "title": "계란찜샐러드",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "salad",
+      "ingredients": [
+        "계란",
+        "양상추",
+        "오이",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 160,
+      "instructions": [
+        "계란찜을 만듭니다.",
+        "채소와 함께 담습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-119",
+      "slug": "recipe-119",
+      "title": "고단백죽",
+      "image": null,
+      "cuisine": "한식",
+      "category": "high-protein",
+      "dishType": "default",
+      "ingredients": [
+        "닭가슴살",
+        "쌀",
+        "대파",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "쌀을 끓입니다.",
+        "닭가슴살을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-120",
+      "slug": "recipe-120",
+      "title": "두부김치찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "stew",
+      "ingredients": [
+        "두부",
+        "김치",
+        "대파",
+        "고춧가루"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "김치를 볶아 끓입니다.",
+        "두부를 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "egg-soup-diet",
+      "slug": "egg-soup-diet",
+      "title": "계란국다이어트",
+      "image": null,
+      "cuisine": "한식",
+      "category": "diet",
+      "dishType": "soup",
+      "ingredients": [
+        "계란",
+        "대파",
+        "멸치육수",
+        "소금"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 90,
+      "instructions": [
+        "육수를 끓입니다.",
+        "계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "shrimp-tofu",
+      "slug": "shrimp-tofu",
+      "title": "새우두부볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "high-protein",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "새우",
+        "두부",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 240,
+      "instructions": [
+        "새우와 두부를 볶습니다.",
+        "간장으로 마무리합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-123",
+      "slug": "recipe-123",
+      "title": "닭가슴살계란볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "high-protein",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "닭가슴살",
+        "계란",
+        "양파",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 260,
+      "instructions": [
+        "닭가슴살을 볶습니다.",
+        "계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-124",
+      "slug": "recipe-124",
+      "title": "마파두부",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "default",
+      "ingredients": [
+        "두부",
+        "돼지고기",
+        "대파",
+        "고추",
+        "간장"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "두부를 넣고 끓입니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-125",
+      "slug": "recipe-125",
+      "title": "짜장라면",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "짜장소스",
+        "양파",
+        "감자"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 500,
+      "instructions": [
+        "채소를 볶습니다.",
+        "짜장과 라면을 넣습니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-126",
+      "slug": "recipe-126",
+      "title": "계란탕면",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "default",
+      "ingredients": [
+        "국수",
+        "계란",
+        "대파",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "면을 삶습니다.",
+        "계란탕 국물에 담습니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-127",
+      "slug": "recipe-127",
+      "title": "볶음짬뽕라면",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "양파",
+        "고추",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "채소를 볶습니다.",
+        "라면과 함께 끓입니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "onion-egg-stir-fry",
+      "slug": "onion-egg-stir-fry",
+      "title": "양파계란볶음",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "양파",
+        "계란",
+        "간장",
+        "식용유"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "양파를 볶습니다.",
+        "계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-129",
+      "slug": "recipe-129",
+      "title": "두부짬뽕",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "default",
+      "ingredients": [
+        "두부",
+        "양파",
+        "고추",
+        "고춧가루"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "양념에 끓입니다.",
+        "두부를 넣어 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-130",
+      "slug": "recipe-130",
+      "title": "깐풍두부",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "default",
+      "ingredients": [
+        "두부",
+        "간장",
+        "마늘",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "두부를 튀기듯 구웁니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-131",
+      "slug": "recipe-131",
+      "title": "계란볶음",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "계란",
+        "토마토",
+        "양파",
+        "설탕"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "재료를 볶습니다.",
+        "완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "onion-stir-fry",
+      "slug": "onion-stir-fry",
+      "title": "양파볶음",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "양파",
+        "간장",
+        "식용유",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 120,
+      "instructions": [
+        "양파를 볶아 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-133",
+      "slug": "recipe-133",
+      "title": "고추계란볶음",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "고추",
+        "계란",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 190,
+      "instructions": [
+        "고추를 볶습니다.",
+        "계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-134",
+      "slug": "recipe-134",
+      "title": "두부볶음",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "두부",
+        "대파",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "두부를 볶아 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-135",
+      "slug": "recipe-135",
+      "title": "라조기",
+      "image": null,
+      "cuisine": "중식",
+      "category": "chinese",
+      "dishType": "stew",
+      "ingredients": [
+        "닭다리",
+        "고추",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "닭을 튀기듯 볶습니다.",
+        "양념을 넣어 완성합니다."
+      ],
+      "tags": [
+        "중식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "-",
+      "slug": "-",
+      "title": "참치 주먹밥",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "김",
+        "참기름",
+        "소금"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "밥과 참치를 섞습니다.",
+        "주먹밥으로 만듭니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "rolled-omelette",
+      "slug": "rolled-omelette",
+      "title": "계란말이",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "default",
+      "ingredients": [
+        "계란",
+        "대파",
+        "간장",
+        "설탕",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "계란물을 만들어 말아 굽습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-138",
+      "slug": "recipe-138",
+      "title": "오야코덮밥",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "닭고기",
+        "계란",
+        "양파",
+        "간장"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 450,
+      "instructions": [
+        "닭과 양파를 볶습니다.",
+        "계란을 올려 밥에 담습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-139",
+      "slug": "recipe-139",
+      "title": "규동",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "소고기",
+        "양파",
+        "간장",
+        "설탕"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 480,
+      "instructions": [
+        "고기와 양파를 볶습니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "natto-rice-bowl",
+      "slug": "natto-rice-bowl",
+      "title": "낫또덮밥",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "낫또",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 5,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "낫또를 준비합니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-141",
+      "slug": "recipe-141",
+      "title": "우동",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "우동",
+        "대파",
+        "간장",
+        "멸치육수"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "육수에 우동을 넣고 끓입니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-142",
+      "slug": "recipe-142",
+      "title": "라멘",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "default",
+      "ingredients": [
+        "라면",
+        "돼지고기",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 500,
+      "instructions": [
+        "육수에 라면을 끓입니다.",
+        "고명을 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-143",
+      "slug": "recipe-143",
+      "title": "돈까스덮밥",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "돈까스",
+        "계란",
+        "양파",
+        "간장"
+      ],
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 550,
+      "instructions": [
+        "돈까스를 준비합니다.",
+        "덮밥으로 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-144",
+      "slug": "recipe-144",
+      "title": "치즈오므라이스",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "계란",
+        "치즈",
+        "케첩",
+        "양파"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 490,
+      "instructions": [
+        "케첩 볶음밥을 만듭니다.",
+        "계란으로 감쌉니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-145",
+      "slug": "recipe-145",
+      "title": "연어덮밥",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "연어",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "연어를 준비합니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-146",
+      "slug": "recipe-146",
+      "title": "참치회덮밥",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "간장",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "참치를 양념합니다.",
+        "밥 위에 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-147",
+      "slug": "recipe-147",
+      "title": "미소된장국",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "soup",
+      "ingredients": [
+        "된장",
+        "두부",
+        "대파",
+        "멸치육수"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 80,
+      "instructions": [
+        "된장을 풀어 끓입니다.",
+        "두부를 넣어 완성합니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-148",
+      "slug": "recipe-148",
+      "title": "야키토리",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "default",
+      "ingredients": [
+        "닭다리",
+        "간장",
+        "설탕",
+        "대파"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 350,
+      "instructions": [
+        "닭을 구워 양념을 바릅니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-149",
+      "slug": "recipe-149",
+      "title": "새우튀김우동",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "noodle",
+      "ingredients": [
+        "우동",
+        "새우",
+        "밀가루",
+        "식용유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 450,
+      "instructions": [
+        "새우튀김을 만듭니다.",
+        "우동과 함께 담습니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "aglio-olio",
+      "slug": "aglio-olio",
+      "title": "알리오 올리오",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "default",
+      "ingredients": [
+        "스파게티",
+        "마늘",
+        "올리브유",
+        "고추",
+        "파슬리"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 520,
+      "instructions": [
+        "면을 삶습니다.",
+        "마늘을 볶고 면과 섞습니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tomato-pasta",
+      "slug": "tomato-pasta",
+      "title": "토마토 파스타",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "noodle",
+      "ingredients": [
+        "스파게티",
+        "토마토",
+        "마늘",
+        "올리브유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "토마토 소스를 만듭니다.",
+        "면과 섞어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "--152",
+      "slug": "--152",
+      "title": "크림 파스타",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "noodle",
+      "ingredients": [
+        "스파게티",
+        "우유",
+        "치즈",
+        "마늘"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 550,
+      "instructions": [
+        "크림 소스를 만듭니다.",
+        "면과 섞어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "--153",
+      "slug": "--153",
+      "title": "봉골레 파스타",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "noodle",
+      "ingredients": [
+        "스파게티",
+        "조개",
+        "마늘",
+        "올리브유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "조개를 볶습니다.",
+        "면과 섞어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "--154",
+      "slug": "--154",
+      "title": "토마토 계란볶음",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "계란",
+        "토마토",
+        "양파",
+        "올리브유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "토마토와 양파를 볶습니다.",
+        "계란을 넣어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "--155",
+      "slug": "--155",
+      "title": "치킨 샐러드",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "salad",
+      "ingredients": [
+        "닭가슴살",
+        "양상추",
+        "토마토",
+        "올리브유"
+      ],
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 310,
+      "instructions": [
+        "닭가슴살을 구웁니다.",
+        "샐러드와 함께 담습니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-156",
+      "slug": "recipe-156",
+      "title": "감자수프",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "default",
+      "ingredients": [
+        "감자",
+        "우유",
+        "양파",
+        "버터"
+      ],
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 200,
+      "instructions": [
+        "감자를 삶습니다.",
+        "갈아 끓여 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-157",
+      "slug": "recipe-157",
+      "title": "계란베네딕트",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "default",
+      "ingredients": [
+        "계란",
+        "식빵",
+        "햄",
+        "버터"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "수란을 만듭니다.",
+        "식빵 위에 올립니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-158",
+      "slug": "recipe-158",
+      "title": "마카로니치즈",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "noodle",
+      "ingredients": [
+        "마카로니",
+        "치즈",
+        "우유",
+        "버터"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "면을 삶습니다.",
+        "치즈 소스와 섞습니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-159",
+      "slug": "recipe-159",
+      "title": "해물토마토파스타",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "noodle",
+      "ingredients": [
+        "스파게티",
+        "토마토",
+        "새우",
+        "마늘"
+      ],
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 420,
+      "instructions": [
+        "해물과 토마토를 볶습니다.",
+        "면과 섞습니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-160",
+      "slug": "recipe-160",
+      "title": "버터감자",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "default",
+      "ingredients": [
+        "감자",
+        "버터",
+        "소금",
+        "파슬리"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "감자를 삶습니다.",
+        "버터와 섞어 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-161",
+      "slug": "recipe-161",
+      "title": "치즈오븐토스트",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "식빵",
+        "치즈",
+        "버터",
+        "햄"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "토핑을 올려 구워 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-162",
+      "slug": "recipe-162",
+      "title": "토마토스프",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "default",
+      "ingredients": [
+        "토마토",
+        "양파",
+        "우유",
+        "올리브유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 150,
+      "instructions": [
+        "재료를 끓여 갈아 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-163",
+      "slug": "recipe-163",
+      "title": "그릴드치즈",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "식빵",
+        "치즈",
+        "버터"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "치즈를 넣고 팬에 구워 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-164",
+      "slug": "recipe-164",
+      "title": "베이컨에그",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "toast",
+      "ingredients": [
+        "베이컨",
+        "계란",
+        "식빵",
+        "버터"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "베이컨과 계란을 구워 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-165",
+      "slug": "recipe-165",
+      "title": "김치계란말이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "김치",
+        "계란",
+        "대파",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "김치를 넣어 계란말이를 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-166",
+      "slug": "recipe-166",
+      "title": "참치계란말이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "참치",
+        "계란",
+        "대파",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 240,
+      "instructions": [
+        "참치를 넣어 계란말이를 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-167",
+      "slug": "recipe-167",
+      "title": "스팸계란말이",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "스팸",
+        "계란",
+        "대파",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "스팸을 넣어 계란말이를 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-168",
+      "slug": "recipe-168",
+      "title": "김치계란볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "김치",
+        "계란",
+        "대파",
+        "참기름"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "김치를 볶고 계란을 넣습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-169",
+      "slug": "recipe-169",
+      "title": "두부계란찜",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "두부",
+        "계란",
+        "대파",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "두부와 계란을 함께 찝니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "potato-egg-stir-fry",
+      "slug": "potato-egg-stir-fry",
+      "title": "감자계란볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "감자",
+        "계란",
+        "양파",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "감자를 볶고 계란을 넣습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "onion-egg-rice-bowl",
+      "slug": "onion-egg-rice-bowl",
+      "title": "양파계란덮밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "양파",
+        "계란",
+        "간장"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 390,
+      "instructions": [
+        "양파와 계란을 볶아 밥에 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-172",
+      "slug": "recipe-172",
+      "title": "마늘종볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "마늘종",
+        "간장",
+        "참기름",
+        "깨"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 80,
+      "instructions": [
+        "마늘종을 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-173",
+      "slug": "recipe-173",
+      "title": "콩나물볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "콩나물",
+        "대파",
+        "마늘",
+        "참기름"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 70,
+      "instructions": [
+        "콩나물을 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-174",
+      "slug": "recipe-174",
+      "title": "시래기국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "시래기",
+        "대파",
+        "간장",
+        "멸치육수"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 100,
+      "instructions": [
+        "시래기를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-175",
+      "slug": "recipe-175",
+      "title": "북어국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "북어",
+        "계란",
+        "대파",
+        "멸치육수"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 120,
+      "instructions": [
+        "북어를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-176",
+      "slug": "recipe-176",
+      "title": "어묵국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "어묵",
+        "대파",
+        "간장",
+        "멸치육수"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 150,
+      "instructions": [
+        "어묵을 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-177",
+      "slug": "recipe-177",
+      "title": "라면국물떡국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "떡",
+        "라면스프",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "육수에 떡을 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-178",
+      "slug": "recipe-178",
+      "title": "김치국",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "김치",
+        "대파",
+        "고춧가루",
+        "멸치육수"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 120,
+      "instructions": [
+        "김치를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-179",
+      "slug": "recipe-179",
+      "title": "된장계란찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "된장",
+        "계란",
+        "두부",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "된장국에 계란을 풀어 넣습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-180",
+      "slug": "recipe-180",
+      "title": "고추장찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "고추장",
+        "두부",
+        "감자",
+        "대파"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "고추장에 재료를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-181",
+      "slug": "recipe-181",
+      "title": "참치김치찌개",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stew",
+      "ingredients": [
+        "참치",
+        "김치",
+        "두부",
+        "대파"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "김치와 참치를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-182",
+      "slug": "recipe-182",
+      "title": "스팸김치볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "스팸",
+        "김치",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "스팸과 김치를 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-183",
+      "slug": "recipe-183",
+      "title": "햄감자볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "햄",
+        "감자",
+        "양파",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "감자와 햄을 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-184",
+      "slug": "recipe-184",
+      "title": "소시지감자볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "소시지",
+        "감자",
+        "양파",
+        "케첩"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "감자와 소시지를 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-185",
+      "slug": "recipe-185",
+      "title": "치즈감자",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "감자",
+        "치즈",
+        "버터",
+        "소금"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "감자를 구워 치즈를 올립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-186",
+      "slug": "recipe-186",
+      "title": "감자스프라면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "감자",
+        "대파",
+        "치즈"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "감자와 라면을 함께 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-187",
+      "slug": "recipe-187",
+      "title": "양파라면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "양파",
+        "계란",
+        "치즈"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 480,
+      "instructions": [
+        "양파를 넣고 라면을 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-188",
+      "slug": "recipe-188",
+      "title": "마늘라면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "마늘",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 490,
+      "instructions": [
+        "마늘을 넣고 라면을 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-189",
+      "slug": "recipe-189",
+      "title": "김치치즈라면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "김치",
+        "치즈",
+        "계란"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 510,
+      "instructions": [
+        "김치와 치즈를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-190",
+      "slug": "recipe-190",
+      "title": "버터치즈라면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "버터",
+        "치즈",
+        "우유"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 530,
+      "instructions": [
+        "버터와 치즈를 넣고 끓입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-191",
+      "slug": "recipe-191",
+      "title": "참치마요라면",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "라면",
+        "참치",
+        "마요네즈",
+        "김"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 500,
+      "instructions": [
+        "라면에 참치마요를 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-192",
+      "slug": "recipe-192",
+      "title": "계란국수",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "계란",
+        "대파",
+        "간장"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "국수에 계란을 곁들입니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-193",
+      "slug": "recipe-193",
+      "title": "들기름국수",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "들기름",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 360,
+      "instructions": [
+        "들기름과 간장에 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-194",
+      "slug": "recipe-194",
+      "title": "김치국수",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "noodle",
+      "ingredients": [
+        "국수",
+        "김치",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 370,
+      "instructions": [
+        "김치 양념에 비벼 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tuna-mayo-rice-ball",
+      "slug": "tuna-mayo-rice-ball",
+      "title": "참치마요주먹밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "마요네즈",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "섞어 주먹밥으로 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "spam-rice-ball",
+      "slug": "spam-rice-ball",
+      "title": "스팸주먹밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "간장",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "instructions": [
+        "스팸을 넣어 주먹밥을 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "kimchi-rice-ball",
+      "slug": "kimchi-rice-ball",
+      "title": "김치주먹밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "김치",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "김치를 넣어 주먹밥을 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "cheese-rice-ball",
+      "slug": "cheese-rice-ball",
+      "title": "치즈주먹밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "치즈",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "치즈를 넣어 주먹밥을 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-199",
+      "slug": "recipe-199",
+      "title": "계란김밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "계란",
+        "김",
+        "단무지",
+        "참기름"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "계란을 지단으로 부쳐 김밥을 말습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-200",
+      "slug": "recipe-200",
+      "title": "참치김밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "김",
+        "단무지",
+        "마요네즈"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "instructions": [
+        "참치마요를 넣어 김밥을 말습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-201",
+      "slug": "recipe-201",
+      "title": "스팸김밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "스팸",
+        "김",
+        "계란",
+        "단무지"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "instructions": [
+        "스팸을 넣어 김밥을 말습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-202",
+      "slug": "recipe-202",
+      "title": "김치김밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "김치",
+        "김",
+        "참기름",
+        "단무지"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 360,
+      "instructions": [
+        "김치를 넣어 김밥을 말습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-203",
+      "slug": "recipe-203",
+      "title": "야채김밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "당근",
+        "시금치",
+        "김",
+        "단무지"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "나물을 넣어 김밥을 말습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-204",
+      "slug": "recipe-204",
+      "title": "계란프라이도시락",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "밥",
+        "계란",
+        "햄",
+        "김",
+        "간장"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "도시락을 싸듯 담아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-205",
+      "slug": "recipe-205",
+      "title": "참치쌈",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "참치",
+        "양상추",
+        "마요네즈",
+        "고추장"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "쌈채에 참치를 싸 먹습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-206",
+      "slug": "recipe-206",
+      "title": "삼겹살쌈",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "삼겹살",
+        "상추",
+        "마늘",
+        "쌈장"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "instructions": [
+        "고기를 구워 쌈에 싸 먹습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-207",
+      "slug": "recipe-207",
+      "title": "두부쌈",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "두부",
+        "깻잎",
+        "간장",
+        "마늘"
+      ],
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "instructions": [
+        "두부를 구워 쌈에 싸 먹습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-208",
+      "slug": "recipe-208",
+      "title": "김치전병",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "김치",
+        "밀가루",
+        "계란",
+        "대파"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "김치전을 더 얇게 부쳐 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-209",
+      "slug": "recipe-209",
+      "title": "호박전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "애호박",
+        "밀가루",
+        "계란",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "instructions": [
+        "호박을 넣어 전을 부칩니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-210",
+      "slug": "recipe-210",
+      "title": "부추전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "부추",
+        "밀가루",
+        "계란",
+        "식용유"
+      ],
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "부추전을 부칩니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-211",
+      "slug": "recipe-211",
+      "title": "파전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "대파",
+        "밀가루",
+        "계란",
+        "식용유"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "대파를 넣어 전을 부칩니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-212",
+      "slug": "recipe-212",
+      "title": "해물파전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "대파",
+        "오징어",
+        "밀가루",
+        "계란"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 320,
+      "instructions": [
+        "해물과 파를 넣어 전을 부칩니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "cheese-pancake",
+      "slug": "cheese-pancake",
+      "title": "치즈전",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "치즈",
+        "밀가루",
+        "계란",
+        "식용유"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "치즈를 넣어 전을 부칩니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-214",
+      "slug": "recipe-214",
+      "title": "고구마맛탕",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "soup",
+      "ingredients": [
+        "고구마",
+        "설탕",
+        "식용유",
+        "깨"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 300,
+      "instructions": [
+        "고구마를 튀겨 시럽에 버무립니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "sweet-potato-fries",
+      "slug": "sweet-potato-fries",
+      "title": "고구마튀김",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "pancake",
+      "ingredients": [
+        "고구마",
+        "식용유",
+        "소금"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 280,
+      "instructions": [
+        "고구마를 튀겨 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "sweet-potato-sticks",
+      "slug": "sweet-potato-sticks",
+      "title": "고구마스틱",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "고구마",
+        "식용유",
+        "소금"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 260,
+      "instructions": [
+        "고구마를 스틱 모양으로 튀깁니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-217",
+      "slug": "recipe-217",
+      "title": "고구마라떼",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "drink",
+      "ingredients": [
+        "고구마",
+        "우유",
+        "꿀"
+      ],
+      "cookingTime": 5,
+      "difficulty": "쉬움",
+      "calories": 200,
+      "instructions": [
+        "고구마와 우유를 갈아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "recipe-218",
+      "slug": "recipe-218",
+      "title": "고구마죽",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "default",
+      "ingredients": [
+        "고구마",
+        "쌀",
+        "우유",
+        "설탕"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 250,
+      "instructions": [
+        "고구마죽을 끓여 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "egg-in-hell",
+      "slug": "egg-in-hell",
+      "title": "에그인헬",
+      "image": null,
+      "cuisine": "양식",
+      "category": "western",
+      "dishType": "stew",
+      "ingredients": [
+        "계란",
+        "토마토",
+        "양파",
+        "마늘",
+        "올리브오일",
+        "소금",
+        "후추",
+        "파슬리 (선택)"
+      ],
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 290,
+      "instructions": [
+        "양파와 마늘을 다져 올리브오일에 볶습니다.",
+        "토마토를 넣고 으깨며 끓입니다. 소금, 후추로 간합니다.",
+        "중앙에 계란을 넣고 뚜껑을 덮어 반숙 상태로 익힙니다.",
+        "파슬리를 뿌려 완성합니다."
+      ],
+      "tags": [
+        "양식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "spicy-pork",
+      "slug": "spicy-pork",
+      "title": "제육볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "돼지고기",
+        "양파",
+        "대파",
+        "고추장",
+        "고춧가루",
+        "마늘",
+        "간장"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 480,
+      "instructions": [
+        "돼지고기를 양념에 재웁니다.",
+        "팬에 고기와 채소를 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "curry-rice",
+      "slug": "curry-rice",
+      "title": "카레라이스",
+      "image": null,
+      "cuisine": "일식",
+      "category": "japanese",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "카레가루",
+        "감자",
+        "당근",
+        "양파",
+        "돼지고기"
+      ],
+      "cookingTime": 25,
+      "difficulty": "쉬움",
+      "calories": 520,
+      "instructions": [
+        "채소와 고기를 볶습니다.",
+        "물과 카레가루를 넣고 끓입니다.",
+        "밥 위에 카레를 올립니다."
+      ],
+      "tags": [
+        "일식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "japchae",
+      "slug": "japchae",
+      "title": "잡채",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "당면",
+        "시금치",
+        "당근",
+        "양파",
+        "버섯",
+        "간장",
+        "참기름"
+      ],
+      "cookingTime": 30,
+      "difficulty": "보통",
+      "calories": 380,
+      "instructions": [
+        "당면을 삶습니다.",
+        "채소와 함께 볶아 간을 맞춥니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "sausage-stir-fry",
+      "slug": "sausage-stir-fry",
+      "title": "소시지볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "소시지",
+        "양파",
+        "케첩",
+        "고추장",
+        "대파"
+      ],
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 350,
+      "instructions": [
+        "소시지를 잘라 볶습니다.",
+        "양념과 채소를 넣어 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "spicy-squid",
+      "slug": "spicy-squid",
+      "title": "오징어볶음",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "오징어",
+        "양파",
+        "대파",
+        "고추장",
+        "고춧가루",
+        "마늘"
+      ],
+      "cookingTime": 15,
+      "difficulty": "보통",
+      "calories": 280,
+      "instructions": [
+        "오징어를 손질합니다.",
+        "채소와 함께 매콤하게 볶습니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "bibimbap",
+      "slug": "bibimbap",
+      "title": "비빔밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "시금치",
+        "당근",
+        "콩나물",
+        "계란",
+        "고추장",
+        "참기름"
+      ],
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 550,
+      "instructions": [
+        "나물을 준비합니다.",
+        "밥 위에 재료를 올리고 고추장과 참기름을 넣어 비빕니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "bulgogi",
+      "slug": "bulgogi",
+      "title": "불고기",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "stir-fry",
+      "ingredients": [
+        "소고기",
+        "양파",
+        "대파",
+        "간장",
+        "설탕",
+        "마늘",
+        "참기름"
+      ],
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 420,
+      "instructions": [
+        "소고기를 양념에 재웁니다.",
+        "양파와 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "tuna-rice-ball",
+      "slug": "tuna-rice-ball",
+      "title": "참치주먹밥",
+      "image": null,
+      "cuisine": "한식",
+      "category": "korean",
+      "dishType": "rice-bowl",
+      "ingredients": [
+        "밥",
+        "참치",
+        "간장",
+        "참기름",
+        "김"
+      ],
+      "cookingTime": 8,
+      "difficulty": "쉬움",
+      "calories": 360,
+      "instructions": [
+        "참치와 밥을 섞어 주먹밥으로 만듭니다."
+      ],
+      "tags": [
+        "한식"
+      ],
+      "substitutions": []
+    },
+    {
+      "id": "pad-thai",
+      "slug": "pad-thai",
+      "title": "팟타이",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "noodle",
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 480,
+      "ingredients": [
+        "쌀국수",
+        "새우",
+        "계란",
+        "숙주",
+        "땅콩",
+        "라임",
+        "팜설탕",
+        "타마린드"
+      ],
+      "instructions": [
+        "면을 불립니다.",
+        "팬에 재료를 볶고 소스를 넣습니다.",
+        "면과 함께 볶아 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "면요리"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "pad-kra-pao",
+      "slug": "pad-kra-pao",
+      "title": "팟카파오",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "stir-fry",
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 420,
+      "ingredients": [
+        "돼지고기",
+        "홍고추",
+        "마늘",
+        "바질",
+        "밥",
+        "간장",
+        "설탕"
+      ],
+      "instructions": [
+        "고기와 마늘·고추를 볶습니다.",
+        "바질과 양념을 넣습니다.",
+        "밥과 함께 담아 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "볶음"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "tom-yum-goong",
+      "slug": "tom-yum-goong",
+      "title": "똠얌꿍",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "soup",
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 280,
+      "ingredients": [
+        "새우",
+        "레몬그라스",
+        "갈랑가",
+        "라임잎",
+        "고추",
+        "버섯",
+        "타마린드"
+      ],
+      "instructions": [
+        "육수에 향신채를 넣고 끓입니다.",
+        "새우와 버섯을 넣습니다.",
+        "라임즙으로 맛을 맞춥니다."
+      ],
+      "tags": [
+        "태국",
+        "국물"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "yum-woon-sen",
+      "slug": "yum-woon-sen",
+      "title": "얌운센",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "salad",
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 220,
+      "ingredients": [
+        "당면",
+        "새우",
+        "양파",
+        "토마토",
+        "라임",
+        "고추",
+        "설탕",
+        "생선소스"
+      ],
+      "instructions": [
+        "당면을 삶습니다.",
+        "새우와 채소를 넣고 무칩니다.",
+        "라임 드레싱으로 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "샐러드"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "som-tam",
+      "slug": "som-tam",
+      "title": "쏨땀",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "salad",
+      "cookingTime": 10,
+      "difficulty": "쉬움",
+      "calories": 180,
+      "ingredients": [
+        "파파야",
+        "토마토",
+        "땅콩",
+        "라임",
+        "생선소스",
+        "설탕",
+        "고추",
+        "마늘"
+      ],
+      "instructions": [
+        "파파야를 채 썹니다.",
+        "양념과 함께 무칩니다.",
+        "땅콩을 올려 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "샐러드"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "green-curry",
+      "slug": "green-curry",
+      "title": "그린커리",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "stew",
+      "cookingTime": 25,
+      "difficulty": "보통",
+      "calories": 380,
+      "ingredients": [
+        "닭고기",
+        "그린커리페이스트",
+        "코코넛밀크",
+        "가지",
+        "홍고추",
+        "바질",
+        "밥"
+      ],
+      "instructions": [
+        "커리페이스트를 볶습니다.",
+        "코코넛밀크와 닭고기를 넣고 끓입니다.",
+        "채소와 바질을 넣어 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "커리"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "khao-pad",
+      "slug": "khao-pad",
+      "title": "카오팟",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "fried-rice",
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 450,
+      "ingredients": [
+        "밥",
+        "계란",
+        "양파",
+        "대파",
+        "생선소스",
+        "설탕",
+        "라임"
+      ],
+      "instructions": [
+        "계란을 볶습니다.",
+        "밥과 양념을 넣고 볶습니다.",
+        "라임을 곁들여 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "볶음밥"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "thai-basil-chicken",
+      "slug": "thai-basil-chicken",
+      "title": "태국식 바질 치킨",
+      "cuisine": "태국",
+      "category": "thai",
+      "dishType": "stir-fry",
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 400,
+      "ingredients": [
+        "닭고기",
+        "홍고추",
+        "마늘",
+        "바질",
+        "간장",
+        "설탕",
+        "밥"
+      ],
+      "instructions": [
+        "닭고기를 볶습니다.",
+        "양념과 바질을 넣습니다.",
+        "밥과 함께 담아 완성합니다."
+      ],
+      "tags": [
+        "태국",
+        "볶음"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "pho",
+      "slug": "pho",
+      "title": "쌀국수",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "noodle",
+      "cookingTime": 40,
+      "difficulty": "보통",
+      "calories": 420,
+      "ingredients": [
+        "쌀국수",
+        "소고기",
+        "양파",
+        "생강",
+        "계피",
+        "고수",
+        "라임",
+        "숙주"
+      ],
+      "instructions": [
+        "육수를 끓입니다.",
+        "면을 삶습니다.",
+        "고명과 함께 담아 완성합니다."
+      ],
+      "tags": [
+        "베트남",
+        "면요리"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "bun-cha",
+      "slug": "bun-cha",
+      "title": "분짜",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "default",
+      "cookingTime": 30,
+      "difficulty": "보통",
+      "calories": 480,
+      "ingredients": [
+        "돼지고기",
+        "쌀국수",
+        "양파",
+        "마늘",
+        "설탕",
+        "생선소스",
+        "라임",
+        "고수"
+      ],
+      "instructions": [
+        "고기를 양념해 구웁니다.",
+        "면을 삶습니다.",
+        "소스와 함께 담아 완성합니다."
+      ],
+      "tags": [
+        "베트남"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "banh-mi",
+      "slug": "banh-mi",
+      "title": "반미",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "toast",
+      "cookingTime": 15,
+      "difficulty": "쉬움",
+      "calories": 380,
+      "ingredients": [
+        "바게트",
+        "돼지고기",
+        "오이",
+        "당근",
+        "고수",
+        "마요네즈",
+        "간장"
+      ],
+      "instructions": [
+        "빵을 토스팅합니다.",
+        "속재료를 넣습니다.",
+        "고기와 채소를 담아 완성합니다."
+      ],
+      "tags": [
+        "베트남",
+        "샌드위치"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "vietnamese-spring-rolls",
+      "slug": "vietnamese-spring-rolls",
+      "title": "월남쌈",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "default",
+      "cookingTime": 20,
+      "difficulty": "쉬움",
+      "calories": 260,
+      "ingredients": [
+        "라이스페이퍼",
+        "새우",
+        "돼지고기",
+        "숙주",
+        "상추",
+        "고수",
+        "라이스버미셀리"
+      ],
+      "instructions": [
+        "재료를 준비합니다.",
+        "라이스페이퍼에 싸듯 담습니다.",
+        "소스와 함께 완성합니다."
+      ],
+      "tags": [
+        "베트남"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "bun-bo-hue",
+      "slug": "bun-bo-hue",
+      "title": "분보후에",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "noodle",
+      "cookingTime": 45,
+      "difficulty": "어려움",
+      "calories": 460,
+      "ingredients": [
+        "쌀국수",
+        "소고기",
+        "돼지고기",
+        "레몬그라스",
+        "고추",
+        "숙주",
+        "라임"
+      ],
+      "instructions": [
+        "매운 육수를 끓입니다.",
+        "면을 삶습니다.",
+        "고기와 채소를 올려 완성합니다."
+      ],
+      "tags": [
+        "베트남",
+        "면요리"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "vietnamese-fried-rice",
+      "slug": "vietnamese-fried-rice",
+      "title": "베트남식 볶음밥",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "fried-rice",
+      "cookingTime": 12,
+      "difficulty": "쉬움",
+      "calories": 430,
+      "ingredients": [
+        "밥",
+        "계란",
+        "새우",
+        "양파",
+        "완두콩",
+        "생선소스",
+        "설탕"
+      ],
+      "instructions": [
+        "새우와 계란을 볶습니다.",
+        "밥과 양념을 넣고 볶습니다.",
+        "완성합니다."
+      ],
+      "tags": [
+        "베트남",
+        "볶음밥"
+      ],
+      "image": null,
+      "substitutions": []
+    },
+    {
+      "id": "lemongrass-chicken",
+      "slug": "lemongrass-chicken",
+      "title": "레몬그라스 치킨",
+      "cuisine": "베트남",
+      "category": "vietnamese",
+      "dishType": "stir-fry",
+      "cookingTime": 20,
+      "difficulty": "보통",
+      "calories": 390,
+      "ingredients": [
+        "닭고기",
+        "레몬그라스",
+        "마늘",
+        "양파",
+        "설탕",
+        "생선소스",
+        "밥"
+      ],
+      "instructions": [
+        "레몬그라스와 닭고기를 볶습니다.",
+        "양념을 넣고 익힙니다.",
+        "밥과 함께 완성합니다."
+      ],
+      "tags": [
+        "베트남",
+        "볶음"
+      ],
+      "image": null,
+      "substitutions": []
+    }
+  ]
+}

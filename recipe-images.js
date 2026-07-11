@@ -1,63 +1,51 @@
 /**
- * 레시피 카드 공통 이미지 선택·렌더링
- * 우선순위: imageUrl → image/thumbnailUrl → category → name 키워드 → default
+ * 레시피 대표 이미지 — /public/images/recipes (URL: /images/recipes)
+ * 파일명: {slug}.webp | {id}.webp → 없으면 default-recipe.webp
  */
 window.RECIPE_IMAGE_MAP = {};
 
-const RECIPE_IMAGE_ASSET_BASE = 'src/assets/recipe-images/';
+const RECIPE_IMAGES_BASE = 'images/recipes/';
+const DEFAULT_RECIPE_IMAGE = `${RECIPE_IMAGES_BASE}default-recipe.webp`;
+const RECIPE_IMAGE_VERSION = '2';
+const RECIPE_IMAGE_EXTENSIONS = ['webp', 'jpg', 'jpeg', 'png'];
 
-const RECIPE_DISH_TYPE_ASSETS = {
-  stew: 'stew.png',
-  soup: 'soup.png',
-  'fried-rice': 'rice.png',
-  'rice-bowl': 'rice.png',
-  noodle: 'noodle.png',
-  pasta: 'pasta.png',
-  'stir-fry': 'stir-fry.png',
-  salad: 'default.png',
-  toast: 'default.png',
-  pancake: 'stir-fry.png',
-  snack: 'default.png',
-  sandwich: 'default.png',
-  dessert: 'default.png',
-  drink: 'default.png',
-  default: 'default.png',
-};
-
-const RECIPE_CATEGORY_ASSETS = {
-  western: 'pasta.png',
-  italian: 'pasta.png',
-  chinese: 'noodle.png',
-  japanese: 'rice.png',
-};
-
-const RECIPE_KEYWORD_ASSETS = [
-  [/토마토.*계란|계란.*토마토/, 'tomato-egg.png'],
-  [/감자/, 'potato.png'],
-  [/파스타|스파게티|알리오|봉골레|페투치네|크림파스/, 'pasta.png'],
-  [/김치찌개|된장찌개|순두부|찌개|찜|조림|전골|육개장|김치/, 'stew.png'],
-  [/볶음밥|덮밥|주먹밥|오므라이스|규동|김밥|밥$/, 'rice.png'],
-  [/계란|달걀|오믈렛|스크램블|계란볶/, 'egg.png'],
-  [/라면|우동|짬뽕|짜장|국수|쫄면|냉면|수제비|라볶이/, 'noodle.png'],
-  [/국$|미역국|된장국|탕$|스프|콩나물국|어묵국/, 'soup.png'],
-  [/볶음|무침/, 'stir-fry.png'],
-];
-
-function inferRecipeDishType(name) {
-  if (typeof DishTypeService !== 'undefined') return DishTypeService.infer(name);
-  const rules = [
-    ['fried-rice', /볶음밥/],
-    ['rice-bowl', /덮밥|주먹밥|오므라이스|김밥/],
-    ['noodle', /라면|우동|국수|파스타|스파게티|쫄면|냉면/],
-    ['stew', /찌개|찜|조림|전골/],
-    ['soup', /국$|탕$|스프/],
-    ['stir-fry', /볶음|무침|스크램블/],
-  ];
-  for (const [type, pattern] of rules) {
-    if (pattern.test(name || '')) return type;
-  }
-  return 'default';
+function withRecipeImageVersion(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}v=${RECIPE_IMAGE_VERSION}`;
 }
+
+/** 레시피명 → slug (이미지 파일명). scripts/recipe-collage-tiles.json 과 동기화 */
+const RECIPE_NAME_SLUGS = {
+  '고구마튀김': 'sweet-potato-fries',
+  '감자튀김': 'potato-fries',
+  '고구마스틱': 'sweet-potato-sticks',
+  '계란흰자오믈렛': 'egg-white-omelet',
+  '감자전': 'potato-pancake',
+  '감자치즈구이': 'potato-cheese-bake',
+  '에그인헬': 'egg-in-hell',
+  '참치주먹밥': 'tuna-rice-ball',
+  '참기름김볶음밥': 'sesame-seaweed-fried-rice',
+  '낫또덮밥': 'natto-rice-bowl',
+  '에그스크램블': 'scrambled-eggs',
+  '참치마요주먹밥': 'tuna-mayo-rice-ball',
+  '스팸주먹밥': 'spam-rice-ball',
+  '김치주먹밥': 'kimchi-rice-ball',
+  '치즈주먹밥': 'cheese-rice-ball',
+  '라면': 'ramen',
+  '두부샐러드': 'tofu-salad',
+  '참치샐러드': 'tuna-salad',
+  '계란국다이어트': 'egg-soup-diet',
+  '양파계란볶음': 'onion-egg-stir-fry',
+  '양파볶음': 'onion-stir-fry',
+  '양파계란덮밥': 'onion-egg-rice-bowl',
+  '치즈전': 'cheese-pancake',
+  '냉파스타': 'cold-pasta',
+  '라면땅': 'ramen-snack',
+};
+
+const LEGACY_ASSET_BASE = 'src/assets/recipe-images/';
 
 function isUnsplashUrl(url) {
   return String(url || '').includes('images.unsplash.com');
@@ -70,33 +58,78 @@ function normalizeRecipePhotoUrl(url) {
   if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-  if (trimmed.startsWith('src/assets/') || trimmed.startsWith('images/')) return trimmed;
-  return `images/recipes/${trimmed}`;
+  if (trimmed.startsWith(RECIPE_IMAGES_BASE)) return withRecipeImageVersion(trimmed);
+  if (trimmed.startsWith('public/images/recipes/')) {
+    return trimmed.replace(/^public\//, '');
+  }
+  if (trimmed.startsWith('images/recipes/')) return trimmed;
+  if (trimmed.startsWith('src/assets/')) return trimmed;
+  if (trimmed.startsWith('/')) return trimmed.replace(/^\//, '');
+  return `${RECIPE_IMAGES_BASE}${trimmed}`;
 }
 
-function resolveRecipeAssetFile(recipe) {
+function inferRecipeSlug(recipe) {
   const name = recipe?.name || recipe?.title || '';
-  const category = recipe?.category;
-
-  if (category && RECIPE_CATEGORY_ASSETS[category]) {
-    return RECIPE_CATEGORY_ASSETS[category];
+  if (recipe?.slug) {
+    const slug = String(recipe.slug).trim();
+    if (slug && !slug.startsWith('builtin-')) return slug;
   }
-  for (const [pattern, file] of RECIPE_KEYWORD_ASSETS) {
-    if (pattern.test(name)) return file;
-  }
-  const dishType = recipe?.dishType || inferRecipeDishType(name);
-  if (dishType && RECIPE_DISH_TYPE_ASSETS[dishType] && dishType !== 'default') {
-    return RECIPE_DISH_TYPE_ASSETS[dishType];
-  }
-  return 'default.png';
+  if (recipe?.imageSlug) return String(recipe.imageSlug).trim();
+  if (name && RECIPE_NAME_SLUGS[name]) return RECIPE_NAME_SLUGS[name];
+  const id = recipe?.id ? String(recipe.id).trim() : '';
+  if (id && !id.startsWith('builtin-')) return id;
+  return '';
 }
 
-function recipeAssetUrl(file) {
-  return `${RECIPE_IMAGE_ASSET_BASE}${file}`;
+function getBundledImageSrc(recipe) {
+  const slug = inferRecipeSlug(recipe);
+  if (!slug) return null;
+  return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${slug}.webp`);
+}
+
+function buildRecipeImageCandidates(recipe) {
+  const slugs = [];
+  const slug = inferRecipeSlug(recipe);
+  if (slug) slugs.push(slug);
+  if (recipe?.id && !slugs.includes(recipe.id)) slugs.push(recipe.id);
+  if (recipe?.source === 'builtin' && recipe?.id?.startsWith('builtin-')) {
+    const numericId = recipe.id.replace(/^builtin-/, '');
+    if (numericId && !slugs.includes(numericId)) slugs.push(numericId);
+  }
+
+  const paths = [];
+  slugs.forEach((key) => {
+    RECIPE_IMAGE_EXTENSIONS.forEach((ext) => {
+      paths.push(withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${key}.${ext}`));
+    });
+  });
+  paths.push(withRecipeImageVersion(DEFAULT_RECIPE_IMAGE));
+  paths.push(withRecipeImageVersion(`${RECIPE_IMAGES_BASE}default-recipe.png`));
+  return [...new Set(paths)];
+}
+
+function resolveLegacyCategoryAsset(recipe) {
+  const map = typeof RECIPE_IMAGE_MAP !== 'undefined' ? RECIPE_IMAGE_MAP : {};
+  const name = recipe?.name || recipe?.title || '';
+  if (name && map[name]) return normalizeRecipePhotoUrl(map[name]);
+  const category = recipe?.category;
+  const categoryAssets = {
+    western: 'pasta.png',
+    italian: 'pasta.png',
+    chinese: 'noodle.png',
+    japanese: 'rice.png',
+  };
+  if (category && categoryAssets[category]) {
+    return `${LEGACY_ASSET_BASE}${categoryAssets[category]}`;
+  }
+  return `${LEGACY_ASSET_BASE}default.png`;
 }
 
 window.RecipeImageService = {
-  assetBase: RECIPE_IMAGE_ASSET_BASE,
+  basePath: RECIPE_IMAGES_BASE,
+  defaultSrc: DEFAULT_RECIPE_IMAGE,
+
+  inferSlug: inferRecipeSlug,
 
   isValidPhoto(url) {
     if (!url || typeof url !== 'string') return false;
@@ -105,65 +138,73 @@ window.RecipeImageService = {
     return true;
   },
 
+  isUserUploadedPhoto(url) {
+    if (!this.isValidPhoto(url)) return false;
+    const normalized = normalizeRecipePhotoUrl(url);
+    if (!normalized) return false;
+    if (normalized.startsWith('data:')) return true;
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) return true;
+    if (normalized.startsWith(RECIPE_IMAGES_BASE)) return false;
+    if (normalized.startsWith(LEGACY_ASSET_BASE)) return false;
+    return true;
+  },
+
   pickPhoto(recipe) {
     if (!recipe) return null;
     const candidates = [recipe.imageUrl, recipe.image, recipe.thumbnailUrl];
     for (const raw of candidates) {
       const normalized = normalizeRecipePhotoUrl(raw);
-      if (normalized && this.isValidPhoto(normalized)) return normalized;
+      if (!normalized || !this.isValidPhoto(normalized)) continue;
+      if (this.isUserUploadedPhoto(normalized)) return normalized;
+      if (normalized.startsWith(RECIPE_IMAGES_BASE) && normalized !== DEFAULT_RECIPE_IMAGE) {
+        return normalized;
+      }
     }
-    return null;
+    return getBundledImageSrc(recipe);
   },
 
-  resolveAssetFile(recipe) {
-    const map = typeof RECIPE_IMAGE_MAP !== 'undefined' ? RECIPE_IMAGE_MAP : {};
-    const name = recipe?.name || recipe?.title || '';
-    if (name && map[name]) return map[name].replace(RECIPE_IMAGE_ASSET_BASE, '');
-    return resolveRecipeAssetFile(recipe);
+  getCandidatePaths(recipe) {
+    return buildRecipeImageCandidates(recipe);
   },
 
-  resolveCategoryAssetSrc(recipe) {
-    return recipeAssetUrl(this.resolveAssetFile(recipe));
-  },
-
-  resolveDefaultAssetSrc() {
-    return recipeAssetUrl('default.png');
-  },
-
-  /** 표시용 최종 src (1~4순위) */
   resolveSrc(recipe) {
-    const photo = this.pickPhoto(recipe);
-    if (photo) return photo;
-    return this.resolveCategoryAssetSrc(recipe);
+    const userPhoto = this.pickPhoto(recipe);
+    if (userPhoto) return userPhoto;
+    return getBundledImageSrc(recipe) || DEFAULT_RECIPE_IMAGE;
   },
 
-  /** 시드/저장용 — 사진 없으면 카테고리 에셋 경로 */
   resolveForStorage(recipe) {
-    const photo = this.pickPhoto(recipe);
-    if (photo && !photo.startsWith(RECIPE_IMAGE_ASSET_BASE)) return photo;
-    return this.resolveCategoryAssetSrc(recipe);
+    const userPhoto = this.pickPhoto(recipe);
+    if (userPhoto && this.isUserUploadedPhoto(userPhoto)) return userPhoto;
+    return getBundledImageSrc(recipe) || DEFAULT_RECIPE_IMAGE;
   },
 
   handleImgError(img) {
     if (!img) return;
-    const step = img.dataset.fallbackStep || '0';
-    const category = img.dataset.fallbackCategory;
-    const fallback = img.dataset.fallbackDefault;
-    if (step === '0' && category && img.src !== category) {
-      img.dataset.fallbackStep = '1';
-      img.src = category;
+    let candidates = [];
+    try {
+      candidates = JSON.parse(img.dataset.fallbackCandidates || '[]');
+    } catch {
+      candidates = [];
+    }
+    const index = Number(img.dataset.fallbackIndex || '0');
+    const next = candidates[index];
+    if (next && img.src !== next) {
+      img.dataset.fallbackIndex = String(index + 1);
+      img.src = next;
       return;
     }
-    if (step !== '2' && fallback && img.src !== fallback) {
-      img.dataset.fallbackStep = '2';
-      img.src = fallback;
+    const legacy = img.dataset.fallbackLegacy;
+    if (legacy && img.src !== legacy) {
+      img.dataset.fallbackLegacy = '';
+      img.src = legacy;
+      return;
+    }
+    if (img.src !== DEFAULT_RECIPE_IMAGE) {
+      img.src = DEFAULT_RECIPE_IMAGE;
     }
   },
 
-  /**
-   * @param {object} recipe
-   * @param {{ variant?: 'card'|'hero'|'thumb'|'home-hero', zoomable?: boolean, alt?: string, lazy?: boolean }} options
-   */
   renderImg(recipe, options = {}) {
     const {
       variant = 'thumb',
@@ -173,25 +214,38 @@ window.RecipeImageService = {
     } = options;
 
     const name = recipe?.name || recipe?.title || '요리';
-    const src = this.resolveSrc(recipe);
-    const categorySrc = this.resolveCategoryAssetSrc(recipe);
-    const defaultSrc = this.resolveDefaultAssetSrc();
+    const candidates = buildRecipeImageCandidates(recipe);
+    const userPhoto = this.pickPhoto(recipe);
+    const src = userPhoto || candidates[0] || DEFAULT_RECIPE_IMAGE;
+    const legacyFallback = resolveLegacyCategoryAsset(recipe);
     const altText = typeof esc === 'function' ? esc(alt || name) : String(alt || name).replace(/"/g, '&quot;');
     const escSrc = typeof esc === 'function' ? esc(src) : src;
     const lazyAttr = lazy ? ' loading="lazy"' : '';
-    const dataAttrs = `data-fallback-category="${typeof esc === 'function' ? esc(categorySrc) : categorySrc}" data-fallback-default="${typeof esc === 'function' ? esc(defaultSrc) : defaultSrc}"`;
+    const fallbackCandidates = userPhoto
+      ? [DEFAULT_RECIPE_IMAGE, `${RECIPE_IMAGES_BASE}default-recipe.png`]
+      : candidates.slice(1);
+    const dataAttrs = [
+      `data-fallback-candidates="${typeof esc === 'function' ? esc(JSON.stringify(fallbackCandidates)) : JSON.stringify(fallbackCandidates)}"`,
+      `data-fallback-index="0"`,
+      `data-fallback-legacy="${typeof esc === 'function' ? esc(legacyFallback) : legacyFallback}"`,
+    ].join(' ');
 
     const classMap = {
       card: 'recipe-card__image recipe-display-image',
-      hero: 'recipe-display-image',
+      feed: 'recipe-card__image recipe-card__image--feed recipe-display-image',
+      hero: 'recipe-detail__hero-img',
       thumb: 'home-recipe-row__thumb recipe-display-image',
       'home-hero': 'home-today-hero__img recipe-display-image',
+      planner: 'planner-meal__img recipe-display-image',
     };
     const imgClass = classMap[variant] || 'recipe-display-image';
     const img = `<img class="${imgClass}" src="${escSrc}" alt="${altText}"${lazyAttr} onerror="RecipeImageService.handleImgError(this)" ${dataAttrs}>`;
 
     if (variant === 'card' && zoomable) {
       return `<button type="button" class="recipe-card__image-btn" data-zoom-src="${escSrc}" aria-label="${altText} 사진 크게 보기">${img}</button>`;
+    }
+    if (variant === 'feed' && zoomable) {
+      return `<button type="button" class="recipe-card__image-btn recipe-card__image-btn--feed" data-zoom-src="${escSrc}" aria-label="${altText} 사진 크게 보기">${img}</button>`;
     }
     if (variant === 'hero' && zoomable) {
       return `<button type="button" class="recipe-detail__hero-btn" data-zoom-src="${escSrc}" aria-label="${altText} 사진 크게 보기">${img}</button>`;
@@ -200,9 +254,9 @@ window.RecipeImageService = {
   },
 };
 
-/** @deprecated RecipeImageService.resolveSrc 사용 */
+/** @deprecated */
 window.RecipeThumbnailService = {
   getDataUri(name, dishType) {
-    return RecipeImageService.resolveCategoryAssetSrc({ name, dishType });
+    return RecipeImageService.resolveSrc({ name, dishType });
   },
 };

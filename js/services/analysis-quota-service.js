@@ -6,6 +6,17 @@ import { FirestoreUserService } from './firestore-user-service.js';
 import { FREE_ANALYSIS_LIMIT } from '../firebase.js';
 
 const GUEST_QUOTA_KEY = 'naengjanggo_guest_free_analysis_remaining';
+const ADMIN_UNLIMITED_USAGE = {
+  remaining: null,
+  limit: null,
+  used: 0,
+  source: 'admin',
+  unlimited: true,
+};
+
+function isAdminUser() {
+  return window.FirebaseServices?.AdminService?.isAdmin?.() === true;
+}
 
 function readGuestLocalRemaining() {
   try {
@@ -35,6 +46,14 @@ export const AnalysisQuotaService = {
     return FREE_ANALYSIS_LIMIT;
   },
 
+  getAdminUnlimitedUsage() {
+    return { ...ADMIN_UNLIMITED_USAGE };
+  },
+
+  isAdmin() {
+    return isAdminUser();
+  },
+
   /** 게스트: LocalStorage 기준 남은 횟수 */
   getGuestLocalUsage() {
     const remaining = readGuestLocalRemaining();
@@ -48,6 +67,7 @@ export const AnalysisQuotaService = {
 
   /** 로그인: Firestore에서 읽기 */
   async fetchLoggedInUsage() {
+    if (isAdminUser()) return this.getAdminUnlimitedUsage();
     const uid = AuthService.getUid();
     if (!uid) return null;
     const remaining = await FirestoreUserService.getFreeAnalysisRemaining(uid);
@@ -57,6 +77,7 @@ export const AnalysisQuotaService = {
   /** 현재 사용자 기준 usage 조회 */
   async fetchUsage() {
     if (this.isLoggedIn()) {
+      if (isAdminUser()) return this.getAdminUnlimitedUsage();
       return this.fetchLoggedInUsage();
     }
 
@@ -81,6 +102,7 @@ export const AnalysisQuotaService = {
   /** AI 분석 성공 후 게스트 LocalStorage 동기화 */
   syncGuestAfterSuccess(aiUsage) {
     if (this.isLoggedIn()) return;
+    if (aiUsage?.unlimited) return;
     if (aiUsage && typeof aiUsage.remaining === 'number') {
       writeGuestLocalRemaining(aiUsage.remaining);
     } else {
