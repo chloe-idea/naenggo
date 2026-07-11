@@ -4745,20 +4745,12 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .tab-bar__item--active {
-  color: var(--color-primary);
+  color: var(--color-primary-home);
 }
 
 .tab-bar__item--active .tab-bar__icon {
-  background: var(--color-primary-light);
-}
-
-.view--main .tab-bar__item--active .tab-bar__icon {
   background: var(--color-primary-home);
   color: #fff;
-}
-
-.view--main .tab-bar__item--active {
-  color: var(--color-primary-home);
 }
 
 .tab-bar__icon {

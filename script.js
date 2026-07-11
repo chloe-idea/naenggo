@@ -2206,22 +2206,70 @@ const MealPlanRepository = {
   },
 };
 
+function parseGroceryAmount(value) {
+  const normalized = String(value ?? '').replace(/,/g, '').trim();
+  if (!normalized) return 0;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 const GroceryRepository = {
-  _state: { budget: '', items: {}, manualItems: [], completedKeys: [] },
+  _state: { budget: '', items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] },
   _byWeek: {},
   _activeWeekKey: '',
   _emptyWeekState() {
-    return { budget: '', items: {}, manualItems: [], completedKeys: [] };
+    return { budget: '', items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] };
+  },
+  _normalizePurchasedLedgerEntry(entry, weekKey = '') {
+    const key = String(entry?.key || entry?.id || '').trim();
+    if (!key) return null;
+    const rawPrice = entry?.actualPrice ?? entry?.actualAmount;
+    const actualPrice = rawPrice === '' || rawPrice == null
+      ? 0
+      : parseGroceryAmount(rawPrice);
+    return {
+      id: String(entry?.id || key),
+      key,
+      name: String(entry?.name || '').trim(),
+      actualPrice: String(actualPrice),
+      actualAmount: String(actualPrice),
+      quantity: String(entry?.quantity ?? '').trim(),
+      purchasedAt: entry?.purchasedAt || '',
+      weekKey: String(entry?.weekKey || weekKey || ''),
+      status: 'purchased',
+    };
   },
   _normalizeWeekState(state) {
+    const weekKey = normalizeGroceryWeekKey(state?.weekKey || this._activeWeekKey || todayStr());
+    const ledgerRaw = Array.isArray(state?.purchasedLedger)
+      ? state.purchasedLedger
+      : (Array.isArray(state?.purchasedRecords) ? state.purchasedRecords : []);
     return {
-      budget: state?.budget ?? '',
-      items: state?.items && typeof state.items === 'object' ? state.items : {},
+      weekKey,
+      budget: state?.budget ?? state?.weeklyBudget ?? '',
+      items: state?.items && typeof state.items === 'object'
+        ? state.items
+        : (state?.groceryItems && typeof state.groceryItems === 'object' ? state.groceryItems : {}),
       manualItems: Array.isArray(state?.manualItems)
         ? state.manualItems.map((item) => this._normalizeManualItem(item)).filter(Boolean)
         : [],
       completedKeys: Array.isArray(state?.completedKeys) ? [...state.completedKeys] : [],
+      purchasedLedger: ledgerRaw
+        .map((entry) => this._normalizePurchasedLedgerEntry(entry, weekKey))
+        .filter(Boolean),
     };
+  },
+  _cloneWeekState(state) {
+    try {
+      return this._normalizeWeekState(JSON.parse(JSON.stringify(state || this._emptyWeekState())));
+    } catch {
+      return this._emptyWeekState();
+    }
+  },
+  clearSession() {
+    this._byWeek = {};
+    this._activeWeekKey = '';
+    this._state = this._emptyWeekState();
   },
   load() {
     this.clearSession();
@@ -2236,45 +2284,109 @@ const GroceryRepository = {
     return this._state;
   },
   save() {
+    this._syncActiveWeekToByWeek();
     if (!isGuestUser()) return;
     try {
-      localStorage.setItem(CONFIG.STORAGE.GROCERY, JSON.stringify(this.exportState()));
+      localStorage.setItem(CONFIG.STORAGE.GROCERY, JSON.stringify({
+        activeWeekKey: this._activeWeekKey || '',
+        byWeek: this._byWeek,
+      }));
     } catch {
       // ignore quota errors
     }
   },
-  clearSession() {
-    this._state = this._emptyWeekState();
-    this._byWeek = {};
-    this._activeWeekKey = '';
+  _syncActiveWeekToByWeek() {
+    const key = normalizeGroceryWeekKey(this._activeWeekKey || todayStr());
+    this._activeWeekKey = key;
+    if (!Array.isArray(this._state.purchasedLedger)) this._state.purchasedLedger = [];
+    if (!Array.isArray(this._state.completedKeys)) this._state.completedKeys = [];
+    if (!this._state.items || typeof this._state.items !== 'object') this._state.items = {};
+    if (!Array.isArray(this._state.manualItems)) this._state.manualItems = [];
+    this._state.weekKey = key;
+    // 깊은 복사로 저장해 주차 간 참조 공유를 방지
+    this._byWeek[key] = this._cloneWeekState(this._state);
   },
   exportState() {
+    this._syncActiveWeekToByWeek();
     return {
       activeWeekKey: this._activeWeekKey || '',
       byWeek: this._byWeek,
-      // legacy fallback fields
-      ...this._state,
     };
   },
   setActiveWeek(weekKey) {
-    const key = weekKey || getWeekKeyFromDateStr(todayStr());
+    const key = normalizeGroceryWeekKey(weekKey || todayStr());
+
+    // 같은 주차면 작업본만 byWeek에 커밋하고 끝 (리렌더 시 데이터 유실 방지)
+    if (this._activeWeekKey === key) {
+      this._syncActiveWeekToByWeek();
+      return;
+    }
+
+    // 현재 주차 작업본을 저장소에 커밋 (다른 주차와 공유되지 않게 clone)
+    if (this._activeWeekKey) {
+      if (!Array.isArray(this._state.purchasedLedger)) this._state.purchasedLedger = [];
+      this._state.weekKey = this._activeWeekKey;
+      this._byWeek[this._activeWeekKey] = this._cloneWeekState(this._state);
+    } else {
+      const hasData = (Array.isArray(this._state.purchasedLedger) && this._state.purchasedLedger.length > 0)
+        || Object.keys(this._state.items || {}).length > 0
+        || (this._state.budget !== '' && this._state.budget != null)
+        || (Array.isArray(this._state.manualItems) && this._state.manualItems.length > 0);
+      if (hasData && !this._byWeek[key]) {
+        this._state.weekKey = key;
+        this._byWeek[key] = this._cloneWeekState(this._state);
+      }
+    }
+
     this._activeWeekKey = key;
-    if (!this._byWeek[key]) this._byWeek[key] = this._emptyWeekState();
-    this._state = this._byWeek[key];
+    if (!this._byWeek[key]) {
+      this._byWeek[key] = this._emptyWeekState();
+      this._byWeek[key].weekKey = key;
+    }
+    // 작업본은 clone — byWeek 스냅샷과 분리해 이후 편집이 다른 주를 덮지 않음
+    this._state = this._cloneWeekState(this._byWeek[key]);
+    this._state.weekKey = key;
   },
   replaceState(state) {
     const byWeek = state?.byWeek && typeof state.byWeek === 'object' ? state.byWeek : null;
-    if (byWeek) {
+    const weekEntries = byWeek ? Object.entries(byWeek) : [];
+    if (weekEntries.length) {
       this._byWeek = {};
-      Object.entries(byWeek).forEach(([weekKey, weekState]) => {
-        this._byWeek[weekKey] = this._normalizeWeekState(weekState);
+      weekEntries.forEach(([weekKey, weekState]) => {
+        const normalizedKey = normalizeGroceryWeekKey(weekKey);
+        const normalized = this._normalizeWeekState({ ...weekState, weekKey: normalizedKey });
+        // 동일 주차로 병합 (레거시 ISO 키와 날짜 키 충돌 시 데이터 유지)
+        if (this._byWeek[normalizedKey]) {
+          const prev = this._byWeek[normalizedKey];
+          this._byWeek[normalizedKey] = this._normalizeWeekState({
+            ...prev,
+            ...normalized,
+            budget: normalized.budget !== '' && normalized.budget != null ? normalized.budget : prev.budget,
+            items: { ...prev.items, ...normalized.items },
+            manualItems: normalized.manualItems.length ? normalized.manualItems : prev.manualItems,
+            completedKeys: [...new Set([...(prev.completedKeys || []), ...(normalized.completedKeys || [])])],
+            purchasedLedger: [
+              ...(prev.purchasedLedger || []),
+              ...(normalized.purchasedLedger || []).filter(
+                (entry) => !(prev.purchasedLedger || []).some((p) => p.key === entry.key || p.id === entry.id),
+              ),
+            ],
+            weekKey: normalizedKey,
+          });
+        } else {
+          this._byWeek[normalizedKey] = normalized;
+        }
       });
-      this.setActiveWeek(state?.activeWeekKey || getWeekKeyFromDateStr(todayStr()));
+      const activeKey = normalizeGroceryWeekKey(state?.activeWeekKey || todayStr());
+      this.setActiveWeek(activeKey);
+      if (Array.isArray(state?.purchasedLedger) && state.purchasedLedger.length
+        && this.getPurchasedLedger().length === 0) {
+        state.purchasedLedger.forEach((entry) => this.upsertPurchasedLedgerEntry(entry));
+      }
       return;
     }
-    // legacy single-week payload migration
-    const weekKey = this._activeWeekKey || getWeekKeyFromDateStr(todayStr());
-    this._byWeek = { [weekKey]: this._normalizeWeekState(state) };
+    const weekKey = normalizeGroceryWeekKey(state?.activeWeekKey || this._activeWeekKey || todayStr());
+    this._byWeek = { [weekKey]: this._normalizeWeekState({ ...state, weekKey }) };
     this.setActiveWeek(weekKey);
   },
   _normalizeManualItem(raw) {
@@ -2311,15 +2423,21 @@ const GroceryRepository = {
   },
   setItemAmounts(key, { price, actualAmount }) {
     const meta = this.getMeta(key);
+    const nextActual = actualAmount === undefined ? meta.actualAmount : actualAmount;
     this._state.items[key] = {
       ...meta,
       price: price ?? meta.price,
-      actualAmount: actualAmount ?? meta.actualAmount,
+      actualAmount: nextActual === '' || nextActual == null ? '' : String(nextActual),
     };
     this.save();
   },
   setChecked(key, checked) {
-    this._state.items[key] = { ...this.getMeta(key), checked: Boolean(checked) };
+    const meta = this.getMeta(key);
+    this._state.items[key] = {
+      ...meta,
+      checked: Boolean(checked),
+      actualAmount: meta.actualAmount === '' || meta.actualAmount == null ? '' : String(meta.actualAmount),
+    };
     this.save();
   },
   setPrice(key, price) {
@@ -2339,28 +2457,90 @@ const GroceryRepository = {
     this.save();
   },
   getBudget() { return this._state.budget || ''; },
+  getPurchasedLedger() {
+    this._syncActiveWeekToByWeek();
+    return Array.isArray(this._state.purchasedLedger) ? [...this._state.purchasedLedger] : [];
+  },
+  upsertPurchasedLedgerEntry(entry) {
+    this._syncActiveWeekToByWeek();
+    const weekKey = this._activeWeekKey || getWeekKeyFromDateStr(todayStr());
+    const nextEntry = this._normalizePurchasedLedgerEntry({
+      ...entry,
+      weekKey: entry?.weekKey || weekKey,
+      purchasedAt: entry?.purchasedAt || new Date().toISOString(),
+      status: 'purchased',
+    }, weekKey);
+    if (!nextEntry) return;
+    if (!Array.isArray(this._state.purchasedLedger)) this._state.purchasedLedger = [];
+    const existing = this._state.purchasedLedger.find(
+      (item) => item.key === nextEntry.key || item.id === nextEntry.id,
+    );
+    if (existing) Object.assign(existing, nextEntry);
+    else this._state.purchasedLedger.push(nextEntry);
+    this._syncActiveWeekToByWeek();
+    this.save();
+  },
+  archivePurchasedItem(item, explicitActualPrice) {
+    if (!item?.key) return;
+    this._syncActiveWeekToByWeek();
+    const meta = this.getMeta(item.key);
+    const actualPrice = explicitActualPrice != null
+      ? parseGroceryAmount(explicitActualPrice)
+      : parseGroceryAmount(meta.actualAmount);
+
+    let quantity = '';
+    let name = String(item.name || '').trim();
+    if (item.manual && item.manualId) {
+      const manual = this.getManualItems().find((entry) => entry.id === item.manualId);
+      if (manual) {
+        name = manual.name || name;
+        quantity = [manual.quantity, manual.unit].filter(Boolean).join('');
+      }
+    } else if (item.count > 1) {
+      quantity = String(item.count);
+    }
+
+    this.upsertPurchasedLedgerEntry({
+      id: item.key,
+      key: item.key,
+      name,
+      actualPrice,
+      quantity,
+      purchasedAt: meta.purchasedAt || new Date().toISOString(),
+      weekKey: this._activeWeekKey || getWeekKeyFromDateStr(todayStr()),
+      status: 'purchased',
+    });
+  },
   getCompletedKeys() {
     return Array.isArray(this._state.completedKeys) ? this._state.completedKeys : [];
   },
   markItemCompleted(key) {
     if (!key) return;
+    this._syncActiveWeekToByWeek();
     if (!Array.isArray(this._state.completedKeys)) this._state.completedKeys = [];
     if (!this._state.completedKeys.includes(key)) this._state.completedKeys.push(key);
     delete this._state.items[key];
     this.save();
   },
   removeManualItem(manualId) {
+    this._syncActiveWeekToByWeek();
     const key = GroceryListService.manualItemKey(manualId);
     this._state.manualItems = (this._state.manualItems || []).filter((item) => item.id !== manualId);
     delete this._state.items[key];
     this._state.completedKeys = this.getCompletedKeys().filter((completedKey) => completedKey !== key);
     this.save();
   },
-  completeCheckedItems(items) {
+  completeCheckedItems(items, amountByKey = null) {
+    this._syncActiveWeekToByWeek();
     for (const item of items || []) {
+      const explicit = amountByKey && Object.prototype.hasOwnProperty.call(amountByKey, item.key)
+        ? amountByKey[item.key]
+        : undefined;
+      this.archivePurchasedItem(item, explicit);
       if (item.manual && item.manualId) this.removeManualItem(item.manualId);
       else this.markItemCompleted(item.key);
     }
+    this._syncActiveWeekToByWeek();
   },
   pruneCompletedKeys(activeMissingKeys) {
     const active = new Set(activeMissingKeys || []);
@@ -3691,14 +3871,25 @@ function getWeekDates(startDateStr) {
   });
 }
 function getWeekKeyFromDateStr(dateStr) {
-  const start = getWeekStartDate(dateStr);
-  const thursday = new Date(start);
-  thursday.setDate(start.getDate() + 3);
-  const year = thursday.getFullYear();
-  const jan4 = new Date(year, 0, 4);
-  const jan4WeekStart = getWeekStartDate(jan4);
-  const weekNo = Math.floor((start - jan4WeekStart) / 604800000) + 1;
-  return `${year}-W${String(weekNo).padStart(2, '0')}`;
+  // 주 시작일(월요일) YYYY-MM-DD — 주차 장보기 데이터 키
+  return toDateStr(getWeekStartDate(dateStr));
+}
+
+/** 레거시 ISO 주차 키(2026-W28) → 주 시작일 키로 변환 */
+function normalizeGroceryWeekKey(weekKey) {
+  const raw = String(weekKey || '').trim();
+  if (!raw) return getWeekKeyFromDateStr(todayStr());
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return getWeekKeyFromDateStr(raw);
+  const iso = /^(\d{4})-W(\d{1,2})$/i.exec(raw);
+  if (iso) {
+    const year = Number(iso[1]);
+    const weekNo = Number(iso[2]);
+    const jan4 = new Date(year, 0, 4);
+    const start = getWeekStartDate(jan4);
+    start.setDate(start.getDate() + (weekNo - 1) * 7);
+    return toDateStr(start);
+  }
+  return getWeekKeyFromDateStr(raw);
 }
 function formatPlannerWeekLabel(startDateStr) {
   const dates = getWeekDates(startDateStr);
@@ -6156,11 +6347,24 @@ function renderPlanner() {
   renderGroceryList();
 }
 
+/** 주차 변경 전 DOM에 남은 예산·실금액을 현재 weekKey에 반영 */
+function flushGroceryDomIntoActiveWeek() {
+  if (dom.groceryBudget) {
+    GroceryRepository.setBudget(dom.groceryBudget.value);
+  }
+  dom.groceryList?.querySelectorAll('.grocery-item').forEach((row) => {
+    syncGroceryAmountRow(row, { schedulePersist: false });
+  });
+  GroceryRepository._syncActiveWeekToByWeek();
+}
+
 function setPlannerWeek(weekStartDateStr) {
+  flushGroceryDomIntoActiveWeek();
   const start = toDateStr(getWeekStartDate(weekStartDateStr));
   state.plannerWeekStart = start;
   state.plannerWeekKey = getWeekKeyFromDateStr(start);
   GroceryRepository.setActiveWeek(state.plannerWeekKey);
+  persistGroceryState().catch(() => undefined);
   renderPlanner();
 }
 
@@ -6282,13 +6486,26 @@ async function removeGroceryListItem(itemKey, grouped) {
 }
 
 function computeGroceryActualTotal(grouped) {
-  let total = 0;
+  const amountsById = new Map();
+
   for (const cat of GROCERY_CATEGORIES) {
-    for (const item of grouped[cat.id] || []) {
-      const amount = Number(GroceryRepository.getMeta(item.key).actualAmount) || 0;
-      total += amount;
+    for (const item of grouped?.[cat.id] || []) {
+      const meta = GroceryRepository.getMeta(item.key);
+      if (!meta.checked) continue;
+      const id = item.key;
+      // 예상가(price) 제외 — 실금액만
+      amountsById.set(id, parseGroceryAmount(meta.actualAmount));
     }
   }
+
+  for (const entry of GroceryRepository.getPurchasedLedger()) {
+    const id = entry.id || entry.key;
+    if (!id || amountsById.has(id)) continue;
+    amountsById.set(id, parseGroceryAmount(entry.actualPrice ?? entry.actualAmount));
+  }
+
+  let total = 0;
+  for (const amount of amountsById.values()) total += amount;
   return total;
 }
 
@@ -6297,7 +6514,9 @@ function renderGroceryBudgetSummary(grouped) {
   const budget = Number(GroceryRepository.getBudget()) || 0;
   const used = computeGroceryActualTotal(grouped);
   const diff = budget - used;
-  const diffLabel = diff >= 0 ? `여유 ${formatMoney(diff)}` : `여유 -${formatMoney(Math.abs(diff))}`;
+  const diffLabel = diff >= 0
+    ? `여유 ${formatMoney(diff)}`
+    : `${formatMoney(Math.abs(diff))} 초과`;
   dom.groceryBudgetSummary.textContent = `${diffLabel} · 사용 ${formatMoney(used)}`;
   dom.groceryBudgetSummary.classList.toggle('budget-box__summary--over', diff < 0);
 }
@@ -6352,6 +6571,8 @@ function renderGroceryList({ force = false } = {}) {
 
   dom.groceryList.querySelectorAll('.grocery-item__check').forEach((cb) => {
     cb.onchange = () => {
+      const row = cb.closest('.grocery-item');
+      if (row) syncGroceryAmountRow(row, { schedulePersist: false });
       GroceryRepository.setChecked(cb.dataset.checkKey, cb.checked);
       flushPersistGroceryState().catch(() => undefined);
       renderGroceryList({ force: true });
@@ -6424,17 +6645,24 @@ function autoGenerateWeeklyPlan() {
 }
 
 async function handleGroceryPurchaseComplete() {
+  if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
   const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
   const grouped = GroceryListService.computeMissing(dates);
   const checkedItems = [];
+  const amountByKey = {};
   const names = [];
   let shoppingCount = 0;
+
+  // 삭제 전에 실금액을 스냅샷 — 목록 제거 후에도 ledger에 남기기 위함
   for (const cat of GROCERY_CATEGORIES) {
     for (const item of grouped[cat.id] || []) {
+      const row = dom.groceryList?.querySelector(`[data-actual-key="${item.key}"]`)?.closest('.grocery-item');
+      if (row) syncGroceryAmountRow(row, { schedulePersist: false });
       const meta = GroceryRepository.getMeta(item.key);
       if (!meta.checked) continue;
       checkedItems.push(item);
-      if (Number(meta.actualAmount) > 0) shoppingCount += 1;
+      amountByKey[item.key] = parseGroceryAmount(meta.actualAmount);
+      if (amountByKey[item.key] > 0) shoppingCount += 1;
       if (item.manual) {
         names.push(item.name);
         continue;
@@ -6448,8 +6676,8 @@ async function handleGroceryPurchaseComplete() {
   }
   try {
     await Promise.all(checkedItems.map((item) => {
-      const meta = GroceryRepository.getMeta(item.key);
-      if (Number(meta.actualAmount) <= 0) return Promise.resolve();
+      const amount = amountByKey[item.key] || 0;
+      if (amount <= 0) return Promise.resolve();
       return syncGroceryItemToShoppingRecord(item.key, item, { silent: true, force: true });
     }));
     const shoppingRecordIds = checkedItems
@@ -6457,9 +6685,12 @@ async function handleGroceryPurchaseComplete() {
       .filter(Boolean);
     const { added } = await PantryIngredientService.addFromNames(names, { skipDuplicates: true });
     await markShoppingRecordsIngredientsAdded(shoppingRecordIds);
-    GroceryRepository.completeCheckedItems(checkedItems);
+    GroceryRepository.completeCheckedItems(checkedItems, amountByKey);
     await persistGroceryState();
-    renderGroceryList();
+    renderGroceryList({ force: true });
+    renderGroceryBudgetSummary(
+      GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerWeekStart)),
+    );
     if (state.view === 'calendar') renderCalendar();
     const parts = [];
     if (added) parts.push(`${added}개 재료 보유 재료에 추가`);
