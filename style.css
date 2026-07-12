@@ -1224,44 +1224,12 @@ body.home-search-keyboard-active .home-search-dock {
   gap: 0;
 }
 
-.home-pantry-chips-divider {
-  height: 1px;
-  margin: 0.5rem 0 0.375rem;
-  background: rgba(0, 0, 0, 0.06);
-}
-
 .home-pantry-chips-clip {
   overflow: hidden;
 }
 
 .home-pantry-chips-panel .home-tags {
   margin-top: 0;
-}
-
-.home-pantry-toggle {
-  align-self: stretch;
-  width: 100%;
-  border: none;
-  background: rgba(0, 0, 0, 0.03);
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0.625rem 0.75rem;
-  min-height: 2.5rem;
-  line-height: 1.4;
-  text-align: center;
-  border-radius: var(--radius-md);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.home-pantry-toggle:hover {
-  color: var(--color-primary);
-  background: rgba(255, 107, 44, 0.06);
-}
-
-.home-pantry-toggle:active {
-  background: rgba(255, 107, 44, 0.1);
 }
 
 .home-tags {
@@ -1289,7 +1257,29 @@ body.home-search-keyboard-active .home-search-dock {
   border-color: #e8e0d8;
   color: var(--color-text-muted);
   font-weight: 700;
-  cursor: default;
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.home-tags .tag--overflow:hover {
+  color: var(--color-primary);
+  border-color: rgba(255, 107, 44, 0.35);
+  background: rgba(255, 107, 44, 0.06);
+}
+
+.home-tags .tag--overflow:active {
+  background: rgba(255, 107, 44, 0.1);
+}
+
+.home-tags .tag__overflow-caret {
+  font-size: 0.625rem;
+  line-height: 1;
+  margin-left: 0.0625rem;
+  opacity: 0.85;
 }
 
 .home-tags .hint--inline {

@@ -3791,8 +3791,8 @@ const dom = {
   pantryChipsClip: $('#pantry-chips-clip'),
   pantryChips: $('#pantry-chips'),
   pantryChipsCount: $('#pantry-chips-count'),
-  pantryChipsToggle: $('#pantry-chips-toggle'),
-  pantryChipsDivider: $('#pantry-chips-divider'),
+  pantryChipsToggle: null,
+  pantryChipsDivider: null,
   homeRecipesSubtitle: $('#home-recipes-subtitle'),
   menuSearchInput: $('#menu-search-input'),
   homeSearchDock: $('.home-search-dock'),
@@ -4208,10 +4208,15 @@ function buildPantryChipsHTML(items, { expanded } = {}) {
   const needsCollapse = items.length > HOME_PANTRY_PREVIEW_COUNT;
   const showAll = expanded || !needsCollapse;
   const visible = showAll ? items : items.slice(0, HOME_PANTRY_PREVIEW_COUNT);
-  const overflow = !showAll && needsCollapse ? items.length - HOME_PANTRY_PREVIEW_COUNT : 0;
+  const overflow = Math.max(0, items.length - HOME_PANTRY_PREVIEW_COUNT);
   let html = visible.map(pantryChipHTML).join('');
-  if (overflow > 0) {
-    html += `<span class="tag tag--overflow" role="listitem" aria-label="외 ${overflow}개 재료">+${overflow}</span>`;
+  if (needsCollapse && overflow > 0) {
+    const caret = showAll ? '▲' : '▼';
+    const aria = showAll ? '보유 재료 접기' : `외 ${overflow}개 재료 펼치기`;
+    html += `<button type="button" class="tag tag--overflow" data-pantry-expand aria-expanded="${showAll ? 'true' : 'false'}" aria-label="${aria}">
+      <span class="tag__overflow-count">+${overflow}</span>
+      <span class="tag__overflow-caret" aria-hidden="true">${caret}</span>
+    </button>`;
   }
   return html;
 }
@@ -4226,16 +4231,19 @@ function bindPantryChipRemoveHandlers(root = dom.pantryChips) {
   });
 }
 
-function updatePantryChipsToggle(items) {
-  const btn = dom.pantryChipsToggle;
-  const divider = dom.pantryChipsDivider;
-  const needsCollapse = items.length > HOME_PANTRY_PREVIEW_COUNT;
-  if (divider) divider.hidden = !needsCollapse;
+function bindPantryChipExpandHandler(root = dom.pantryChips) {
+  const btn = root?.querySelector('[data-pantry-expand]');
   if (!btn) return;
-  btn.hidden = !needsCollapse;
-  if (!needsCollapse) return;
-  btn.textContent = pantryChipsExpanded ? '▲ 보유 재료 접기' : '▼ 보유 재료 펼치기';
-  btn.setAttribute('aria-expanded', pantryChipsExpanded ? 'true' : 'false');
+  btn.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPantryChipsExpanded(!pantryChipsExpanded, { animate: true });
+  };
+}
+
+function bindPantryChipsHandlers(root = dom.pantryChips) {
+  bindPantryChipRemoveHandlers(root);
+  bindPantryChipExpandHandler(root);
 }
 
 function updateHomeRecipesSubtitle() {
@@ -4297,14 +4305,12 @@ function renderPantryChips({ animate = false } = {}) {
 
   if (!count) {
     chips.innerHTML = '<p class="hint hint--inline">재료를 추가하면 맞춤 레시피를 추천해 드려요.</p>';
-    updatePantryChipsToggle(items);
     return;
   }
 
   if (!needsCollapse) {
     chips.innerHTML = buildPantryChipsHTML(items, { expanded: true });
-    bindPantryChipRemoveHandlers();
-    updatePantryChipsToggle(items);
+    bindPantryChipsHandlers();
     return;
   }
 
@@ -4312,30 +4318,26 @@ function renderPantryChips({ animate = false } = {}) {
     const startHeight = clip.offsetHeight;
     if (effectivelyExpanded) {
       chips.innerHTML = buildPantryChipsHTML(items, { expanded: true });
-      bindPantryChipRemoveHandlers();
+      bindPantryChipsHandlers();
       const endHeight = chips.scrollHeight;
-      runPantryChipsHeightTransition(clip, startHeight, endHeight, () => {
-        updatePantryChipsToggle(items);
-      });
+      runPantryChipsHeightTransition(clip, startHeight, endHeight);
     } else {
       const fullHTML = buildPantryChipsHTML(items, { expanded: true });
       const collapsedHTML = buildPantryChipsHTML(items, { expanded: false });
       chips.innerHTML = collapsedHTML;
       const endHeight = chips.scrollHeight;
       chips.innerHTML = fullHTML;
-      bindPantryChipRemoveHandlers();
+      bindPantryChipsHandlers();
       runPantryChipsHeightTransition(clip, startHeight, endHeight, () => {
         chips.innerHTML = collapsedHTML;
-        bindPantryChipRemoveHandlers();
-        updatePantryChipsToggle(items);
+        bindPantryChipsHandlers();
       });
     }
     return;
   }
 
   chips.innerHTML = buildPantryChipsHTML(items, { expanded: effectivelyExpanded });
-  bindPantryChipRemoveHandlers();
-  updatePantryChipsToggle(items);
+  bindPantryChipsHandlers();
 }
 
 function canForkRecipe(recipe) {
@@ -8332,9 +8334,6 @@ function init() {
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
-  dom.pantryChipsToggle?.addEventListener('click', () => {
-    setPantryChipsExpanded(!pantryChipsExpanded, { animate: true });
-  });
   dom.quickForm.addEventListener('submit', handleQuickAdd);
   dom.quickInput.addEventListener('compositionstart', () => { state.isComposing = true; });
   dom.quickInput.addEventListener('compositionend', () => { state.isComposing = false; });
