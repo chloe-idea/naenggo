@@ -3477,12 +3477,13 @@ const MatchService = {
     if (!missing.length && !substituted.length) return '모든 재료 준비 완료!';
     const parts = [];
     if (substituted.length) {
-      const hints = substituted.slice(0, 2).map((s) => `${s.required}→${s.owned}`);
-      parts.push(`${hints.join(', ')}${substituted.length > 2 ? ` 외 ${substituted.length - 2}개` : ''} 대체 가능`);
+      const hints = substituted.slice(0, 2).map((s) => `${s.required} → ${s.owned}`);
+      parts.push(`${hints.join(', ')}${substituted.length > 2 ? ` 외 ${substituted.length - 2}개` : ''}로 대체 가능`);
     }
     if (missing.length) {
       if (missing.length === 1) parts.push(`${missing[0]}만 있으면 가능`);
-      else parts.push(`${missing.slice(0, 2).join(', ')}${missing.length > 2 ? ` 외 ${missing.length - 2}개` : ''} 부족`);
+      else if (missing.length === 2) parts.push(`${missing[0]}, ${missing[1]}만 있으면 가능`);
+      else parts.push(`${missing.slice(0, 2).join(', ')} 외 ${missing.length - 2}개만 있으면 가능`);
     }
     return parts.join(' · ');
   },
@@ -3553,11 +3554,11 @@ const RecommendationService = {
     if (result.missing.length === 1) return `🛒 ${formatIngredientDisplay(result.missing[0])}만 있으면 가능`;
     if (result.missing.length === 2) {
       const names = result.missing.map((m) => formatIngredientDisplay(m));
-      return `🛒 ${names.join(', ')} 필요`;
+      return `🛒 ${names.join(', ')}만 있으면 가능`;
     }
     if (result.missing.length > 2) {
       const names = result.missing.slice(0, 2).map((m) => formatIngredientDisplay(m));
-      return `🛒 ${names.join(', ')} 외 ${result.missing.length - 2}개 필요`;
+      return `🛒 ${names.join(', ')} 외 ${result.missing.length - 2}개만 있으면 가능`;
     }
     if (result.expiryBoost > 0) return '⚠️ 임박 재료 활용';
     if (this.isHighProtein(result.recipe)) return '💪 고단백';
@@ -4430,6 +4431,8 @@ function homeCardDifficultyIcon(difficulty) {
 
 const HOME_CARD_BOOKMARK_ICON = `<svg class="recipe-card-home__bookmark-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 3.75h8a1 1 0 011 1V16l-5-2.75L5 16V4.75a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
 const HOME_CARD_BOOKMARK_ICON_FILLED = `<svg class="recipe-card-home__bookmark-icon" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 3.75h8a1 1 0 011 1V16l-5-2.75L5 16V4.75a1 1 0 011-1z" fill="currentColor"/></svg>`;
+const HOME_CARD_CART_ICON = `<svg class="recipe-card-home__hint-icon recipe-card-home__hint-icon--cart" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 2.5h1.2l.35 1.4M4.05 3.9h9.2l-1.1 5.1H5.2L4.05 3.9z" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.1" cy="12.2" r="1.05" fill="currentColor"/><circle cx="11.1" cy="12.2" r="1.05" fill="currentColor"/></svg>`;
+const HOME_CARD_SWAP_ICON = `<svg class="recipe-card-home__hint-icon recipe-card-home__hint-icon--swap" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.2 5.2h7.2M8.6 3.2l2.2 2-2.2 2M12.8 10.8H5.6M7.4 8.8l-2.2 2 2.2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /** 홈 카드 추천 태그 (최대 2개, 이모지 없음). 대체 문구가 없을 때만 사용 */
 function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost }) {
@@ -4455,25 +4458,28 @@ function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost })
   return [...new Set(tags)].slice(0, 2);
 }
 
-/** 홈 카드 준비 상태 문구 — 긍정형, 재료명 우선 */
+/** 홈 카드 준비 상태 문구 — 목업: 🛒 + 주황 Bold 재료명 + 기본색 나머지 */
 function formatHomeReadyMessage(missing) {
   const names = (missing || []).map(shortIngredientLabel).filter(Boolean);
   const count = names.length;
   if (count <= 0) {
-    return { label: '바로 가능', mod: 'available' };
+    return { html: '바로 가능', mod: 'available' };
   }
+  let namesHtml;
   if (count === 1) {
-    return { label: `${names[0]}만 있으면 가능`, mod: 'low' };
+    namesHtml = esc(names[0]);
+  } else if (count === 2) {
+    namesHtml = `${esc(names[0])}, ${esc(names[1])}`;
+  } else {
+    namesHtml = `${esc(names[0])}, ${esc(names[1])} 외 ${count - 2}개`;
   }
-  if (count === 2) {
-    return { label: `${names[0]}, ${names[1]}만 더 준비하면 가능`, mod: 'low' };
-  }
-  if (count <= 4) {
-    return { label: `${names[0]}, ${names[1]} 외 ${count - 2}개 더 필요해요`, mod: 'medium' };
-  }
-  return { label: '장보면 바로 만들 수 있어요', mod: 'high' };
+  return {
+    html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${namesHtml}</span><span class="recipe-card-status__rest">만 있으면 가능</span>`,
+    mod: count <= 2 ? 'low' : 'medium',
+  };
 }
 
+/** 홈 카드 대체 문구 — 목업: 초록 교체 아이콘 + 초록 Bold "A → B" + 기본색 나머지 */
 function formatHomeSubstitutionLine(substituted) {
   if (!isLoggedInAppUser() || !substituted?.length) return '';
   const first = substituted[0];
@@ -4483,7 +4489,7 @@ function formatHomeSubstitutionLine(substituted) {
   return {
     required,
     owned,
-    html: `${esc(required)}는 <span class="recipe-card-home__sub-hl">${esc(owned)}</span>로 대체 가능합니다.`,
+    html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-pair">${esc(required)} → ${esc(owned)}</span><span class="recipe-card-home__sub-rest">로 대체 가능</span>`,
   };
 }
 
@@ -4531,11 +4537,11 @@ function homeRecipeCardHTML(result) {
 
   const statusRow = missingCount > 0
     ? `<div class="recipe-card-home__row recipe-card-home__row--status">
-        <span class="recipe-card-status recipe-card-status--${status.mod}">${esc(status.label)}</span>
+        <span class="recipe-card-status recipe-card-status--${status.mod}">${status.html}</span>
         ${homeGroceryAddButtonHTML(recipe.id)}
       </div>`
     : `<div class="recipe-card-home__row recipe-card-home__row--status">
-        <span class="recipe-card-status recipe-card-status--${status.mod}">${esc(status.label)}</span>
+        <span class="recipe-card-status recipe-card-status--${status.mod}">${status.html}</span>
       </div>`;
 
   let row4 = '';
@@ -4551,7 +4557,7 @@ function homeRecipeCardHTML(result) {
       <div class="recipe-card__body">
         <div class="recipe-card-home__row recipe-card-home__row--title">
           <span class="recipe-card__name recipe-card-home__title">${esc(recipe.name)}</span>
-          <div class="recipe-card-home__title-end">${saveBtn}${matchPill}</div>
+          <div class="recipe-card-home__title-end">${matchPill}${saveBtn}</div>
         </div>
         <div class="recipe-card-home__row recipe-card-home__meta">
           <span class="recipe-card-home__meta-item">${HOME_CARD_CLOCK_ICON}<span>${esc(String(recipe.cookTime || '-'))}분</span></span>
@@ -4597,8 +4603,8 @@ function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryN
             ${communityBadge}
           </div>
           <div class="recipe-card__header-end">
-            ${headerAction || forkBtn ? `<div class="recipe-card__actions-row">${headerAction}${forkBtn}</div>` : ''}
             ${badge ? `<span class="match-badge match-badge--${badge}">${matchPercent}%</span>` : ''}
+            ${headerAction || forkBtn ? `<div class="recipe-card__actions-row">${headerAction}${forkBtn}</div>` : ''}
           </div>
         </div>
         ${hideOrigin ? '' : recipeOriginHTML(recipe, { compact: true })}

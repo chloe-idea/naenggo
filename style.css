@@ -2177,7 +2177,7 @@ body.home-search-keyboard-active .home-search-dock {
 .recipe-card-home__title-end {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.625rem; /* ~10px: 일치율 배지 ↔ 저장 아이콘 */
   flex-shrink: 0;
 }
 
@@ -2231,13 +2231,15 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .recipe-card-status {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   flex: 1;
   min-width: 0;
   padding: 0;
   border-radius: 0;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2245,22 +2247,48 @@ body.home-search-keyboard-active .home-search-dock {
   border: none;
   box-shadow: none;
   background: transparent;
+  color: #343a40;
+}
+
+.recipe-card-home__hint-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+  display: block;
+}
+
+.recipe-card-home__hint-icon--cart {
+  color: var(--color-primary);
+}
+
+.recipe-card-home__hint-icon--swap {
+  color: #2f9e44;
+}
+
+.recipe-card-status__names {
+  color: var(--color-primary);
+  font-weight: 700;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recipe-card-status__rest {
+  color: #343a40;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .recipe-card-status--available {
   color: #2f9e44;
+  font-weight: 700;
 }
 
-.recipe-card-status--low {
-  color: #d9480f;
-}
-
-.recipe-card-status--medium {
-  color: #e8590c;
-}
-
+.recipe-card-status--low,
+.recipe-card-status--medium,
 .recipe-card-status--high {
-  color: #495057;
+  color: #343a40;
 }
 
 .recipe-card-home__meta {
@@ -2314,12 +2342,32 @@ body.home-search-keyboard-active .home-search-dock {
 
 .recipe-card-home__sub {
   margin: 0;
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #343a40;
+  font-weight: 500;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
+}
+
+.recipe-card-home__sub-pair {
+  color: #2f9e44;
+  font-weight: 700;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recipe-card-home__sub-rest {
+  color: #343a40;
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .recipe-card-home__sub-hl {
@@ -2354,20 +2402,50 @@ body.home-search-keyboard-active .home-search-dock {
   flex-shrink: 0;
 }
 
+/* 홈 카드 저장: pill 배경 없이 bookmark 아이콘만 (보조 액션) */
 .recipe-card--home .recipe-card__action-btn--bookmark {
   min-width: 1.75rem;
-  min-height: 22px;
-  padding: 0.125rem 0.3125rem;
+  min-height: 1.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  border: none;
+  box-shadow: none;
+}
+
+.recipe-card--home .recipe-card__action-btn--bookmark:hover,
+.recipe-card--home .recipe-card__action-btn--bookmark:focus-visible {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text);
+}
+
+.recipe-card--home .recipe-card__action-btn--bookmark:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.recipe-card--home .recipe-card__action-btn--bookmark.recipe-card__action-btn--saved {
+  color: var(--color-primary-dark);
+  background: transparent;
+}
+
+.recipe-card--home .recipe-card__action-btn--bookmark.recipe-card__action-btn--saved:hover,
+.recipe-card--home .recipe-card__action-btn--bookmark.recipe-card__action-btn--saved:focus-visible {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-primary-dark);
 }
 
 .recipe-card-home__bookmark-icon {
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 1.1875rem; /* 19px */
+  height: 1.1875rem;
   display: block;
+  flex-shrink: 0;
 }
 
 .recipe-card__saved {
@@ -2783,7 +2861,7 @@ body.home-search-keyboard-active .home-search-dock {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.25rem;
+  gap: 0.625rem; /* ~10px: 일치율 배지 ↔ 액션 */
   flex-shrink: 0;
 }
 
