@@ -4554,18 +4554,18 @@ function homeRecipeCardHTML(result) {
   return `
     <div class="recipe-card recipe-card--home" role="button" tabindex="0" data-rid="${esc(recipe.id)}">
       <div class="recipe-card__image-wrap">${img}</div>
-      <div class="recipe-card__body">
-        <div class="recipe-card-home__row recipe-card-home__row--title">
+      <div class="recipe-card__body recipe-card-home__content">
+        <div class="recipe-card-home__info">
           <span class="recipe-card__name recipe-card-home__title">${esc(recipe.name)}</span>
-          <div class="recipe-card-home__title-end">${matchPill}${saveBtn}</div>
+          <div class="recipe-card-home__row recipe-card-home__meta">
+            <span class="recipe-card-home__meta-item">${HOME_CARD_CLOCK_ICON}<span>${esc(String(recipe.cookTime || '-'))}분</span></span>
+            <span class="recipe-card-home__meta-sep">·</span>
+            <span class="recipe-card-home__meta-item">${homeCardDifficultyIcon(recipe.difficulty)}<span>${esc(recipe.difficulty || '-')}</span></span>
+          </div>
+          ${statusRow}
+          ${row4}
         </div>
-        <div class="recipe-card-home__row recipe-card-home__meta">
-          <span class="recipe-card-home__meta-item">${HOME_CARD_CLOCK_ICON}<span>${esc(String(recipe.cookTime || '-'))}분</span></span>
-          <span class="recipe-card-home__meta-sep">·</span>
-          <span class="recipe-card-home__meta-item">${homeCardDifficultyIcon(recipe.difficulty)}<span>${esc(recipe.difficulty || '-')}</span></span>
-        </div>
-        ${statusRow}
-        ${row4}
+        <div class="recipe-card-home__actions">${matchPill}${saveBtn}</div>
       </div>
     </div>`;
 }
