@@ -4459,11 +4459,11 @@ function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost })
 }
 
 /** 홈 카드 준비 상태 문구 — 목업: 🛒 + 주황 Bold 재료명 + 기본색 나머지 */
-function formatHomeReadyMessage(missing) {
+function formatHomeReadyMessage(missing, { readyHtml = '바로 가능' } = {}) {
   const names = (missing || []).map(shortIngredientLabel).filter(Boolean);
   const count = names.length;
   if (count <= 0) {
-    return { html: '바로 가능', mod: 'available' };
+    return { html: readyHtml, mod: 'available' };
   }
   let namesHtml;
   if (count === 1) {
@@ -4513,27 +4513,49 @@ function homeMatchPercentPillHTML(matchPercent) {
   return `<span class="recipe-card-home__match recipe-card-home__match--${mod}">${value}%</span>`;
 }
 
-/** 홈 화면 전용 레시피 카드 — 지정 4행 레이아웃 */
-function homeRecipeCardHTML(result) {
+/** 홈·내 레시피 공통 카드 레이아웃 (우측 액션만 옵션으로 분기) */
+function homeRecipeCardHTML(result, options = {}) {
+  const {
+    action = 'save', // 'save' | 'fork'
+    showOrigin = false,
+    showVisibility = false,
+    readyHtml = '바로 가능',
+    showRecommendTags = true,
+  } = options;
+
   const recipe = result.recipe;
   const missing = result.missing || [];
   const substituted = result.substituted || [];
   const matchedPantryNames = result.matchedPantryNames || [];
   const missingCount = missing.length;
-  const status = formatHomeReadyMessage(missing);
+  const status = formatHomeReadyMessage(missing, { readyHtml });
   const saved = SavedRecipeRepository.isSaved(recipe.id);
   const img = recipeCardImageHTML(recipe);
   const subLine = formatHomeSubstitutionLine(substituted);
-  const tags = subLine
-    ? []
-    : getHomeRecipeRecommendTags({
+  const tags = (!subLine && showRecommendTags)
+    ? getHomeRecipeRecommendTags({
       recipe,
       matchedPantryNames,
       expiryBoost: result.expiryBoost,
-    });
+    })
+    : [];
 
-  const saveBtn = `<button type="button" class="recipe-card__action-btn recipe-card__action-btn--bookmark${saved ? ' recipe-card__action-btn--saved' : ''}" data-save-id="${esc(recipe.id)}" data-auth-required aria-label="${saved ? '저장 해제' : '레시피 저장'}">${saved ? HOME_CARD_BOOKMARK_ICON_FILLED : HOME_CARD_BOOKMARK_ICON}</button>`;
+  let actionBtn = '';
+  if (action === 'fork' && canForkRecipe(recipe)) {
+    actionBtn = `<button type="button" class="recipe-card__action-btn" data-fork-id="${esc(recipe.id)}" data-auth-required aria-label="내 버전 만들기">✏️ 내 버전</button>`;
+  } else if (action === 'save') {
+    actionBtn = `<button type="button" class="recipe-card__action-btn recipe-card__action-btn--bookmark${saved ? ' recipe-card__action-btn--saved' : ''}" data-save-id="${esc(recipe.id)}" data-auth-required aria-label="${saved ? '저장 해제' : '레시피 저장'}">${saved ? HOME_CARD_BOOKMARK_ICON_FILLED : HOME_CARD_BOOKMARK_ICON}</button>`;
+  }
   const matchPill = homeMatchPercentPillHTML(result.matchPercent);
+
+  const originRow = showOrigin && (recipe.createdFrom || recipe.parentRecipeId)
+    ? `<p class="recipe-card-home__row recipe-card-home__origin">${esc(recipe.createdFrom || '레시피')} 기반</p>`
+    : '';
+
+  const visibilityMeta = showVisibility
+    ? `<span class="recipe-card-home__meta-sep">·</span>
+       <span class="recipe-card-home__meta-item">${recipe.visibility === 'public' ? '🌐 공개' : '🔒 비공개'}</span>`
+    : '';
 
   const statusRow = missingCount > 0
     ? `<div class="recipe-card-home__row recipe-card-home__row--status">
@@ -4557,15 +4579,17 @@ function homeRecipeCardHTML(result) {
       <div class="recipe-card__body recipe-card-home__content">
         <div class="recipe-card-home__info">
           <span class="recipe-card__name recipe-card-home__title">${esc(recipe.name)}</span>
+          ${originRow}
           <div class="recipe-card-home__row recipe-card-home__meta">
             <span class="recipe-card-home__meta-item">${HOME_CARD_CLOCK_ICON}<span>${esc(String(recipe.cookTime || '-'))}분</span></span>
             <span class="recipe-card-home__meta-sep">·</span>
             <span class="recipe-card-home__meta-item">${homeCardDifficultyIcon(recipe.difficulty)}<span>${esc(recipe.difficulty || '-')}</span></span>
+            ${visibilityMeta}
           </div>
           ${statusRow}
           ${row4}
         </div>
-        <div class="recipe-card-home__actions">${matchPill}${saveBtn}</div>
+        <div class="recipe-card-home__actions">${matchPill}${actionBtn}</div>
       </div>
     </div>`;
 }
@@ -5018,14 +5042,28 @@ function renderMyRecipes() {
   const recipes = RecipeRepository.getUserRecipes();
   dom.myRecipesCount.textContent = recipes.length ? `${recipes.length}개` : '';
   dom.myRecipesEmpty.hidden = recipes.length > 0;
-  dom.myRecipesList.innerHTML = recipes.map((recipe) => {
+  const myResults = recipes.map((recipe) => {
     const names = RecommendationService.getPantryNames();
-    const a = names.length ? MatchService.analyze(names, recipe.ingredients) : null;
-    return recipeCardHTML({ recipe, matchPercent: a?.matchPercent, missing: a?.missing || [], matched: a?.matched || [],
-      matchedPantryNames: a?.matchedPantryNames || [], exact: a?.exact || [], substituted: a?.substituted || [],
-      showVisibility: true, showCardMealLog: true, showCardFork: true });
-  }).join('');
-  bindRecipeCards(dom.myRecipesList, recipes.map((r) => ({ recipe: r })));
+    const a = MatchService.analyze(names, recipe.ingredients || []);
+    return {
+      recipe,
+      matchPercent: a.matchPercent,
+      missing: a.missing || [],
+      matched: a.matched || [],
+      matchedPantryNames: a.matchedPantryNames || [],
+      exact: a.exact || [],
+      substituted: a.substituted || [],
+      expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
+    };
+  });
+  dom.myRecipesList.innerHTML = myResults.map((r) => homeRecipeCardHTML(r, {
+    action: 'fork',
+    showOrigin: true,
+    showVisibility: true,
+    readyHtml: '🟢 모든 재료 준비 완료!',
+    showRecommendTags: true,
+  })).join('');
+  bindRecipeCards(dom.myRecipesList, myResults);
 
   dom.myRecipesList.querySelectorAll('.recipe-card').forEach((card) => {
     card.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -5036,11 +5074,25 @@ function renderMyRecipes() {
   dom.savedEmpty.hidden = saved.length > 0;
   const savedResults = saved.map((recipe) => {
     const names = RecommendationService.getPantryNames();
-    const a = names.length ? MatchService.analyze(names, recipe.ingredients) : null;
-    return { recipe, matchPercent: a?.matchPercent ?? null, missing: a?.missing || [], matched: a?.matched || [],
-      matchedPantryNames: a?.matchedPantryNames || [], exact: a?.exact || [], substituted: a?.substituted || [] };
+    const a = MatchService.analyze(names, recipe.ingredients || []);
+    return {
+      recipe,
+      matchPercent: a.matchPercent,
+      missing: a.missing || [],
+      matched: a.matched || [],
+      matchedPantryNames: a.matchedPantryNames || [],
+      exact: a.exact || [],
+      substituted: a.substituted || [],
+      expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
+    };
   });
-  dom.savedList.innerHTML = savedResults.map((r) => recipeCardHTML({ ...r, showAuthor: true, showCardMealLog: true, showCardFork: true })).join('');
+  dom.savedList.innerHTML = savedResults.map((r) => homeRecipeCardHTML(r, {
+    action: 'save',
+    showOrigin: true,
+    showVisibility: false,
+    readyHtml: '🟢 모든 재료 준비 완료!',
+    showRecommendTags: true,
+  })).join('');
   bindRecipeCards(dom.savedList, savedResults);
   syncAuthGateUi();
 }

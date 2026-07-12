@@ -2198,6 +2198,21 @@ body.home-search-keyboard-active .home-search-dock {
   white-space: nowrap;
 }
 
+.recipe-card-home__origin {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 내 레시피 카드: 홈과 동일 디자인, 우측은 pill «내 버전» */
+.recipe-card--home .recipe-card-home__actions .recipe-card__action-btn:not(.recipe-card__action-btn--bookmark) {
+  flex-shrink: 0;
+}
+
 /* 내 레시피 .match-badge와 동일한 pill 크기 */
 .recipe-card-home__match {
   display: inline-flex;
