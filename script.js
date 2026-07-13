@@ -4495,6 +4495,45 @@ function formatHomeSubstitutionLine(substituted) {
   };
 }
 
+/** 내 레시피 카드 준비 상태 — 바로 가능 / 긍정형 부족 안내 */
+function formatMyRecipeReadyMessage(missing) {
+  const names = (missing || []).map(shortIngredientLabel).filter(Boolean);
+  const count = names.length;
+  if (count <= 0) {
+    return { html: '바로 가능', mod: 'available' };
+  }
+  if (count === 1) {
+    return {
+      html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(names[0])}</span><span class="recipe-card-status__rest">만 있으면 가능</span>`,
+      mod: 'low',
+    };
+  }
+  if (count === 2) {
+    return {
+      html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(names[0])}, ${esc(names[1])}</span><span class="recipe-card-status__rest">만 있으면 가능</span>`,
+      mod: 'low',
+    };
+  }
+  return {
+    html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(names[0])}, ${esc(names[1])} 외 ${count - 2}개</span><span class="recipe-card-status__rest"> 필요</span>`,
+    mod: 'medium',
+  };
+}
+
+/** 내 레시피 대체 문구 — 초록 교체 아이콘 + 초록 "A → B" + 회색 "로 대체 가능" */
+function formatMyRecipeSubstitutionLine(substituted) {
+  if (!isLoggedInAppUser() || !substituted?.length) return '';
+  const first = substituted[0];
+  const required = shortIngredientLabel(first.required);
+  const owned = shortIngredientLabel(first.owned);
+  if (!required || !owned) return '';
+  return {
+    required,
+    owned,
+    html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-pair">${esc(required)} → ${esc(owned)}</span><span class="recipe-card-home__sub-rest">로 대체 가능</span>`,
+  };
+}
+
 function homeGroceryAddButtonHTML(recipeId) {
   return `<button type="button" class="recipe-card-home__grocery-btn" data-grocery-add-rid="${esc(recipeId)}" onclick="event.stopPropagation()">장보기 추가</button>`;
 }
@@ -4515,25 +4554,30 @@ function homeMatchPercentPillHTML(matchPercent) {
   return `<span class="recipe-card-home__match recipe-card-home__match--${mod}">${value}%</span>`;
 }
 
-/** 홈·내 레시피 공통 카드 레이아웃 (우측 액션만 옵션으로 분기) */
+/** 홈·저장·내 레시피 공통 카드 레이아웃 */
 function homeRecipeCardHTML(result, options = {}) {
   const {
-    action = 'save', // 'save' | 'fork'
-    showOrigin = false,
+    action = 'save', // 'save' | 'fork' | 'none'
     showVisibility = false,
     readyHtml = '바로 가능',
     showRecommendTags = true,
+    variant = 'home', // 'home' | 'my'
   } = options;
+  const isMy = variant === 'my';
 
   const recipe = result.recipe;
   const missing = result.missing || [];
   const substituted = result.substituted || [];
   const matchedPantryNames = result.matchedPantryNames || [];
   const missingCount = missing.length;
-  const status = formatHomeReadyMessage(missing, { readyHtml });
+  const status = isMy
+    ? formatMyRecipeReadyMessage(missing)
+    : formatHomeReadyMessage(missing, { readyHtml });
   const saved = SavedRecipeRepository.isSaved(recipe.id);
   const img = recipeCardImageHTML(recipe);
-  const subLine = formatHomeSubstitutionLine(substituted);
+  const subLine = isMy
+    ? formatMyRecipeSubstitutionLine(substituted)
+    : formatHomeSubstitutionLine(substituted);
   const tags = (!subLine && showRecommendTags)
     ? getHomeRecipeRecommendTags({
       recipe,
@@ -4550,10 +4594,6 @@ function homeRecipeCardHTML(result, options = {}) {
   }
   const matchPill = homeMatchPercentPillHTML(result.matchPercent);
 
-  const originRow = showOrigin && (recipe.createdFrom || recipe.parentRecipeId)
-    ? `<p class="recipe-card-home__row recipe-card-home__origin">${esc(recipe.createdFrom || '레시피')} 기반</p>`
-    : '';
-
   const visibilityMeta = showVisibility
     ? `<span class="recipe-card-home__meta-sep">·</span>
        <span class="recipe-card-home__meta-item">${recipe.visibility === 'public' ? '🌐 공개' : '🔒 비공개'}</span>`
@@ -4568,20 +4608,28 @@ function homeRecipeCardHTML(result, options = {}) {
         <span class="recipe-card-status recipe-card-status--${status.mod}">${status.html}</span>
       </div>`;
 
-  let row4 = '';
+  let row4;
   if (subLine) {
-    row4 = `<p class="recipe-card-home__row recipe-card-home__sub">${subLine.html}</p>`;
+    row4 = `<p class="recipe-card-home__row recipe-card-home__sub recipe-card-home__footer">${subLine.html}</p>`;
   } else if (tags.length) {
-    row4 = `<div class="recipe-card-home__row recipe-card-home__tags">${tags.map((t) => `<span class="recipe-card-home__tag">${esc(t)}</span>`).join('')}</div>`;
+    row4 = `<div class="recipe-card-home__row recipe-card-home__tags recipe-card-home__footer">${tags.map((t) => `<span class="recipe-card-home__tag">${esc(t)}</span>`).join('')}</div>`;
+  } else {
+    row4 = '<div class="recipe-card-home__row recipe-card-home__footer recipe-card-home__footer--empty" aria-hidden="true"></div>';
   }
 
+  const cardClass = isMy
+    ? 'recipe-card recipe-card--home recipe-card--my'
+    : 'recipe-card recipe-card--home';
+
   return `
-    <div class="recipe-card recipe-card--home" role="button" tabindex="0" data-rid="${esc(recipe.id)}">
+    <div class="${cardClass}" role="button" tabindex="0" data-rid="${esc(recipe.id)}">
       <div class="recipe-card__image-wrap">${img}</div>
       <div class="recipe-card__body recipe-card-home__content">
         <div class="recipe-card-home__info">
-          <span class="recipe-card__name recipe-card-home__title">${esc(recipe.name)}</span>
-          ${originRow}
+          <div class="recipe-card-home__title-row">
+            <span class="recipe-card__name recipe-card-home__title">${esc(recipe.name)}</span>
+            <div class="recipe-card-home__actions">${matchPill}${actionBtn}</div>
+          </div>
           <div class="recipe-card-home__row recipe-card-home__meta">
             <span class="recipe-card-home__meta-item">${HOME_CARD_CLOCK_ICON}<span>${esc(String(recipe.cookTime || '-'))}분</span></span>
             <span class="recipe-card-home__meta-sep">·</span>
@@ -4591,7 +4639,6 @@ function homeRecipeCardHTML(result, options = {}) {
           ${statusRow}
           ${row4}
         </div>
-        <div class="recipe-card-home__actions">${matchPill}${actionBtn}</div>
       </div>
     </div>`;
 }
@@ -5059,11 +5106,10 @@ function renderMyRecipes() {
     };
   });
   dom.myRecipesList.innerHTML = myResults.map((r) => homeRecipeCardHTML(r, {
-    action: 'fork',
-    showOrigin: true,
+    action: 'none',
     showVisibility: true,
-    readyHtml: '🟢 모든 재료 준비 완료!',
     showRecommendTags: true,
+    variant: 'my',
   })).join('');
   bindRecipeCards(dom.myRecipesList, myResults);
 
@@ -5088,11 +5134,11 @@ function renderMyRecipes() {
       expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
     };
   });
+  // 저장한 레시피: 홈과 동일한 4행 레이아웃 (+ 북마크)
   dom.savedList.innerHTML = savedResults.map((r) => homeRecipeCardHTML(r, {
     action: 'save',
-    showOrigin: true,
     showVisibility: false,
-    readyHtml: '🟢 모든 재료 준비 완료!',
+    readyHtml: '바로 가능',
     showRecommendTags: true,
   })).join('');
   bindRecipeCards(dom.savedList, savedResults);
