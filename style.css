@@ -4273,6 +4273,17 @@ body.home-search-keyboard-active .home-search-dock {
   padding: 1.25rem 1rem var(--form-bottom-space);
 }
 
+/* 직접 작성: 하단 단계 안내 없음 → safe-area만 남김 */
+#recipe-form-modal:not(.recipe-form-modal--video-flow) .form-modal {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+#recipe-form-modal:not(.recipe-form-modal--video-flow) #recipe-form .form-actions {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+  padding-bottom: 0.25rem;
+}
+
 .form-modal__title {
   font-size: 1.125rem;
   font-weight: 700;
@@ -4290,6 +4301,171 @@ body.home-search-keyboard-active .home-search-dock {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
+}
+
+.form-row--cook-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.form-cook-meta__left {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.form-field--category,
+.form-field--difficulty,
+.form-field--cook-time {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* 라벨→컨트롤 간격은 양열 동일하게 유지 */
+.form-field--category,
+.form-field--cook-time {
+  gap: 0.375rem;
+}
+
+.form-row--cook-meta .form-cook-meta__select {
+  height: 56px;
+  min-height: 56px;
+  max-height: 56px;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+/* 카테고리 select 하단 ↔ 난이도 select 상단 = 16px (난이도 라벨은 간격 안에 배치) */
+.form-field--difficulty {
+  position: relative;
+  margin-top: 16px;
+  gap: 0;
+}
+
+.form-field--difficulty .form-field__label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 2px);
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* ===== Cook time wheel picker (vertical snap list) ===== */
+.cook-time-wheel {
+  --cook-wheel-h: 128px;
+  --cook-wheel-item-h: 42px; /* (128px - 2px border) / 3 */
+  --cook-wheel-visible: 3;
+  position: relative;
+  width: 100%;
+  height: var(--cook-wheel-h);
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cook-time-wheel__viewport {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.cook-time-wheel__highlight {
+  position: absolute;
+  left: 0.25rem;
+  right: 0.25rem;
+  top: var(--cook-wheel-item-h);
+  height: var(--cook-wheel-item-h);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 107, 53, 0.08);
+  border-top: 1px solid rgba(255, 107, 53, 0.18);
+  border-bottom: 1px solid rgba(255, 107, 53, 0.18);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cook-time-wheel__list {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: var(--cook-wheel-item-h) 0;
+  box-sizing: border-box;
+  list-style: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.cook-time-wheel__list::-webkit-scrollbar {
+  display: none;
+}
+
+.cook-time-wheel__item {
+  display: flex;
+  flex: 0 0 var(--cook-wheel-item-h);
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--cook-wheel-item-h);
+  min-height: var(--cook-wheel-item-h);
+  max-height: var(--cook-wheel-item-h);
+  box-sizing: border-box;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: var(--cook-wheel-item-h);
+  color: var(--color-text-muted);
+  opacity: 0.4;
+  transition: color 0.12s ease, opacity 0.12s ease;
+}
+
+.cook-time-wheel__item--active {
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  opacity: 1;
+}
+
+.cook-time-wheel__fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--cook-wheel-item-h);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.cook-time-wheel__fade--top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--color-bg) 20%, rgba(255, 255, 255, 0));
+}
+
+.cook-time-wheel__fade--bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--color-bg) 20%, rgba(255, 255, 255, 0));
 }
 
 .form-field {
@@ -4784,10 +4960,14 @@ body.home-search-keyboard-active .home-search-dock {
 .video-step-bar {
   display: flex;
   gap: 0.375rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.625rem;
   padding: 0.25rem;
   background: var(--color-surface);
   border-radius: var(--radius-full);
+}
+
+.video-step-bar[hidden] {
+  display: none !important;
 }
 
 .video-step-bar__item {
@@ -4810,45 +4990,8 @@ body.home-search-keyboard-active .home-search-dock {
   color: var(--color-primary);
 }
 
-.video-extract-hero {
-  text-align: center;
-  margin-bottom: 1rem;
-  padding: 1rem 0.75rem;
-  background: linear-gradient(160deg, #fff8f4 0%, #fff 100%);
-  border: 1px solid rgba(255, 107, 53, 0.12);
-  border-radius: var(--radius-lg);
-}
-
-.video-extract-hero__title {
-  margin: 0 0 0.375rem;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text);
-  line-height: 1.35;
-}
-
-.video-extract-hero__desc {
-  margin: 0 0 0.75rem;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  line-height: 1.45;
-}
-
-.video-platform-badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.375rem;
-}
-
-.video-platform-badge {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  padding: 0.25rem 0.625rem;
-  border-radius: var(--radius-full);
-  background: #fff;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+#recipe-form-modal.recipe-form-modal--video-flow .form-modal__title {
+  margin-bottom: 0.75rem;
 }
 
 .video-extract-panel {
@@ -4882,7 +5025,7 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .video-caption-details {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -4929,47 +5072,11 @@ body.home-search-keyboard-active .home-search-dock {
   color: #c0392b;
 }
 
-.video-extract-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.625rem;
-  margin: 0.75rem 0 1rem;
-  padding: 1.5rem 1rem;
-  background: var(--color-surface);
-  border: 1px dashed rgba(255, 107, 53, 0.25);
-  border-radius: var(--radius-lg);
-  animation: fadeIn 0.25s ease;
-}
-
-.video-extract-loading__spinner {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 3px solid rgba(255, 107, 53, 0.2);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: btn-spin 0.75s linear infinite;
-}
-
-.video-extract-loading__text {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  color: var(--color-text);
-}
-
-.video-extract-loading__hint {
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
 .video-extract-actions {
   position: sticky;
   bottom: 0;
-  margin-top: 0.5rem;
-  padding-top: 0.75rem;
+  margin-top: 0.375rem;
+  padding-top: 0.5rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--color-bg) 28%);
 }
 
@@ -5016,7 +5123,7 @@ body.home-search-keyboard-active .home-search-dock {
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-primary);
-  margin-bottom: 0.75rem;
+  margin: 0 0 0.5rem;
 }
 
 .video-ai-usage--exhausted {
@@ -5033,17 +5140,17 @@ body.home-search-keyboard-active .home-search-dock {
   background: rgba(180, 83, 9, 0.08);
   border: 1px solid rgba(180, 83, 9, 0.2);
   border-radius: var(--radius-md, 8px);
-  padding: 0.625rem 0.75rem;
-  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
   line-height: 1.45;
 }
 
 .video-link-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1rem;
-  margin-bottom: 0.75rem;
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .video-link-card__field {
@@ -5266,6 +5373,47 @@ body.home-search-keyboard-active .home-search-dock {
   position: absolute;
   opacity: 0;
   pointer-events: none;
+}
+
+/* 직접 입력 모달: 공개 설정 선형 아이콘 */
+#recipe-form .visibility-option {
+  color: var(--color-text-muted);
+}
+
+#recipe-form .visibility-option:has(input:checked) {
+  color: var(--color-primary-dark);
+}
+
+#recipe-form .visibility-option__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4375rem;
+  line-height: 1.2;
+}
+
+#recipe-form .visibility-option__icon {
+  flex-shrink: 0;
+  font-size: 1.125rem;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  color: inherit;
+}
+
+.recipe-visibility-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  line-height: 1.2;
+}
+
+.recipe-visibility-label__icon {
+  flex-shrink: 0;
+  font-size: 0.9375em;
+  line-height: 1;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+  color: inherit;
+  vertical-align: middle;
 }
 
 /* ===== Tab Bar ===== */

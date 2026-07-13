@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=137">
+  <link rel="stylesheet" href="style.css?v=147">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -491,11 +491,47 @@
             <button type="button" class="form-tabs__btn" data-recipe-tab="video" data-auth-required role="tab" aria-selected="false">영상 링크로 추가<span class="auth-gate-badge" hidden aria-hidden="true">🔒</span></button>
           </div>
 
+          <div id="video-flow-step-bar" class="video-step-bar" hidden aria-hidden="true">
+            <span class="video-step-bar__item video-step-bar__item--active" data-video-step="1">① 링크 입력</span>
+            <span class="video-step-bar__item" data-video-step="2">② 확인·수정</span>
+            <span class="video-step-bar__item" data-video-step="3">③ 저장</span>
+          </div>
+
           <!-- 직접 입력 -->
           <form id="recipe-form" class="recipe-form recipe-form-panel" data-recipe-panel="manual" novalidate>
             <div class="form-field">
               <label for="recipe-name" class="form-field__label">레시피 이름 <span class="required">*</span></label>
               <input type="text" id="recipe-name" class="form-field__input" required>
+            </div>
+            <div class="form-row form-row--cook-meta">
+              <div class="form-cook-meta__left">
+                <div class="form-field form-field--category">
+                  <label for="recipe-category" class="form-field__label">카테고리 <span class="required">*</span></label>
+                  <select id="recipe-category" class="form-field__select form-cook-meta__select" required>
+                    <option value="korean">한식</option><option value="western">양식</option>
+                    <option value="japanese">일식</option><option value="chinese">중식</option>
+                    <option value="diet">다이어트</option><option value="high-protein">고단백</option>
+                  </select>
+                </div>
+                <div class="form-field form-field--difficulty">
+                  <label for="recipe-difficulty" class="form-field__label">난이도 <span class="required">*</span></label>
+                  <select id="recipe-difficulty" class="form-field__select form-cook-meta__select" required>
+                    <option value="쉬움">쉬움</option><option value="보통">보통</option><option value="어려움">어려움</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-field form-field--cook-time">
+                <span class="form-field__label" id="recipe-cook-time-label">조리시간 <span class="required">*</span></span>
+                <input type="hidden" id="recipe-cook-time" name="recipe-cook-time" value="30" required>
+                <div class="cook-time-wheel" data-cook-time-wheel role="group" aria-labelledby="recipe-cook-time-label">
+                  <div class="cook-time-wheel__fade cook-time-wheel__fade--top" aria-hidden="true"></div>
+                  <div class="cook-time-wheel__viewport">
+                    <div class="cook-time-wheel__highlight" aria-hidden="true"></div>
+                    <ul class="cook-time-wheel__list" role="listbox" aria-labelledby="recipe-cook-time-label" tabindex="0"></ul>
+                  </div>
+                  <div class="cook-time-wheel__fade cook-time-wheel__fade--bottom" aria-hidden="true"></div>
+                </div>
+              </div>
             </div>
             <div class="form-field">
               <span class="form-field__label">사진 <span class="optional">(선택)</span></span>
@@ -521,30 +557,10 @@
               <label for="recipe-ingredients" class="form-field__label">재료 <span class="required">*</span></label>
               <textarea id="recipe-ingredients" class="form-field__textarea" rows="3" required></textarea>
             </div>
-            <div class="form-row">
-              <div class="form-field">
-                <label for="recipe-cook-time" class="form-field__label">조리시간(분) <span class="required">*</span></label>
-                <input type="number" id="recipe-cook-time" class="form-field__input" min="1" required>
-              </div>
-              <div class="form-field">
-                <label for="recipe-difficulty" class="form-field__label">난이도 <span class="required">*</span></label>
-                <select id="recipe-difficulty" class="form-field__select" required>
-                  <option value="쉬움">쉬움</option><option value="보통">보통</option><option value="어려움">어려움</option>
-                </select>
-              </div>
-            </div>
             <div class="form-field">
               <label for="recipe-steps" class="form-field__label">조리 순서 <span class="required">*</span></label>
               <textarea id="recipe-steps" class="form-field__textarea" rows="4" required placeholder="한 줄에 한 단계씩 입력하세요"></textarea>
               <p class="form-field__hint">줄바꿈으로 단계를 구분합니다. 쉼표(,)는 문장 안에서 자유롭게 사용할 수 있어요.</p>
-            </div>
-            <div class="form-field">
-              <label for="recipe-category" class="form-field__label">카테고리 <span class="required">*</span></label>
-              <select id="recipe-category" class="form-field__select" required>
-                <option value="korean">한식</option><option value="western">양식</option>
-                <option value="japanese">일식</option><option value="chinese">중식</option>
-                <option value="diet">다이어트</option><option value="high-protein">고단백</option>
-              </select>
             </div>
             <div class="form-field">
               <label for="recipe-memo" class="form-field__label">메모</label>
@@ -555,11 +571,17 @@
               <div class="visibility-toggle">
                 <label class="visibility-option">
                   <input type="radio" name="recipe-visibility" id="recipe-visibility-private" value="private" checked>
-                  <span>🔒 비공개</span>
+                  <span class="visibility-option__label">
+                    <span class="material-symbols-outlined visibility-option__icon" aria-hidden="true">lock</span>
+                    비공개
+                  </span>
                 </label>
                 <label class="visibility-option">
                   <input type="radio" name="recipe-visibility" id="recipe-visibility-public" value="public">
-                  <span>🌐 공개</span>
+                  <span class="visibility-option__label">
+                    <span class="material-symbols-outlined visibility-option__icon" aria-hidden="true">public</span>
+                    공개
+                  </span>
                 </label>
               </div>
               <p class="form-field__hint">공개 레시피는 커뮤니티에 표시됩니다</p>
@@ -571,24 +593,8 @@
             </div>
           </form>
 
-          <div id="video-flow-step-bar" class="video-step-bar" hidden aria-hidden="true">
-            <span class="video-step-bar__item video-step-bar__item--active" data-video-step="1">① 링크 입력</span>
-            <span class="video-step-bar__item" data-video-step="2">② 확인·수정</span>
-            <span class="video-step-bar__item" data-video-step="3">③ 저장</span>
-          </div>
-
           <!-- 영상 링크 입력 -->
           <div id="recipe-form-panel-video" class="recipe-form-panel video-extract-panel" data-recipe-panel="video" hidden>
-            <div class="video-extract-hero">
-              <p class="video-extract-hero__title">영상 링크를 붙여넣으면 레시피를 정리해 드려요</p>
-              <p class="video-extract-hero__desc">영상 파일은 저장하지 않고, 링크·캡션에서 확인 가능한 정보만 추출합니다.</p>
-              <div class="video-platform-badges" aria-hidden="true">
-                <span class="video-platform-badge">▶ YouTube</span>
-                <span class="video-platform-badge">📷 Reels</span>
-                <span class="video-platform-badge">🎵 TikTok</span>
-              </div>
-            </div>
-
             <p id="video-ai-usage" class="video-ai-usage" hidden>남은 무료 분석 5회</p>
             <p id="video-extract-warning" class="video-extract-warning" hidden></p>
 
@@ -630,17 +636,6 @@
                 <textarea id="video-paste-text" class="form-field__textarea" rows="6" placeholder="영상 설명, 자막, 고정 댓글을 붙여넣어 주세요."></textarea>
               </div>
               <button type="button" id="video-fallback-analyze-btn" class="btn btn--outline btn--full">붙여넣은 텍스트로 레시피 정리</button>
-            </div>
-
-            <div id="video-form-error" class="video-form-error-card" hidden role="alert">
-              <span class="video-form-error-card__icon" aria-hidden="true">⚠️</span>
-              <p class="video-form-error-card__text"></p>
-            </div>
-
-            <div id="video-extract-loading" class="video-extract-loading" hidden aria-live="polite" aria-busy="true">
-              <div class="video-extract-loading__spinner" aria-hidden="true"></div>
-              <p id="video-extract-loading-text" class="video-extract-loading__text">레시피를 분석하고 있어요…</p>
-              <p class="video-extract-loading__hint">보통 10~30초 정도 걸릴 수 있어요</p>
             </div>
 
             <div class="form-actions video-extract-actions">
@@ -987,6 +982,6 @@
   <script src="js/ingredient-emoji.js?v=1"></script>
   <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=167" defer></script>
+  <script src="script.js?v=174" defer></script>
 </body>
 </html>

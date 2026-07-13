@@ -4243,6 +4243,14 @@ function isPublicCommunityRecipe(recipe) {
   return recipe?.source === 'user' && (recipe.visibility === 'public' || recipe.isPublic === true);
 }
 
+/** 직접 입력 공개설정과 동일한 Material 선형 아이콘 */
+function recipeVisibilityLabelHTML(visibility) {
+  const isPublic = visibility === 'public';
+  const icon = isPublic ? 'public' : 'lock';
+  const text = isPublic ? '공개' : '비공개';
+  return `<span class="recipe-visibility-label"><span class="material-symbols-outlined recipe-visibility-label__icon" aria-hidden="true">${icon}</span>${text}</span>`;
+}
+
 function switchView(view) {
   if (view === 'community') view = 'main';
   const prevView = state.view;
@@ -4941,7 +4949,7 @@ function homeRecipeCardHTML(result, options = {}) {
 
   const visibilityMeta = showVisibility
     ? `<span class="recipe-card-home__meta-sep">·</span>
-       <span class="recipe-card-home__meta-item">${recipe.visibility === 'public' ? '🌐 공개' : '🔒 비공개'}</span>`
+       <span class="recipe-card-home__meta-item">${recipeVisibilityLabelHTML(recipe.visibility)}</span>`
     : '';
 
   const statusRow = missingCount > 0
@@ -5030,7 +5038,7 @@ function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryN
           <span>⏱ ${recipe.cookTime}분</span>
           <span>📊 ${recipe.difficulty}</span>
           ${showAuthor ? `<span>👤 ${esc(recipe.authorName)}</span>` : ''}
-          ${showVisibility ? `<span>${recipe.visibility === 'public' ? '🌐 공개' : '🔒 비공개'}</span>` : ''}
+          ${showVisibility ? `<span>${recipeVisibilityLabelHTML(recipe.visibility)}</span>` : ''}
           ${showSaveCount ? `<span class="recipe-card__save-count">⭐ ${saveCount}명 저장</span>` : ''}
         </div>
         ${!hideReason && recommendationReason ? `<p class="recipe-card__reason">${esc(recommendationReason)}</p>` : ''}
@@ -8002,7 +8010,7 @@ function openRecipeDetail(result) {
         ${recipe.sourceUrl ? `<a class="recipe-detail__source-link" href="${esc(recipe.sourceUrl)}" target="_blank" rel="noopener noreferrer">🎬 원본 영상 보기</a>` : ''}
         <div class="recipe-detail__tags">
           ${recipe.tags.map((t) => `<span class="recipe-detail__tag">${esc(t)}</span>`).join('')}
-          <span class="recipe-detail__tag">${recipe.visibility === 'public' ? '🌐 공개' : '🔒 비공개'}</span>
+          <span class="recipe-detail__tag">${recipeVisibilityLabelHTML(recipe.visibility)}</span>
           <span class="recipe-detail__tag">👤 ${esc(recipe.authorName)}</span>
         </div>
         <div class="recipe-detail__stats">
@@ -8120,6 +8128,7 @@ function applyRecipeFormTab(tab) {
     dom.videoFlowStepBar.setAttribute('aria-hidden', showFlow ? 'false' : 'true');
     updateVideoFlowStep(tab === 'review' ? 2 : tab === 'video' ? 1 : 0);
   }
+  dom.recipeFormModal?.classList.toggle('recipe-form-modal--video-flow', tab === 'video' || tab === 'review');
   updateVideoFormModalTitle(tab);
   if (tab === 'video') AiUsageService.refreshDisplay();
 }
@@ -8190,14 +8199,21 @@ function showAiDailyLimitAlert(message) {
 }
 
 function setVideoExtractLoading(loading, message = '레시피를 분석하고 있어요…') {
-  if (dom.videoExtractLoading) dom.videoExtractLoading.hidden = !loading;
-  if (dom.videoExtractLoadingText) dom.videoExtractLoadingText.textContent = message;
   dom.recipeFormPanelVideo?.classList.toggle('video-extract-panel--loading', loading);
   if (dom.videoAnalyzeBtn) {
     const limitReached = state.aiUsageRemaining === 0;
     dom.videoAnalyzeBtn.disabled = loading || limitReached;
     dom.videoAnalyzeBtn.classList.toggle('btn--loading', loading);
     dom.videoAnalyzeBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
+    if (loading) {
+      if (!dom.videoAnalyzeBtn.dataset.prevLabel) {
+        dom.videoAnalyzeBtn.dataset.prevLabel = '레시피 추출하기';
+      }
+      dom.videoAnalyzeBtn.textContent = message;
+    } else if (dom.videoAnalyzeBtn.dataset.prevLabel) {
+      dom.videoAnalyzeBtn.textContent = dom.videoAnalyzeBtn.dataset.prevLabel;
+      delete dom.videoAnalyzeBtn.dataset.prevLabel;
+    }
   }
   if (dom.videoFallbackAnalyzeBtn) {
     dom.videoFallbackAnalyzeBtn.disabled = loading;
@@ -8294,12 +8310,7 @@ async function updateVideoLinkPreview() {
 }
 
 function showVideoFormError(msg) {
-  const textEl = dom.videoFormErrorText || dom.videoFormError;
-  if (textEl) textEl.textContent = msg;
-  if (dom.videoFormError) {
-    dom.videoFormError.hidden = false;
-    dom.videoFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  if (msg) showToast(msg);
 }
 
 function showVideoReviewError(msg) {
@@ -8359,7 +8370,7 @@ async function handleVideoExtract() {
     });
     return;
   }
-  dom.videoFormError.hidden = true;
+  if (dom.videoFormError) dom.videoFormError.hidden = true;
   hideVideoFallback();
   hideVideoExtractWarning();
   const sourceUrl = dom.videoSourceUrl.value.trim();
@@ -8415,7 +8426,7 @@ async function handleVideoFallbackAnalyze() {
     });
     return;
   }
-  dom.videoFormError.hidden = true;
+  if (dom.videoFormError) dom.videoFormError.hidden = true;
   const sourceUrl = dom.videoSourceUrl.value.trim();
   clearVideoExtractStateBeforeExtract(sourceUrl);
   const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload(sourceUrl);
@@ -8540,6 +8551,141 @@ function handleVideoRecipeSave() {
     });
 }
 
+const COOK_TIME_WHEEL_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 90, 120];
+const COOK_TIME_WHEEL_DEFAULT = 30;
+const COOK_TIME_WHEEL_ITEM_HEIGHT = 42; // (128px wheel - 2px border) / 3
+
+let cookTimeWheelBound = false;
+let cookTimeWheelScrollTimer = null;
+let cookTimeWheelIgnoreScroll = false;
+let cookTimeWheelActiveIndex = -1;
+
+function nearestCookTimeWheelOption(minutes) {
+  const n = Number(minutes);
+  if (!Number.isFinite(n) || n <= 0) return COOK_TIME_WHEEL_DEFAULT;
+  let best = COOK_TIME_WHEEL_OPTIONS[0];
+  let bestDiff = Math.abs(best - n);
+  for (const opt of COOK_TIME_WHEEL_OPTIONS) {
+    const diff = Math.abs(opt - n);
+    if (diff < bestDiff) {
+      best = opt;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
+function getCookTimeWheelElements() {
+  const root = document.querySelector('[data-cook-time-wheel]');
+  const list = root?.querySelector('.cook-time-wheel__list');
+  return { root, list };
+}
+
+function cookTimeWheelIndexFromScroll(list) {
+  if (!list) return 0;
+  const raw = Math.round(list.scrollTop / COOK_TIME_WHEEL_ITEM_HEIGHT);
+  return Math.max(0, Math.min(COOK_TIME_WHEEL_OPTIONS.length - 1, raw));
+}
+
+function updateCookTimeWheelActiveItem(list, index) {
+  if (!list || index === cookTimeWheelActiveIndex) return;
+  cookTimeWheelActiveIndex = index;
+  setCookTimeWheelFormValue(index);
+  list.querySelectorAll('.cook-time-wheel__item').forEach((el, i) => {
+    el.classList.toggle('cook-time-wheel__item--active', i === index);
+    el.setAttribute('aria-selected', i === index ? 'true' : 'false');
+  });
+}
+
+function setCookTimeWheelFormValue(index) {
+  const value = COOK_TIME_WHEEL_OPTIONS[index];
+  if (value == null || !dom.formCookTime) return;
+  const next = String(value);
+  if (dom.formCookTime.value !== next) dom.formCookTime.value = next;
+}
+
+function scrollCookTimeWheelToIndex(list, index, { smooth = false } = {}) {
+  if (!list) return;
+  const targetTop = index * COOK_TIME_WHEEL_ITEM_HEIGHT;
+  cookTimeWheelIgnoreScroll = true;
+  if (smooth) {
+    list.scrollTo({ top: targetTop, behavior: 'smooth' });
+  } else {
+    list.scrollTop = targetTop;
+  }
+  window.setTimeout(() => { cookTimeWheelIgnoreScroll = false; }, smooth ? 280 : 0);
+}
+
+function syncCookTimeWheelValue(minutes, { scroll = true, smooth = false } = {}) {
+  const value = nearestCookTimeWheelOption(minutes);
+  if (dom.formCookTime) dom.formCookTime.value = String(value);
+  const { list } = getCookTimeWheelElements();
+  if (!list) return value;
+  const index = COOK_TIME_WHEEL_OPTIONS.indexOf(value);
+  updateCookTimeWheelActiveItem(list, index);
+  if (scroll) {
+    const applyScroll = () => scrollCookTimeWheelToIndex(list, index, { smooth });
+    if (list.clientHeight > 0) applyScroll();
+    else requestAnimationFrame(applyScroll);
+  }
+  return value;
+}
+
+function commitCookTimeWheelFromScroll(list) {
+  if (!list) return;
+  const index = cookTimeWheelIndexFromScroll(list);
+  updateCookTimeWheelActiveItem(list, index);
+  setCookTimeWheelFormValue(index);
+  const targetTop = index * COOK_TIME_WHEEL_ITEM_HEIGHT;
+  if (Math.abs(list.scrollTop - targetTop) > 0.5) {
+    scrollCookTimeWheelToIndex(list, index, { smooth: true });
+  }
+}
+
+function buildCookTimeWheelItems(list) {
+  if (!list) return;
+  cookTimeWheelActiveIndex = -1;
+  list.innerHTML = COOK_TIME_WHEEL_OPTIONS.map((minutes) => (
+    `<li class="cook-time-wheel__item" role="option" data-cook-time="${minutes}" aria-selected="false">${minutes}분</li>`
+  )).join('');
+}
+
+function initCookTimeWheel() {
+  const { root, list } = getCookTimeWheelElements();
+  if (!root || !list || cookTimeWheelBound) return;
+  cookTimeWheelBound = true;
+  buildCookTimeWheelItems(list);
+
+  list.addEventListener('scroll', () => {
+    if (cookTimeWheelIgnoreScroll) return;
+    // 인덱스가 바뀔 때만 하이라이트 갱신. 폼 값은 스크롤 종료 시 한 번 반영
+    updateCookTimeWheelActiveItem(list, cookTimeWheelIndexFromScroll(list));
+    clearTimeout(cookTimeWheelScrollTimer);
+    cookTimeWheelScrollTimer = setTimeout(() => commitCookTimeWheelFromScroll(list), 100);
+  }, { passive: true });
+
+  list.addEventListener('scrollend', () => {
+    if (cookTimeWheelIgnoreScroll) return;
+    clearTimeout(cookTimeWheelScrollTimer);
+    commitCookTimeWheelFromScroll(list);
+  });
+
+  // 모달 세로 스크롤과 휠 스크롤 충돌 완화 (기본 pan-y는 유지)
+  list.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  list.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+  list.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+
+  list.querySelectorAll('[data-cook-time]').forEach((item) => {
+    item.addEventListener('click', () => {
+      syncCookTimeWheelValue(item.dataset.cookTime, { scroll: true, smooth: true });
+    });
+  });
+
+  requestAnimationFrame(() => {
+    syncCookTimeWheelValue(dom.formCookTime?.value || COOK_TIME_WHEEL_DEFAULT, { scroll: true, smooth: false });
+  });
+}
+
 function prepareRecipeForm(id = null, { prefillName = '' } = {}) {
   state.editingRecipeId = id;
   state.formImage = null;
@@ -8562,7 +8708,7 @@ function prepareRecipeForm(id = null, { prefillName = '' } = {}) {
       .filter((ing) => !isOptionalIngredient(ing))
       .map(formatIngredientDisplay)
       .join('\n');
-    dom.formCookTime.value = r.cookTime;
+    syncCookTimeWheelValue(r.cookTime, { scroll: true });
     dom.formDifficulty.value = r.difficulty;
     dom.formSteps.value = r.steps.join('\n');
     dom.formCategory.value = r.category;
@@ -8575,6 +8721,7 @@ function prepareRecipeForm(id = null, { prefillName = '' } = {}) {
     dom.formVisibilityPrivate.checked = true;
     setRecipeFormTab('manual');
     if (prefillName) dom.formName.value = prefillName;
+    syncCookTimeWheelValue(COOK_TIME_WHEEL_DEFAULT, { scroll: true });
   }
   return true;
 }
@@ -8592,6 +8739,7 @@ function openRecipeForm(id = null, options = {}) {
   if (!prepareRecipeForm(id, options)) return;
   openModal('form');
   requestAnimationFrame(() => {
+    syncCookTimeWheelValue(dom.formCookTime?.value || COOK_TIME_WHEEL_DEFAULT, { scroll: true });
     if (options.prefillName && !id) {
       dom.formIngredients?.focus();
     } else {
@@ -8620,6 +8768,11 @@ function handleRecipeFormSubmit(e) {
   };
   if (!data.name) return showError('레시피 이름을 입력해 주세요.');
   if (!data.ingredients.length) return showError('재료를 입력해 주세요.');
+  if (!COOK_TIME_WHEEL_OPTIONS.includes(Number(data.cookTime))) {
+    data.cookTime = nearestCookTimeWheelOption(data.cookTime);
+    if (dom.formCookTime) dom.formCookTime.value = String(data.cookTime);
+  }
+  if (!data.cookTime) return showError('조리시간을 선택해 주세요.');
   if (!data.steps.length) return showError('조리 순서를 입력해 주세요.');
 
   if (state.editingRecipeId && !data.image) {
@@ -9210,6 +9363,7 @@ function init() {
   });
   dom.videoSourceUrl?.addEventListener('blur', updateVideoLinkPreview);
   initRecipePhotoUpload();
+  initCookTimeWheel();
 
   document.querySelectorAll('[data-close-modal]').forEach((el) => {
     el.onclick = () => {
