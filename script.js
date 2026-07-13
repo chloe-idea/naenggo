@@ -4135,18 +4135,8 @@ function recipePlaceholderHTML(recipe, variant = 'card') {
 
 function recipeCardImageHTML(recipe) {
   if (typeof RecipeImageService !== 'undefined') {
-    const hasPhoto = RecipeImageService.pickPhoto(recipe);
-    if (hasPhoto) {
-      return RecipeImageService.renderImg(recipe, { variant: 'card', zoomable: true });
-    }
-    const categorySrc = RecipeImageService.resolveCategoryAssetSrc(recipe);
-    const dishType = recipe.dishType || DishTypeService.infer(recipe.name);
-    const svg = DishTypeService.placeholderSVG(recipe);
-    return `
-      <div class="recipe-card__image recipe-card__image--placeholder recipe-card__image--${esc(dishType)}" aria-hidden="true">
-        <img class="recipe-card__image-bg" src="${esc(categorySrc)}" alt="">
-        ${svg}
-      </div>`;
+    // 카드 사진은 라이트박스 대신 카드와 같이 상세 모달로 연결
+    return RecipeImageService.renderImg(recipe, { variant: 'card', zoomable: false });
   }
   return recipePlaceholderHTML(recipe, 'card');
 }
@@ -4159,7 +4149,9 @@ function recipeHeroHTML(recipe) {
 }
 
 function bindZoomableImages(container) {
+  // 카드 안 사진은 상세 모달로 열리게 두고, 상세 히어로 등만 라이트박스
   container.querySelectorAll('[data-zoom-src]').forEach((btn) => {
+    if (btn.closest('.recipe-card')) return;
     btn.onclick = (e) => {
       e.stopPropagation();
       openImageLightbox(btn.dataset.zoomSrc, btn.querySelector('img')?.alt || '');
@@ -5291,7 +5283,7 @@ function bindRecipeCards(container, results) {
   bindZoomableImages(container);
   container.querySelectorAll('.recipe-card').forEach((card) => {
     const open = (e) => {
-      if (e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid], [data-zoom-src], .recipe-card__image-btn, .recipe-card-author, [data-author-id]')) return;
+      if (e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid], .recipe-card-author, [data-author-id]')) return;
       const r = results.find((x) => idEq(x.recipe.id, card.dataset.rid));
       openRecipeDetail(r || { recipe: RecipeRepository.getById(card.dataset.rid) });
     };
