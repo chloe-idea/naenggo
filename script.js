@@ -3808,6 +3808,8 @@ const state = {
   plannerSheet: { date: null, slot: null, action: 'add', tab: 'recommend', search: '' },
   /** 식단에서 «레시피 등록 후 추가» 시 저장 완료 후 슬롯에 연결 */
   plannerPendingMeal: null,
+  myRecipesSort: { mine: 'newest', saved: 'match' },
+  myRecipesSortSheetSection: null,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -3862,6 +3864,9 @@ const dom = {
   myRecipesList: $('#my-recipes-list'), myRecipesCount: $('#my-recipes-count'), myRecipesEmpty: $('#my-recipes-empty'),
   myRecipesGuestHint: $('#my-recipes-guest-hint'),
   savedList: $('#saved-recipes-list'), savedCount: $('#saved-recipes-count'), savedEmpty: $('#saved-recipes-empty'),
+  myRecipesSortSheet: $('#my-recipes-sort-sheet'),
+  myRecipesSortOptions: $('#my-recipes-sort-options'),
+  myRecipesSortSheetTitle: $('#my-recipes-sort-sheet-title'),
   pantryList: $('#pantry-list'), pantryCount: $('#pantry-manage-count'), pantryEmpty: $('#pantry-empty'),
   openPantryAdd: $('#open-pantry-add-btn'), openRecipeForm: $('#open-recipe-form-btn'),
   openVideoRecipeFormBtn: $('#open-video-recipe-form-btn'),
@@ -5261,79 +5266,223 @@ function renderHome() {
 }
 
 // ===== Render: My Recipes =====
+const MY_RECIPES_SORT_OPTIONS = [
+  { id: 'newest', label: '최신순' },
+  { id: 'oldest', label: '오래된순' },
+  { id: 'match', label: '재료 일치율 높은순' },
+  { id: 'cookTime', label: '조리시간 짧은순' },
+  { id: 'name', label: '이름순' },
+];
+
+function buildMyPageRecipeResult(recipe) {
+  const names = RecommendationService.getPantryNames();
+  const a = MatchService.analyze(names, recipe.ingredients || []);
+  return {
+    recipe,
+    matchPercent: a.matchPercent,
+    missing: a.missing || [],
+    matched: a.matched || [],
+    matchedPantryNames: a.matchedPantryNames || [],
+    exact: a.exact || [],
+    substituted: a.substituted || [],
+    expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
+  };
+}
+
+function getSavedRecipeOrderIndex(recipeId) {
+  const ids = SavedRecipeRepository._ids || [];
+  const idx = ids.findIndex((id) => idEq(id, recipeId));
+  return idx >= 0 ? idx : -1;
+}
+
+function getMyRecipeCreatedAtValue(recipe) {
+  return String(recipe?.createdAt || recipe?.updatedAt || '');
+}
+
+function sortMyPageRecipeResults(results, sortId, section) {
+  const list = [...(results || [])];
+  list.sort((a, b) => {
+    if (sortId === 'newest' || sortId === 'oldest') {
+      const dir = sortId === 'newest' ? -1 : 1;
+      if (section === 'saved') {
+        return dir * (getSavedRecipeOrderIndex(a.recipe.id) - getSavedRecipeOrderIndex(b.recipe.id));
+      }
+      const dateA = getMyRecipeCreatedAtValue(a.recipe);
+      const dateB = getMyRecipeCreatedAtValue(b.recipe);
+      if (dateA !== dateB) return dir * dateA.localeCompare(dateB);
+      return String(a.recipe.name || '').localeCompare(String(b.recipe.name || ''), 'ko');
+    }
+    if (sortId === 'match') {
+      const diff = (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0);
+      if (diff !== 0) return diff;
+      return String(a.recipe.name || '').localeCompare(String(b.recipe.name || ''), 'ko');
+    }
+    if (sortId === 'cookTime') {
+      const timeA = Number(a.recipe.cookTime);
+      const timeB = Number(b.recipe.cookTime);
+      const normA = Number.isFinite(timeA) ? timeA : 9999;
+      const normB = Number.isFinite(timeB) ? timeB : 9999;
+      if (normA !== normB) return normA - normB;
+      return String(a.recipe.name || '').localeCompare(String(b.recipe.name || ''), 'ko');
+    }
+    if (sortId === 'name') {
+      return String(a.recipe.name || '').localeCompare(String(b.recipe.name || ''), 'ko');
+    }
+    return 0;
+  });
+  return list;
+}
+
+function setMyRecipesSectionCount(el, count) {
+  if (!el) return;
+  el.textContent = `${count}개`;
+}
+
+function setMyRecipesEmptyState(emptyEl, { title, hint, hidden }) {
+  if (!emptyEl) return;
+  emptyEl.hidden = hidden;
+  const titleEl = emptyEl.querySelector('.empty-state__text');
+  const hintEl = emptyEl.querySelector('.empty-state__hint');
+  if (titleEl && title != null) titleEl.textContent = title;
+  if (hintEl) {
+    if (hint) {
+      hintEl.hidden = false;
+      hintEl.textContent = hint;
+    } else {
+      hintEl.hidden = true;
+      hintEl.textContent = '';
+    }
+  }
+}
+
+function closeMyRecipesSortSheet() {
+  if (!dom.myRecipesSortSheet || dom.myRecipesSortSheet.hidden) {
+    state.myRecipesSortSheetSection = null;
+    return;
+  }
+  dom.myRecipesSortSheet.hidden = true;
+  dom.myRecipesSortSheet.setAttribute('aria-hidden', 'true');
+  state.myRecipesSortSheetSection = null;
+  updateBodyScrollLock();
+}
+
+function renderMyRecipesSortOptions() {
+  if (!dom.myRecipesSortOptions) return;
+  const section = state.myRecipesSortSheetSection;
+  const current = section === 'saved' ? state.myRecipesSort.saved : state.myRecipesSort.mine;
+  if (dom.myRecipesSortSheetTitle) {
+    dom.myRecipesSortSheetTitle.textContent = section === 'saved' ? '저장한 레시피 정렬' : '내 레시피 정렬';
+  }
+  dom.myRecipesSortOptions.innerHTML = MY_RECIPES_SORT_OPTIONS.map((opt) => {
+    const selected = opt.id === current;
+    return `
+      <button type="button" class="my-recipes-sort-option${selected ? ' my-recipes-sort-option--selected' : ''}"
+        role="option" aria-selected="${selected ? 'true' : 'false'}" data-sort-id="${esc(opt.id)}">
+        <span class="my-recipes-sort-option__label">${esc(opt.label)}</span>
+        <span class="my-recipes-sort-option__check" aria-hidden="true">${selected ? '✓' : ''}</span>
+      </button>`;
+  }).join('');
+  dom.myRecipesSortOptions.querySelectorAll('[data-sort-id]').forEach((btn) => {
+    btn.onclick = () => {
+      const sortId = btn.dataset.sortId;
+      if (!section || !MY_RECIPES_SORT_OPTIONS.some((o) => o.id === sortId)) return;
+      if (section === 'saved') state.myRecipesSort.saved = sortId;
+      else state.myRecipesSort.mine = sortId;
+      closeMyRecipesSortSheet();
+      renderMyRecipes();
+    };
+  });
+}
+
+function openMyRecipesSortSheet(section) {
+  if (!dom.myRecipesSortSheet || (section !== 'mine' && section !== 'saved')) return;
+  state.myRecipesSortSheetSection = section;
+  renderMyRecipesSortOptions();
+  dom.myRecipesSortSheet.querySelector('.planner-sheet')?.classList.remove('planner-sheet--closing');
+  dom.myRecipesSortSheet.hidden = false;
+  dom.myRecipesSortSheet.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  updateBodyScrollLock();
+}
+
+function initMyRecipesSortUi() {
+  document.querySelectorAll('.my-recipes-sort-btn[data-sort-section]').forEach((btn) => {
+    btn.onclick = () => openMyRecipesSortSheet(btn.dataset.sortSection);
+  });
+  document.querySelectorAll('[data-close-modal="my-recipes-sort"]').forEach((el) => {
+    el.onclick = () => closeMyRecipesSortSheet();
+  });
+}
+
 function renderMyRecipes() {
   const guest = isGuestUser();
   if (dom.myRecipesGuestHint) dom.myRecipesGuestHint.hidden = !guest;
 
   if (guest) {
-    dom.myRecipesCount.textContent = '';
-    dom.myRecipesList.innerHTML = '';
-    dom.myRecipesEmpty.hidden = false;
-    const myEmptyText = dom.myRecipesEmpty?.querySelector('.empty-state__text');
-    if (myEmptyText) myEmptyText.textContent = '로그인하면 저장한 레시피를 확인할 수 있어요.';
-    dom.savedCount.textContent = '';
-    dom.savedList.innerHTML = '';
-    dom.savedEmpty.hidden = false;
-    const savedEmptyText = dom.savedEmpty?.querySelector('.empty-state__text');
-    if (savedEmptyText) savedEmptyText.textContent = '로그인하면 즐겨찾기한 레시피를 확인할 수 있어요.';
+    setMyRecipesSectionCount(dom.myRecipesCount, 0);
+    setMyRecipesSectionCount(dom.savedCount, 0);
+    if (dom.myRecipesList) dom.myRecipesList.innerHTML = '';
+    if (dom.savedList) dom.savedList.innerHTML = '';
+    setMyRecipesEmptyState(dom.myRecipesEmpty, {
+      title: '로그인하면 내 레시피를 확인할 수 있어요.',
+      hint: '',
+      hidden: false,
+    });
+    setMyRecipesEmptyState(dom.savedEmpty, {
+      title: '로그인하면 즐겨찾기한 레시피를 확인할 수 있어요.',
+      hint: '',
+      hidden: false,
+    });
     syncAuthGateUi();
     return;
   }
 
   const recipes = RecipeRepository.getUserRecipes();
-  dom.myRecipesCount.textContent = recipes.length ? `${recipes.length}개` : '';
-  dom.myRecipesEmpty.hidden = recipes.length > 0;
-  const myResults = recipes.map((recipe) => {
-    const names = RecommendationService.getPantryNames();
-    const a = MatchService.analyze(names, recipe.ingredients || []);
-    return {
-      recipe,
-      matchPercent: a.matchPercent,
-      missing: a.missing || [],
-      matched: a.matched || [],
-      matchedPantryNames: a.matchedPantryNames || [],
-      exact: a.exact || [],
-      substituted: a.substituted || [],
-      expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
-    };
+  const myResults = sortMyPageRecipeResults(
+    recipes.map(buildMyPageRecipeResult),
+    state.myRecipesSort.mine,
+    'mine',
+  );
+  setMyRecipesSectionCount(dom.myRecipesCount, myResults.length);
+  setMyRecipesEmptyState(dom.myRecipesEmpty, {
+    title: '아직 직접 만든 레시피가 없어요',
+    hint: '직접 입력으로 나만의 레시피를 추가해보세요',
+    hidden: myResults.length > 0,
   });
-  dom.myRecipesList.innerHTML = myResults.map((r) => homeRecipeCardHTML(r, {
-    action: 'none',
-    showVisibility: true,
-    showRecommendTags: true,
-    variant: 'my',
-  })).join('');
-  bindRecipeCards(dom.myRecipesList, myResults);
-
-  dom.myRecipesList.querySelectorAll('.recipe-card').forEach((card) => {
-    card.addEventListener('contextmenu', (e) => e.preventDefault());
-  });
+  if (dom.myRecipesList) {
+    dom.myRecipesList.innerHTML = myResults.map((r) => homeRecipeCardHTML(r, {
+      action: 'none',
+      showVisibility: true,
+      showRecommendTags: true,
+      variant: 'my',
+    })).join('');
+    bindRecipeCards(dom.myRecipesList, myResults);
+    dom.myRecipesList.querySelectorAll('.recipe-card').forEach((card) => {
+      card.addEventListener('contextmenu', (e) => e.preventDefault());
+    });
+  }
 
   const saved = SavedRecipeRepository.getRecipes();
-  dom.savedCount.textContent = saved.length ? `${saved.length}개` : '';
-  dom.savedEmpty.hidden = saved.length > 0;
-  const savedResults = saved.map((recipe) => {
-    const names = RecommendationService.getPantryNames();
-    const a = MatchService.analyze(names, recipe.ingredients || []);
-    return {
-      recipe,
-      matchPercent: a.matchPercent,
-      missing: a.missing || [],
-      matched: a.matched || [],
-      matchedPantryNames: a.matchedPantryNames || [],
-      exact: a.exact || [],
-      substituted: a.substituted || [],
-      expiryBoost: RecommendationService.getExpiryBoost(a.matchedPantryNames || []),
-    };
+  const savedResults = sortMyPageRecipeResults(
+    saved.map(buildMyPageRecipeResult),
+    state.myRecipesSort.saved,
+    'saved',
+  );
+  setMyRecipesSectionCount(dom.savedCount, savedResults.length);
+  setMyRecipesEmptyState(dom.savedEmpty, {
+    title: '아직 저장한 레시피가 없어요',
+    hint: '마음에 드는 레시피를 저장해보세요',
+    hidden: savedResults.length > 0,
   });
-  // 저장한 레시피: 홈과 동일한 4행 레이아웃 (+ 북마크)
-  dom.savedList.innerHTML = savedResults.map((r) => homeRecipeCardHTML(r, {
-    action: 'save',
-    showVisibility: false,
-    readyHtml: '바로 가능',
-    showRecommendTags: true,
-  })).join('');
-  bindRecipeCards(dom.savedList, savedResults);
+  if (dom.savedList) {
+    dom.savedList.innerHTML = savedResults.map((r) => homeRecipeCardHTML(r, {
+      action: 'save',
+      showVisibility: false,
+      readyHtml: '바로 가능',
+      showRecommendTags: true,
+    })).join('');
+    bindRecipeCards(dom.savedList, savedResults);
+  }
   syncAuthGateUi();
 }
 
@@ -8607,6 +8756,7 @@ function updateBodyScrollLock() {
     || (dom.grocerySpendSheet && !dom.grocerySpendSheet.hidden)
     || (dom.plannerSlotSheet && !dom.plannerSlotSheet.hidden)
     || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
+    || (dom.myRecipesSortSheet && !dom.myRecipesSortSheet.hidden)
     || (dom.loginPromptModal && !dom.loginPromptModal.hidden);
   document.body.style.overflow = anyOpen ? 'hidden' : '';
 }
@@ -8653,6 +8803,7 @@ function closeModal(type) {
 function closeAllModals() {
   ['recipe', 'form', 'pantry', 'meal', 'shopping', 'grocery-item'].forEach(closeModal);
   closePlannerSheets();
+  closeMyRecipesSortSheet();
   closeCalendarDaySheet({ immediate: true });
   closeCalendarExpenseSheet();
   closeGrocerySpendSheet();
@@ -8758,6 +8909,7 @@ function init() {
   initGroceryListAmountHandlers();
   initCalendarDaySheetGestures();
   initHomeSearchDock();
+  initMyRecipesSortUi();
   window.addEventListener('resize', scheduleFitMobileHomeCardMissingStatuses);
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
@@ -8906,6 +9058,7 @@ function init() {
       else if (type === 'calendar-expense') closeCalendarExpenseSheet();
       else if (type === 'grocery-spend') closeGrocerySpendSheet();
       else if (type === 'planner-slot' || type === 'planner-recipe') closePlannerSheets();
+      else if (type === 'my-recipes-sort') closeMyRecipesSortSheet();
       else if (type !== 'profile') closeModal(type);
     };
   });
