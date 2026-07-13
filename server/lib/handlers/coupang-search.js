@@ -7,6 +7,10 @@
  * Body: { coupangUrls: ["https://www.coupang.com/np/search?component=&q=...&channel=user"] }
  */
 import { generateCoupangPartnersAuthorization } from '../coupang-hmac.js';
+import {
+  resolveCoupangPartnersCredentials,
+  coupangKeysMissingPayload,
+} from '../coupang-env.js';
 
 const DOMAIN = 'https://api-gateway.coupang.com';
 const DEEPLINK_PATH = '/v2/providers/affiliate_open_api/apis/openapi/v1/deeplink';
@@ -26,9 +30,8 @@ function pickAffiliateUrl(item) {
  * @returns {Promise<{ status: number, body: object }>}
  */
 export async function handleCoupangSearch({ keyword } = {}) {
-  const accessKey = String(process.env.COUPANG_PARTNERS_ACCESS_KEY || '').trim();
-  const secretKey = String(process.env.COUPANG_PARTNERS_SECRET_KEY || '').trim();
-  const subId = String(process.env.COUPANG_PARTNERS_SUB_ID || '').trim();
+  const creds = resolveCoupangPartnersCredentials();
+  const { accessKey, secretKey, subId } = creds;
   const cleaned = String(keyword || '').trim();
 
   if (!cleaned) {
@@ -39,13 +42,14 @@ export async function handleCoupangSearch({ keyword } = {}) {
   }
 
   if (!accessKey || !secretKey) {
+    console.warn('[coupang-search] keys missing', {
+      hasAccessKey: Boolean(accessKey),
+      hasSecretKey: Boolean(secretKey),
+      vercelEnv: process.env.VERCEL_ENV || null,
+    });
     return {
       status: 503,
-      body: {
-        success: false,
-        error: 'COUPANG_KEYS_MISSING',
-        message: '쿠팡파트너스 API 키가 설정되지 않았습니다.',
-      },
+      body: coupangKeysMissingPayload(creds),
     };
   }
 
