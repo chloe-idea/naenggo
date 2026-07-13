@@ -55,6 +55,19 @@ service cloud.firestore {
       );
     }
 
+    // 공개 작성자 프로필 — 누구나 읽기, 본인만 쓰기 (이메일/uid 비포함)
+    match /publicProfiles/{uid} {
+      allow read: if true;
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'displayName', 'profileImageUrl', 'bio', 'socialLinks',
+          'publicRecipeCount', 'createdAt', 'updatedAt'
+        ])
+        && (!('email' in request.resource.data))
+        && (!('uid' in request.resource.data));
+      allow delete: if false;
+    }
+
     // users/{uid} 프로필 문서
     match /users/{uid} {
       allow read: if isOwner(uid);

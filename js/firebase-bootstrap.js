@@ -9,6 +9,9 @@ import { AnalysisQuotaService } from './services/analysis-quota-service.js';
 import { AdminService } from './services/admin-service.js';
 import { FirestoreBuiltinRecipesService } from './services/firestore-builtin-recipes-service.js';
 import { FirestoreUserDataSync } from './services/firestore-user-data-sync.js';
+import { FirestorePublicProfilesService } from './services/firestore-public-profiles-service.js';
+import { FirestorePublicRecipesService } from './services/firestore-public-recipes-service.js';
+import { normalizeSocialLinks } from './lib/social-url.js';
 import { formatAuthError } from './services/auth-errors.js';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
 
@@ -238,12 +241,34 @@ function updateProfileMenuContent(authUser, profile = null) {
   const titleEl = $('profile-menu-title');
   const emailEl = $('profile-menu-email');
   const nameInput = $('profile-display-name');
+  const bioInput = $('profile-bio');
   const picker = $('profile-avatar-picker');
+  const errorEl = $('profile-menu-error');
+  const social = resolvedProfile?.socialLinks || {};
 
   if (titleEl) titleEl.textContent = avatar.displayName || '프로필';
   if (emailEl) emailEl.textContent = authUser?.email || '—';
   if (nameInput && document.activeElement !== nameInput) {
     nameInput.value = resolvedProfile?.displayName || avatar.displayName || '';
+  }
+  if (bioInput && document.activeElement !== bioInput) {
+    bioInput.value = resolvedProfile?.bio || '';
+  }
+
+  const socialFields = [
+    ['profile-social-youtube', social.youtube],
+    ['profile-social-instagram', social.instagram],
+    ['profile-social-tiktok', social.tiktok],
+    ['profile-social-website', social.website],
+  ];
+  socialFields.forEach(([id, value]) => {
+    const input = $(id);
+    if (input && document.activeElement !== input) input.value = value || '';
+  });
+
+  if (errorEl) {
+    errorEl.hidden = true;
+    errorEl.textContent = '';
   }
 
   if (picker) {
@@ -268,6 +293,18 @@ async function loadUserProfile(authUser) {
     cachedUserProfile = await FirestoreUserService.getUserDocument(authUser.uid);
     if (!cachedUserProfile) {
       cachedUserProfile = await FirestoreUserService.ensureUserDocument(authUser);
+    } else {
+      const publicProfile = await FirestorePublicProfilesService.getById(authUser.uid);
+      if (!publicProfile) {
+        const avatarType = cachedUserProfile.avatarType;
+        const profileImageUrl = avatarType === 'google' && authUser.photoURL
+          ? authUser.photoURL
+          : String(cachedUserProfile.profileImageUrl || cachedUserProfile.profileImage || '').trim();
+        await FirestorePublicProfilesService.syncFromUserProfile(authUser.uid, {
+          ...cachedUserProfile,
+          profileImageUrl,
+        });
+      }
     }
   } catch (err) {
     console.error('[firebase-bootstrap] loadUserProfile failed:', err);
@@ -347,7 +384,8 @@ function openProfileMenu() {
 
   modal.hidden = false;
   modal.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
+  if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
+  else document.body.style.overflow = 'hidden';
   if (btn) btn.setAttribute('aria-expanded', 'true');
 
   updateProfileMenuContent(resolveAuthUser(), cachedUserProfile);
@@ -364,30 +402,147 @@ function closeProfileMenu() {
   modal.setAttribute('aria-hidden', 'true');
   if (btn) btn.setAttribute('aria-expanded', 'false');
 
-  const anyModalOpen = ['recipe-form-modal', 'meal-modal', 'shopping-modal', 'pantry-modal', 'recipe-modal']
-    .some((id) => {
-      const el = document.getElementById(id);
-      return el && !el.hidden;
-    });
-  if (!anyModalOpen) document.body.style.overflow = '';
+  if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
+  else {
+    const anyModalOpen = ['recipe-form-modal', 'meal-modal', 'shopping-modal', 'pantry-modal', 'recipe-modal']
+      .some((id) => {
+        const el = document.getElementById(id);
+        return el && !el.hidden;
+      });
+    if (!anyModalOpen) document.body.style.overflow = '';
+  }
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 
-async function saveProfileDisplayName() {
-  const user = resolveAuthUser();
-  const input = $('profile-display-name');
-  if (!user?.uid || !input) return;
+async function saveProfileViaServer(updates) {
+  const idToken = await AuthService.getIdToken();
+  if (!idToken) return null;
+  const res = await fetch('/api/user-profile', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(updates),
+  });
+  const contentType = String(res.headers.get('content-type') || '');
+  const data = contentType.includes('application/json')
+    ? await res.json().catch(() => ({}))
+    : {};
+  if (!res.ok || !data?.ok) {
+    const err = new Error(data?.error || '프로필 저장에 실패했어요.');
+    err.code = 'SERVER_PROFILE_SAVE_FAILED';
+    err.status = res.status;
+    err.serverUnavailable = res.status === 401
+      || res.status === 404
+      || res.status === 503
+      || res.status >= 500
+      || !contentType.includes('application/json');
+    throw err;
+  }
+  return data.profile || null;
+}
 
-  const displayName = input.value.trim().slice(0, 20);
-  if (!displayName) return;
+function showProfileMenuError(message) {
+  const errorEl = $('profile-menu-error');
+  if (!errorEl) return;
+  errorEl.textContent = message || '';
+  errorEl.hidden = !message;
+}
+
+async function saveProfileDisplayName() {
+  return saveFullProfile();
+}
+
+async function saveFullProfile() {
+  const user = resolveAuthUser();
+  const nameInput = $('profile-display-name');
+  const bioInput = $('profile-bio');
+  const saveBtn = $('profile-save-btn');
+  if (!user?.uid || !nameInput) return;
+
+  const displayName = nameInput.value.trim().slice(0, 20);
+  if (!displayName) {
+    showProfileMenuError('닉네임을 입력해 주세요.');
+    nameInput.focus();
+    return;
+  }
+
+  const socialLinks = {
+    youtube: $('profile-social-youtube')?.value || '',
+    instagram: $('profile-social-instagram')?.value || '',
+    tiktok: $('profile-social-tiktok')?.value || '',
+    website: $('profile-social-website')?.value || '',
+  };
+  const linksResult = normalizeSocialLinks(socialLinks);
+  if (!linksResult.ok) {
+    showProfileMenuError(linksResult.error);
+    return;
+  }
+
+  const updates = {
+    displayName,
+    bio: (bioInput?.value || '').trim().slice(0, 80),
+    socialLinks: linksResult.socialLinks,
+    avatarType: cachedUserProfile?.avatarType,
+  };
+
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '저장 중…';
+  }
+  showProfileMenuError('');
 
   try {
-    cachedUserProfile = await FirestoreUserService.updateProfile(user.uid, { displayName });
+    let savedViaServer = false;
+    try {
+      const serverProfile = await saveProfileViaServer(updates);
+      if (serverProfile) {
+        cachedUserProfile = {
+          ...(cachedUserProfile || {}),
+          ...serverProfile,
+          socialLinks: serverProfile.socialLinks || linksResult.socialLinks,
+        };
+        FirestorePublicProfilesService.clearCache(user.uid);
+        savedViaServer = true;
+      }
+    } catch (serverErr) {
+      const msg = String(serverErr?.message || '');
+      const isValidation = serverErr?.status === 400
+        || /YouTube|Instagram|TikTok|https|링크|URL|허용되지/i.test(msg);
+      // 서버 미기동/구버전(404)·Admin 미설정(503) 등은 Firestore 직접 저장으로 폴백
+      const shouldFallback = serverErr?.serverUnavailable
+        || serverErr?.code === 'INVALID_ID_TOKEN'
+        || serverErr?.name === 'TypeError'
+        || /서버 프로필|Firebase Admin|not configured|Failed to fetch|NetworkError|로그인 정보/i.test(msg);
+      if (isValidation && !shouldFallback) throw serverErr;
+      if (!shouldFallback && serverErr?.code === 'SERVER_PROFILE_SAVE_FAILED' && serverErr?.status === 400) {
+        throw serverErr;
+      }
+      console.warn('[firebase-bootstrap] server profile save unavailable, using client write:', {
+        status: serverErr?.status,
+        message: msg,
+      });
+    }
+
+    if (!savedViaServer) {
+      cachedUserProfile = await FirestoreUserService.updateProfile(user.uid, updates, {
+        photoURL: user.photoURL || '',
+      });
+    }
+
     renderAuthUi(user);
     updateProfileMenuContent(user, cachedUserProfile);
+    window.dispatchEvent(new CustomEvent('public-profile-updated', { detail: { uid: user.uid } }));
+    if (typeof window.showToast === 'function') window.showToast('프로필을 저장했어요');
   } catch (err) {
-    console.error('[firebase-bootstrap] save displayName failed:', err);
-    showAuthError({ message: '닉네임 저장에 실패했어요.' });
+    console.error('[firebase-bootstrap] save profile failed:', err);
+    showProfileMenuError(err?.message || '프로필 저장에 실패했어요.');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '프로필 저장';
+    }
   }
 }
 
@@ -396,9 +551,14 @@ async function saveProfileAvatarType(avatarType) {
   if (!user?.uid || !avatarType) return;
 
   try {
-    cachedUserProfile = await FirestoreUserService.updateProfile(user.uid, { avatarType });
+    cachedUserProfile = await FirestoreUserService.updateProfile(
+      user.uid,
+      { avatarType },
+      { photoURL: user.photoURL || '' },
+    );
     renderAuthUi(user);
     updateProfileMenuContent(user, cachedUserProfile);
+    window.dispatchEvent(new CustomEvent('public-profile-updated', { detail: { uid: user.uid } }));
   } catch (err) {
     console.error('[firebase-bootstrap] save avatarType failed:', err);
     showAuthError({ message: '프로필 이미지 변경에 실패했어요.' });
@@ -687,6 +847,7 @@ function bindAuthUi() {
   const profileBtn = $('profile-menu-btn');
   const logoutBtn = $('profile-logout-btn');
   const saveNameBtn = $('profile-save-name-btn');
+  const saveProfileBtn = $('profile-save-btn');
   const avatarPicker = $('profile-avatar-picker');
   const profileModal = $('profile-menu-modal');
 
@@ -711,7 +872,8 @@ function bindAuthUi() {
     closeProfileMenu();
     signOutFlow(event);
   }, { capture: true });
-  saveNameBtn?.addEventListener('click', saveProfileDisplayName);
+  saveNameBtn?.addEventListener('click', saveFullProfile);
+  saveProfileBtn?.addEventListener('click', saveFullProfile);
   avatarPicker?.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-avatar-type]');
     if (!btn || btn.disabled) return;
@@ -773,6 +935,8 @@ async function bootstrap() {
     AuthService,
     AdminService,
     FirestoreUserService,
+    FirestorePublicProfilesService,
+    FirestorePublicRecipesService,
     FirestoreIngredientService,
     FirestoreBuiltinRecipesService,
     FirestoreUserDataSync,

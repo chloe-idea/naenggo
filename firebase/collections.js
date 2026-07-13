@@ -8,6 +8,7 @@ export const FREE_ANALYSIS_LIMIT = 5;
 /** 논리 컬렉션 이름 (문서·팀 커뮤니케이션용) */
 export const Collection = {
   USERS: 'users',
+  PUBLIC_PROFILES: 'publicProfiles',
   PUBLIC_RECIPES: 'publicRecipes',
   RECIPES: 'recipes',
   MY_RECIPES: 'myRecipes',
@@ -29,12 +30,29 @@ export const UserFields = {
   EMAIL: 'email',
   DISPLAY_NAME: 'displayName',
   PHOTO_URL: 'photoURL',
+  PROFILE_IMAGE: 'profileImage',
+  PROFILE_IMAGE_URL: 'profileImageUrl',
+  BIO: 'bio',
+  SOCIAL_LINKS: 'socialLinks',
+  PUBLIC_RECIPE_COUNT: 'publicRecipeCount',
+  AVATAR_TYPE: 'avatarType',
   FREE_ANALYSIS_REMAINING: 'freeAnalysisRemaining',
   DEFAULT_CURRENCY: 'defaultCurrency',
   DEFAULT_FRIDGE_ID: 'defaultFridgeId',
   CREATED_AT: 'createdAt',
   UPDATED_AT: 'updatedAt',
   LAST_LOGIN_AT: 'lastLoginAt',
+};
+
+/** publicProfiles/{uid} 공개 프로필 필드 */
+export const PublicProfileFields = {
+  DISPLAY_NAME: 'displayName',
+  PROFILE_IMAGE_URL: 'profileImageUrl',
+  BIO: 'bio',
+  SOCIAL_LINKS: 'socialLinks',
+  PUBLIC_RECIPE_COUNT: 'publicRecipeCount',
+  CREATED_AT: 'createdAt',
+  UPDATED_AT: 'updatedAt',
 };
 
 /** recipes/{recipeId} 필드 */
@@ -184,6 +202,10 @@ export function userSettingsPath(uid) {
 
 export function publicRecipePath(recipeId) {
   return `${Collection.PUBLIC_RECIPES}/${recipeId}`;
+}
+
+export function publicProfilePath(uid) {
+  return `${Collection.PUBLIC_PROFILES}/${uid}`;
 }
 
 /** @deprecated mealCalendar 서브컬렉션 사용 */

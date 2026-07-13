@@ -35,6 +35,8 @@
   --tab-bar-height: 3.75rem;
   --tab-bar-dock-offset: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
   --tab-bar-space: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
+  --bottom-nav-height: var(--tab-bar-height);
+  --bottom-nav-total-height: var(--tab-bar-space);
   --home-search-float-gap: 0.625rem;
   --home-search-collapsed-inner: 3rem;
   --home-search-collapsed-shell-pad: 0.125rem;
@@ -44,7 +46,7 @@
   --home-search-bottom-offset: calc(var(--tab-bar-dock-offset) + var(--home-search-float-gap));
   --home-search-reserved-space: calc(var(--home-search-float-gap) + var(--home-search-float-wrapper) + 0.375rem);
   --home-search-expanded-reserved: calc(var(--home-search-float-gap) + var(--home-search-float-wrapper) + min(38vh, 14rem) + 0.75rem);
-  --form-bottom-space: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+  --form-bottom-space: max(1.25rem, env(safe-area-inset-bottom, 0px));
 }
 
 html {
@@ -840,11 +842,32 @@ textarea {
 
 .profile-menu__input {
   flex: 1;
+  width: 100%;
   min-width: 0;
   padding: 0.5rem 0.625rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: 0.875rem;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.profile-menu__error {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: #fff1f0;
+  color: #c0392b;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.profile-menu__error[hidden] {
+  display: none !important;
+}
+
+#profile-save-btn {
+  margin-bottom: 0.75rem;
 }
 
 .profile-avatar-picker {
@@ -2549,6 +2572,199 @@ body.home-search-keyboard-active .home-search-dock {
   line-height: 1.35;
 }
 
+.recipe-card-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-family: inherit;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: left;
+}
+
+.recipe-card-author:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.recipe-card-author__avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f1f3f5;
+}
+
+.recipe-card-author__avatar--initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.recipe-card-author__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #555;
+  font-weight: 500;
+}
+
+.recipe-card-author__chevron {
+  flex-shrink: 0;
+  opacity: 0.55;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.recipe-detail__author-wrap {
+  margin: 0 0 0.75rem;
+}
+
+.recipe-detail__author-wrap .recipe-card-author {
+  font-size: 0.8125rem;
+}
+
+.recipe-detail__author-wrap .recipe-card-author__avatar {
+  width: 22px;
+  height: 22px;
+}
+
+.recipe-detail__source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  text-decoration: none;
+}
+
+/* ===== Author public profile ===== */
+.author-profile-view {
+  padding-bottom: 1.5rem;
+}
+
+.author-profile__back {
+  display: inline-flex;
+  align-items: center;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.35rem 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.author-profile__header {
+  margin-bottom: 0.5rem;
+}
+
+.author-profile__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.author-profile__avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f1f3f5;
+  border: 1px solid var(--color-border);
+}
+
+.author-profile__avatar--initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.author-profile__text {
+  min-width: 0;
+  flex: 1;
+}
+
+.author-profile__name {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.author-profile__bio {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.author-profile__socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.author-profile__social-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.author-profile__social-ext {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.author-profile__loading,
+.author-profile__error {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.author-profile__recipes-section .section__title {
+  margin-bottom: 0.75rem;
+}
+
 .recipe-card-home__icon {
   width: 0.875rem;
   height: 0.875rem;
@@ -3442,10 +3658,14 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 /* ===== Modal ===== */
+/* overlay는 Bottom Nav 위까지만 — 탭바가 항상 보이고 탭 가능 */
 .modal {
   position: fixed;
-  inset: 0;
-  z-index: 1100;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--bottom-nav-total-height);
+  z-index: 900;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -3466,16 +3686,17 @@ body.home-search-keyboard-active .home-search-dock {
   position: relative;
   width: 100%;
   max-width: var(--max-width);
-  max-height: 92dvh;
+  max-height: 100%;
   background: var(--color-bg);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow-x: hidden;
   overflow-y: auto;
   animation: slideUp 0.3s ease;
   -webkit-overflow-scrolling: touch;
   scroll-padding-bottom: var(--form-bottom-space);
 }
 
-/* Bottom Sheet — 화면 하단 고정 */
+/* Bottom Sheet — navigation 위 영역 하단 정렬 */
 .modal--sheet {
   align-items: flex-end;
   justify-content: center;
@@ -3494,12 +3715,13 @@ body.home-search-keyboard-active .home-search-dock {
   display: flex;
   flex-direction: column;
   height: auto;
-  max-height: 80dvh;
-  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  max-height: min(80dvh, 100%);
+  padding-bottom: 1rem;
 }
 
+/* overlay가 이미 nav 위에서 끝나므로 추가 하단 여백 불필요 */
 .modal--sheet.modal--sheet-tab-safe {
-  padding-bottom: var(--tab-bar-space);
+  padding-bottom: 0;
   box-sizing: border-box;
 }
 
@@ -3816,9 +4038,9 @@ body.home-search-keyboard-active .home-search-dock {
   user-select: none;
 }
 
-/* 폼 모달은 Bottom Sheet 위에 단독 표시 */
+/* 폼 모달 — nav보다 낮은 z-index 유지 (탭바 1000) */
 .modal:not(.modal--sheet) {
-  z-index: 1110;
+  z-index: 900;
 }
 
 @keyframes fadeIn {
@@ -3831,14 +4053,129 @@ body.home-search-keyboard-active .home-search-dock {
   to { transform: translateY(0); }
 }
 
-/* Centered modals — 로그인·프로필 (하단 탭바 위 정중앙) */
+/* ===== Meal record modal — width & field alignment ===== */
+/* [hidden]보다 display:flex 특이도가 높으면 닫혀도 계속 보이므로 :not([hidden]) 필수 */
+#meal-modal.meal-record-modal[hidden] {
+  display: none !important;
+}
+
+#meal-modal.meal-record-modal:not([hidden]) {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding: 16px 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+#meal-modal .modal__panel--meal {
+  position: relative;
+  left: auto;
+  right: auto;
+  width: calc(100% - 32px);
+  max-width: 480px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-lg);
+  will-change: transform;
+}
+
+#meal-modal .form-modal--meal {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 1.25rem 1rem 0;
+}
+
+#meal-modal .meal-record-form,
+#meal-modal .form-field {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+#meal-modal .form-field__input,
+#meal-modal .form-field__select,
+#meal-modal .form-field__textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* 날짜 input — 브라우저 기본 너비/appearance로 인한 어긋남 정리 */
+#meal-modal input[type="date"].form-field__input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.25;
+}
+
+#meal-modal input[type="date"].form-field__input::-webkit-date-and-time-value {
+  text-align: left;
+  min-width: 0;
+  width: 100%;
+}
+
+#meal-modal input[type="date"].form-field__input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+#meal-modal .meal-type-tabs {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#meal-modal .meal-type-tab {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#meal-modal .photo-upload,
+#meal-modal .photo-upload__preview,
+#meal-modal .photo-upload__actions,
+#meal-modal .form-actions {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+@media (min-width: 481px) {
+  #meal-modal.meal-record-modal:not([hidden]) {
+    align-items: center;
+  }
+}
+
+/* Centered modals — 로그인·프로필 (navigation 위 영역 정중앙) */
 .modal.modal--center {
   align-items: center;
   justify-content: center;
   padding:
     max(1rem, env(safe-area-inset-top))
     max(1rem, env(safe-area-inset-right))
-    calc(1rem + var(--tab-bar-space))
+    1rem
     max(1rem, env(safe-area-inset-left));
   box-sizing: border-box;
 }
@@ -3847,10 +4184,7 @@ body.home-search-keyboard-active .home-search-dock {
   position: relative;
   width: 100%;
   max-width: 22rem;
-  max-height: min(
-    88dvh,
-    calc(100dvh - var(--tab-bar-space) - 2rem - env(safe-area-inset-top, 0px))
-  );
+  max-height: min(88dvh, calc(100% - 2rem));
   height: auto;
   margin: 0 auto;
   align-self: center;
@@ -4270,18 +4604,57 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .form-modal {
-  padding: 1.25rem 1rem var(--form-bottom-space);
+  padding: 1.25rem 1rem 0;
 }
 
-/* 직접 작성: 하단 단계 안내 없음 → safe-area만 남김 */
+/* 재료 추가/수정 — 사방 여백 동일, 필드 간격 균일 */
+#pantry-modal .form-modal {
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+#pantry-modal .form-modal__title {
+  margin: 0 0 1rem;
+  padding-right: 2rem;
+}
+
+#pantry-modal #pantry-modal-form.recipe-form {
+  gap: 1rem;
+}
+
+#pantry-modal .form-field {
+  gap: 0.375rem;
+  margin: 0;
+}
+
+#pantry-modal .form-row {
+  gap: 0.75rem;
+  margin: 0;
+}
+
+#pantry-modal .form-actions {
+  margin: 0;
+  padding: 0;
+  gap: 0.75rem;
+}
+
+#pantry-modal .form-field__input,
+#pantry-modal .form-field__select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* 직접 작성: 영상 단계바 없음 → 공통 하단 여백만 */
 #recipe-form-modal:not(.recipe-form-modal--video-flow) .form-modal {
-  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
 }
 
 #recipe-form-modal:not(.recipe-form-modal--video-flow) #recipe-form .form-actions {
-  margin-top: 0.25rem;
+  margin-top: 1.5rem;
   margin-bottom: 0;
-  padding-bottom: 0.25rem;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
 }
 
 .form-modal__title {
@@ -4295,6 +4668,11 @@ body.home-search-keyboard-active .home-search-dock {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+/* 직접 입력 모달: 섹션 간격만 살짝 축소 (라벨↔입력 간격은 유지) */
+#recipe-form.recipe-form {
+  gap: 0.75rem;
 }
 
 .form-row {
@@ -4342,10 +4720,14 @@ body.home-search-keyboard-active .home-search-dock {
   white-space: nowrap;
 }
 
-/* 카테고리 select 하단 ↔ 난이도 select 상단 = 16px (난이도 라벨은 간격 안에 배치) */
+/*
+  왼쪽 컨트롤: 56 + 22 + 56 = 134
+  오른쪽 휠: 134 (border-box, 항목 44×3)
+  난이도 라벨은 간격 안에 배치
+*/
 .form-field--difficulty {
   position: relative;
-  margin-top: 16px;
+  margin-top: 22px;
   gap: 0;
 }
 
@@ -4353,15 +4735,16 @@ body.home-search-keyboard-active .home-search-dock {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(100% + 2px);
+  bottom: calc(100% + 4px);
   margin: 0;
-  line-height: 1.2;
+  line-height: 1.15;
+  font-size: 0.8125rem;
 }
 
 /* ===== Cook time wheel picker (vertical snap list) ===== */
 .cook-time-wheel {
-  --cook-wheel-h: 128px;
-  --cook-wheel-item-h: 42px; /* (128px - 2px border) / 3 */
+  --cook-wheel-h: 134px;
+  --cook-wheel-item-h: 44px; /* (134px - 2px border) / 3 */
   --cook-wheel-visible: 3;
   position: relative;
   width: 100%;
@@ -4829,37 +5212,42 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .form-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-  padding-bottom: 0.25rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 1.5rem;
+  padding-top: 0;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  position: static;
+  flex-grow: 0;
+  flex-shrink: 0;
+  min-height: 0;
+  background: transparent;
+  border-top: none;
 }
 
 .form-actions .btn {
-  flex: 1;
+  width: 100%;
+  min-width: 0;
 }
 
-/* ===== Shopping record modal ===== */
+/* ===== Shopping record modal (scroll body + inline actions) ===== */
 #shopping-modal .modal__panel {
-  height: auto;
-  max-height: 85dvh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  scroll-padding-bottom: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 #shopping-modal .form-modal--shopping {
-  display: flex;
-  flex-direction: column;
+  padding: 1.25rem 1rem 0;
+  overflow: visible;
+  display: block;
   min-height: 0;
-  flex: 1 1 auto;
-  padding: 1rem 1rem 0;
-  overflow: hidden;
+  flex: none;
 }
 
 #shopping-modal .form-modal__title {
-  flex-shrink: 0;
   margin-bottom: 0.75rem;
   font-size: 1.0625rem;
 }
@@ -4867,34 +5255,10 @@ body.home-search-keyboard-active .home-search-dock {
 #shopping-modal .shopping-form {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  gap: 0.75rem;
+  overflow: visible;
+  flex: none;
   min-height: 0;
-  gap: 0;
-  overflow: hidden;
-}
-
-#shopping-modal .shopping-form__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6875rem;
-  padding-bottom: 0.375rem;
-}
-
-#shopping-modal .shopping-form__footer {
-  flex-shrink: 0;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  margin-top: 0;
-  padding: 0.875rem 0 calc(1rem + env(safe-area-inset-bottom, 0px));
-  background: var(--color-bg);
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 #shopping-modal .form-field {
@@ -4905,13 +5269,17 @@ body.home-search-keyboard-active .home-search-dock {
 #shopping-modal .form-field__textarea {
   padding-top: 0.5625rem;
   padding-bottom: 0.5625rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 #shopping-modal .form-field__textarea {
   min-height: 6rem;
-  max-height: 7.5rem;
-  height: 6rem;
-  resize: none;
+  height: auto;
+  max-height: none;
+  resize: vertical;
   line-height: 1.45;
 }
 
@@ -5073,11 +5441,11 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .video-extract-actions {
-  position: sticky;
-  bottom: 0;
-  margin-top: 0.375rem;
-  padding-top: 0.5rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--color-bg) 28%);
+  position: static;
+  margin-top: 1.5rem;
+  padding-top: 0;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  background: transparent;
 }
 
 .video-review-panel {
@@ -5104,11 +5472,11 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .video-review-actions {
-  position: sticky;
-  bottom: 0;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, var(--color-bg) 28%);
+  position: static;
+  margin-top: 1.5rem;
+  padding-top: 0;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  background: transparent;
 }
 
 .video-form__notice {
@@ -5321,8 +5689,12 @@ body.home-search-keyboard-active .home-search-dock {
   align-items: center;
   gap: 0.25rem;
   margin-bottom: 0.75rem;
-  font-size: 0.875rem;
-  color: var(--color-primary);
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
   text-decoration: none;
 }
 
@@ -5416,7 +5788,7 @@ body.home-search-keyboard-active .home-search-dock {
   vertical-align: middle;
 }
 
-/* ===== Tab Bar ===== */
+/* ===== Tab Bar — 모달보다 위, 항상 표시·탭 가능 ===== */
 .tab-bar {
   position: fixed;
   left: 0;
@@ -5430,7 +5802,7 @@ body.home-search-keyboard-active .home-search-dock {
   background: #fff;
   border-top: 1px solid #ececec;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
-  min-height: var(--tab-bar-height);
+  min-height: var(--bottom-nav-height);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   box-sizing: border-box;
   -webkit-transform: translateZ(0);
@@ -6502,7 +6874,7 @@ body.home-search-keyboard-active .home-search-dock {
 @media (display-mode: standalone), (display-mode: fullscreen) {
   :root {
     --tab-bar-space: calc(var(--tab-bar-height) + env(safe-area-inset-bottom, 0px));
-    --form-bottom-space: calc(8rem + env(safe-area-inset-bottom, 0px));
+    --form-bottom-space: max(1.5rem, env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -6519,7 +6891,18 @@ body.home-search-keyboard-active .home-search-dock {
 
   .modal:not(.modal--sheet) .modal__panel {
     border-radius: var(--radius-lg);
-    max-height: 85dvh;
+    max-height: min(85dvh, 100%);
+  }
+
+  /* 식사 기록: 전용 패딩/너비 유지 (전역 태블릿 규칙에 덮이지 않음) */
+  #meal-modal.meal-record-modal:not([hidden]) {
+    padding: 16px 0;
+  }
+
+  #meal-modal .modal__panel--meal {
+    width: calc(100% - 32px);
+    max-width: 480px;
+    max-height: 100%;
   }
 
   .modal--sheet {
@@ -6977,8 +7360,7 @@ body.home-search-keyboard-active .home-search-dock {
   flex-direction: column;
   gap: 0.375rem;
   padding: 0 1rem;
-  /* 탭바 위로 올라온 시트에서도 마지막(간식) 항목이 충분히 보이도록 */
-  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 1.25rem;
 }
 
 #planner-slot-sheet.modal--sheet-tab-safe .planner-slot-menu {
@@ -6987,7 +7369,7 @@ body.home-search-keyboard-active .home-search-dock {
 
 #planner-slot-sheet.modal--sheet-tab-safe .modal__panel.planner-sheet,
 #planner-recipe-sheet.modal--sheet-tab-safe .modal__panel.planner-sheet {
-  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0.75rem;
 }
 
 .planner-slot-menu__item {

@@ -79,6 +79,7 @@ const VIEW_TITLES = {
   pantry: '보유 재료를 상세 관리하세요',
   planner: '일주일 식단과 장보기 리스트를 준비하세요',
   calendar: '해먹은 음식을 기록하고 확인하세요',
+  'author-profile': '작성자 프로필',
 };
 
 const MEAL_TYPES = [
@@ -3809,6 +3810,8 @@ const state = {
   plannerPendingMeal: null,
   myRecipesSort: { mine: 'newest', saved: 'match' },
   myRecipesSortSheetSection: null,
+  authorProfileId: null,
+  authorProfileReturnView: 'main',
 };
 
 const $ = (s) => document.querySelector(s);
@@ -3819,7 +3822,12 @@ const dom = {
   views: {
     main: $('#view-main'), 'my-recipes': $('#view-my-recipes'),
     pantry: $('#view-pantry'), planner: $('#view-planner'), calendar: $('#view-calendar'),
+    'author-profile': $('#view-author-profile'),
   },
+  authorProfileBack: $('#author-profile-back'),
+  authorProfileHeader: $('#author-profile-header'),
+  authorProfileRecipes: $('#author-profile-recipes'),
+  authorProfileEmpty: $('#author-profile-empty'),
   plannerWeekPrev: $('#planner-week-prev'), plannerWeekLabel: $('#planner-week-label'), plannerWeekNext: $('#planner-week-next'),
   plannerAutoBtn: $('#planner-auto-btn'), plannerGrid: $('#planner-grid'),
   plannerGuestHint: $('#planner-guest-hint'),
@@ -3936,6 +3944,7 @@ const dom = {
   videoReviewErrorText: $('#video-review-error')?.querySelector('.video-form-error-card__text'),
   videoAnalyzeBtn: $('#video-analyze-btn'),
   loginPromptModal: $('#login-prompt-modal'),
+  profileMenuModal: $('#profile-menu-modal'),
   loginPromptGoogleBtn: $('#login-prompt-google-btn'),
   loginPromptDismissBtn: $('#login-prompt-dismiss-btn'),
   loginPromptQuota: $('#login-prompt-quota'),
@@ -4243,6 +4252,197 @@ function isPublicCommunityRecipe(recipe) {
   return recipe?.source === 'user' && (recipe.visibility === 'public' || recipe.isPublic === true);
 }
 
+function getAuthorProfilesService() {
+  return window.FirebaseServices?.FirestorePublicProfilesService || null;
+}
+
+function resolveAuthorCardInfo(recipe) {
+  if (!recipe || !isPublicCommunityRecipe(recipe)) return null;
+  const authorId = String(recipe.authorId || '').trim();
+  const svc = getAuthorProfilesService();
+  const cached = authorId && svc?.peek ? svc.peek(authorId) : undefined;
+  const fallbackName = String(
+    recipe.authorName || recipe.nickname || recipe.displayName || '',
+  ).trim();
+  const fallbackImage = String(
+    recipe.profileImage || recipe.profileImageUrl || recipe.authorGooglePhotoURL || '',
+  ).trim();
+
+  if (cached) {
+    return {
+      authorId,
+      displayName: cached.displayName || fallbackName || '냉장GO 사용자',
+      profileImageUrl: cached.profileImageUrl || fallbackImage,
+    };
+  }
+  if (cached === null) {
+    return {
+      authorId,
+      displayName: fallbackName || '냉장GO 사용자',
+      profileImageUrl: fallbackImage,
+    };
+  }
+  return {
+    authorId,
+    displayName: fallbackName || '냉장GO 사용자',
+    profileImageUrl: fallbackImage,
+  };
+}
+
+async function hydrateAuthorProfiles(recipes = []) {
+  const svc = getAuthorProfilesService();
+  if (!svc?.getMany) return;
+  const ids = [...new Set(
+    (recipes || [])
+      .filter((r) => isPublicCommunityRecipe(r) && r.authorId)
+      .map((r) => String(r.authorId)),
+  )];
+  if (!ids.length) return;
+  try {
+    await svc.getMany(ids);
+  } catch (err) {
+    console.warn('[hydrateAuthorProfiles]', err);
+  }
+}
+
+function recipeAuthorRowHTML(recipe) {
+  const info = resolveAuthorCardInfo(recipe);
+  if (!info) return '';
+  const initial = (info.displayName.charAt(0) || '냉').toUpperCase();
+  const avatar = info.profileImageUrl
+    ? `<img class="recipe-card-author__avatar" src="${esc(info.profileImageUrl)}" alt="" loading="lazy" decoding="async" width="20" height="20">`
+    : `<span class="recipe-card-author__avatar recipe-card-author__avatar--initial" aria-hidden="true">${esc(initial)}</span>`;
+  const authorAttr = info.authorId ? ` data-author-id="${esc(info.authorId)}"` : '';
+  return `
+    <button type="button" class="recipe-card-author"${authorAttr} aria-label="${esc(info.displayName)} 프로필 보기">
+      ${avatar}
+      <span class="recipe-card-author__name">${esc(info.displayName)}</span>
+      <span class="recipe-card-author__chevron" aria-hidden="true">›</span>
+    </button>`;
+}
+
+function recipeSourcePostLinkHTML(recipe) {
+  const url = String(recipe?.sourcePostUrl || recipe?.sourceUrl || '').trim();
+  if (!url) return '';
+  const platform = String(recipe?.sourcePlatform || '').toLowerCase();
+  const isVideo = /youtube|youtu\.be|tiktok|instagram|video|reel|shorts/i.test(platform)
+    || /youtube\.com|youtu\.be|tiktok\.com|instagram\.com/.test(url);
+  const label = isVideo ? '이 레시피 영상 보기 ↗' : '원본 게시물 보기 ↗';
+  return `<a class="recipe-detail__source-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
+}
+
+function authorSocialButtonsHTML(socialLinks = {}) {
+  const items = [
+    { key: 'youtube', label: 'YouTube' },
+    { key: 'instagram', label: 'Instagram' },
+    { key: 'tiktok', label: 'TikTok' },
+    { key: 'website', label: '웹사이트' },
+  ];
+  return items
+    .filter((item) => socialLinks[item.key])
+    .map((item) => `
+      <a class="author-profile__social-btn" href="${esc(socialLinks[item.key])}" target="_blank" rel="noopener noreferrer">
+        <span class="author-profile__social-label">${esc(item.label)}</span>
+        <span class="author-profile__social-ext" aria-hidden="true">↗</span>
+      </a>`)
+    .join('');
+}
+
+async function openAuthorProfile(authorId, { returnView = null } = {}) {
+  const uid = String(authorId || '').trim();
+  if (!uid) return;
+  state.authorProfileId = uid;
+  state.authorProfileReturnView = returnView || (state.view === 'author-profile' ? state.authorProfileReturnView : state.view) || 'main';
+  closeAllModals();
+  switchView('author-profile');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  await renderAuthorProfile();
+}
+
+async function renderAuthorProfile() {
+  const header = dom.authorProfileHeader;
+  const listEl = dom.authorProfileRecipes;
+  const emptyEl = dom.authorProfileEmpty;
+  if (!header || !listEl) return;
+
+  const authorId = state.authorProfileId;
+  if (!authorId) {
+    header.innerHTML = '<p class="author-profile__error">작성자를 찾을 수 없어요</p>';
+    listEl.innerHTML = '';
+    if (emptyEl) emptyEl.hidden = true;
+    return;
+  }
+
+  header.innerHTML = '<div class="author-profile__loading">프로필을 불러오는 중…</div>';
+  listEl.innerHTML = '';
+  if (emptyEl) emptyEl.hidden = true;
+
+  const svc = getAuthorProfilesService();
+  let profile = null;
+  try {
+    profile = svc ? await svc.getById(authorId, { force: true, includeSocial: true }) : null;
+  } catch (err) {
+    console.warn('[renderAuthorProfile]', err);
+  }
+
+  const fallbackRecipe = PublicRecipeRepository.getAll().find((r) => r.authorId === authorId);
+  const displayName = profile?.displayName
+    || fallbackRecipe?.authorName
+    || fallbackRecipe?.nickname
+    || '냉장GO 사용자';
+  const imageUrl = profile?.profileImageUrl
+    || fallbackRecipe?.profileImage
+    || '';
+  const bio = profile?.bio || '';
+  const socialLinks = profile?.socialLinks || {};
+  const initial = (displayName.charAt(0) || '냉').toUpperCase();
+  const avatar = imageUrl
+    ? `<img class="author-profile__avatar" src="${esc(imageUrl)}" alt="" loading="lazy" decoding="async" width="72" height="72">`
+    : `<span class="author-profile__avatar author-profile__avatar--initial" aria-hidden="true">${esc(initial)}</span>`;
+  const socialHtml = authorSocialButtonsHTML(socialLinks);
+
+  header.innerHTML = `
+    <div class="author-profile__identity">
+      ${avatar}
+      <div class="author-profile__text">
+        <h2 class="author-profile__name">${esc(displayName)}</h2>
+        ${bio ? `<p class="author-profile__bio">${esc(bio)}</p>` : ''}
+      </div>
+    </div>
+    ${socialHtml ? `<div class="author-profile__socials">${socialHtml}</div>` : ''}`;
+
+  let recipes = PublicRecipeRepository.getAll().filter(
+    (r) => r.authorId === authorId && isPublicCommunityRecipe(r),
+  );
+  const publicSvc = window.FirebaseServices?.FirestorePublicRecipesService;
+  if ((!recipes.length || recipes.length < (profile?.publicRecipeCount || 0)) && publicSvc?.listByAuthorId) {
+    try {
+      const remote = await publicSvc.listByAuthorId(authorId);
+      if (remote?.length) recipes = remote;
+    } catch (err) {
+      console.warn('[renderAuthorProfile] listByAuthorId', err);
+    }
+  }
+
+  const names = RecommendationService.getPantryNames();
+  const results = recipes.map((recipe) => ({
+    recipe,
+    ...MatchService.analyze(names, recipe.ingredients),
+  }));
+
+  await hydrateAuthorProfiles(recipes);
+  if (state.view !== 'author-profile' || state.authorProfileId !== authorId) return;
+
+  if (!results.length) {
+    listEl.innerHTML = '';
+    if (emptyEl) emptyEl.hidden = false;
+    return;
+  }
+  if (emptyEl) emptyEl.hidden = true;
+  listEl.innerHTML = results.map((r) => homeRecipeCardHTML(r, { showAuthor: true })).join('');
+  bindRecipeCards(listEl, results);
+}
+
 /** 직접 입력 공개설정과 동일한 Material 선형 아이콘 */
 function recipeVisibilityLabelHTML(visibility) {
   const isPublic = visibility === 'public';
@@ -4256,9 +4456,12 @@ function switchView(view) {
   const prevView = state.view;
   state.view = view;
   Object.entries(dom.views).forEach(([k, el]) => { if (el) el.hidden = k !== view; });
-  dom.tabItems.forEach((tab) => tab.classList.toggle('tab-bar__item--active', tab.dataset.view === view));
+  dom.tabItems.forEach((tab) => {
+    tab.classList.toggle('tab-bar__item--active', tab.dataset.view === view);
+  });
   document.body.classList.toggle('view--main', view === 'main');
   document.body.classList.toggle('view--calendar', view === 'calendar');
+  document.body.classList.toggle('view--author-profile', view === 'author-profile');
   if (prevView === 'main' && view !== 'main') {
     toggleHomeFilterPanel(false);
     collapseHomeSearchDock();
@@ -4273,6 +4476,7 @@ function switchView(view) {
 
 function navigate(view) {
   if (view === 'community') view = 'main';
+  if (view !== 'author-profile') state.authorProfileId = null;
   switchView(view);
   closeAllModals();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -4300,6 +4504,7 @@ function renderCurrentView() {
     case 'pantry': renderPantryManage(); break;
     case 'planner': renderPlanner(); break;
     case 'calendar': renderCalendar(); break;
+    case 'author-profile': renderAuthorProfile(); break;
   }
 }
 
@@ -4912,6 +5117,7 @@ function homeRecipeCardHTML(result, options = {}) {
   const {
     action = 'save', // 'save' | 'fork' | 'none'
     showVisibility = false,
+    showAuthor = true,
     readyHtml = '바로 가능',
     showRecommendTags = true,
     variant = 'home', // 'home' | 'my'
@@ -4970,6 +5176,8 @@ function homeRecipeCardHTML(result, options = {}) {
     row4 = '<div class="recipe-card-home__row recipe-card-home__footer recipe-card-home__footer--empty" aria-hidden="true"></div>';
   }
 
+  const authorRow = showAuthor && !isMy ? recipeAuthorRowHTML(recipe) : '';
+
   const cardClass = isMy
     ? 'recipe-card recipe-card--home recipe-card--my'
     : 'recipe-card recipe-card--home';
@@ -4989,6 +5197,7 @@ function homeRecipeCardHTML(result, options = {}) {
             <span class="recipe-card-home__meta-item">${homeCardDifficultyIcon(recipe.difficulty)}<span>${esc(recipe.difficulty || '-')}</span></span>
             ${visibilityMeta}
           </div>
+          ${authorRow}
           ${statusRow}
           ${row4}
         </div>
@@ -5052,12 +5261,20 @@ function bindRecipeCards(container, results) {
   bindZoomableImages(container);
   container.querySelectorAll('.recipe-card').forEach((card) => {
     const open = (e) => {
-      if (e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid], [data-zoom-src], .recipe-card__image-btn')) return;
+      if (e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid], [data-zoom-src], .recipe-card__image-btn, .recipe-card-author, [data-author-id]')) return;
       const r = results.find((x) => idEq(x.recipe.id, card.dataset.rid));
       openRecipeDetail(r || { recipe: RecipeRepository.getById(card.dataset.rid) });
     };
     card.onclick = open;
-    card.onkeydown = (e) => { if (e.key === 'Enter' && !e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid]')) open(e); };
+    card.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.target.closest('[data-log-meal-id], [data-save-id], [data-fork-id], [data-grocery-add-rid], .recipe-card-author')) open(e);
+    };
+  });
+  container.querySelectorAll('.recipe-card-author[data-author-id]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openAuthorProfile(btn.dataset.authorId);
+    };
   });
   container.querySelectorAll('[data-log-meal-id]').forEach((btn) => {
     btn.onclick = (e) => {
@@ -5421,6 +5638,33 @@ function renderHome() {
   bindRecipeCards(dom.recipeList, results);
   updateHomeRecipesSubtitle();
   syncAuthGateUi();
+
+  hydrateAuthorProfiles(results.map((r) => r.recipe)).then(() => {
+    if (state.view !== 'main') return;
+    const cards = dom.recipeList?.querySelectorAll('.recipe-card');
+    if (!cards?.length) return;
+    results.forEach((r, i) => {
+      const card = cards[i];
+      if (!card || !idEq(card.dataset.rid, r.recipe.id)) return;
+      const meta = card.querySelector('.recipe-card-home__meta');
+      if (!meta) return;
+      let authorEl = card.querySelector('.recipe-card-author');
+      const html = recipeAuthorRowHTML(r.recipe);
+      if (!html) {
+        authorEl?.remove();
+        return;
+      }
+      if (authorEl) {
+        authorEl.outerHTML = html;
+      } else {
+        meta.insertAdjacentHTML('afterend', html);
+      }
+      card.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAuthorProfile(e.currentTarget.dataset.authorId);
+      });
+    });
+  });
 }
 
 // ===== Render: My Recipes =====
@@ -8007,12 +8251,13 @@ function openRecipeDetail(result) {
       </div>
       <div class="recipe-detail__content">
         ${recipeOriginHTML(recipe)}
-        ${recipe.sourceUrl ? `<a class="recipe-detail__source-link" href="${esc(recipe.sourceUrl)}" target="_blank" rel="noopener noreferrer">🎬 원본 영상 보기</a>` : ''}
+        ${recipeSourcePostLinkHTML(recipe)}
         <div class="recipe-detail__tags">
           ${recipe.tags.map((t) => `<span class="recipe-detail__tag">${esc(t)}</span>`).join('')}
           <span class="recipe-detail__tag">${recipeVisibilityLabelHTML(recipe.visibility)}</span>
-          <span class="recipe-detail__tag">👤 ${esc(recipe.authorName)}</span>
+          ${isPublicCommunityRecipe(recipe) ? '' : `<span class="recipe-detail__tag">👤 ${esc(recipe.authorName || '냉장GO')}</span>`}
         </div>
+        ${isPublicCommunityRecipe(recipe) ? `<div class="recipe-detail__author-wrap">${recipeAuthorRowHTML(recipe)}</div>` : ''}
         <div class="recipe-detail__stats">
           <div class="stat"><span class="stat__label">조리시간</span><span class="stat__value">${recipe.cookTime}분</span></div>
           <div class="stat"><span class="stat__label">난이도</span><span class="stat__value">${recipe.difficulty}</span></div>
@@ -8081,6 +8326,25 @@ function openRecipeDetail(result) {
   dom.modalContent.querySelector('#btn-edit-recipe')?.addEventListener('click', () => {
     closeModal('recipe'); openRecipeForm(recipe.id);
   });
+  dom.modalContent.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const authorId = e.currentTarget.dataset.authorId;
+    closeModal('recipe');
+    openAuthorProfile(authorId);
+  });
+  if (isPublicCommunityRecipe(recipe) && recipe.authorId) {
+    hydrateAuthorProfiles([recipe]).then(() => {
+      if (state.detailRecipeId !== recipe.id) return;
+      const wrap = dom.modalContent?.querySelector('.recipe-detail__author-wrap');
+      if (!wrap) return;
+      wrap.innerHTML = recipeAuthorRowHTML(recipe);
+      wrap.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeModal('recipe');
+        openAuthorProfile(e.currentTarget.dataset.authorId);
+      });
+    });
+  }
   dom.modalContent.querySelector('#btn-delete-recipe')?.addEventListener('click', () => {
     if (confirm(`"${recipe.name}" 삭제할까요?`)) {
       deleteUserRecipe(recipe.id)
@@ -8553,7 +8817,7 @@ function handleVideoRecipeSave() {
 
 const COOK_TIME_WHEEL_OPTIONS = [5, 10, 15, 20, 25, 30, 40, 50, 60, 90, 120];
 const COOK_TIME_WHEEL_DEFAULT = 30;
-const COOK_TIME_WHEEL_ITEM_HEIGHT = 42; // (128px wheel - 2px border) / 3
+const COOK_TIME_WHEEL_ITEM_HEIGHT = 44; // (134px wheel - 2px border) / 3
 
 let cookTimeWheelBound = false;
 let cookTimeWheelScrollTimer = null;
@@ -9070,8 +9334,10 @@ function updateBodyScrollLock() {
     || (dom.plannerSlotSheet && !dom.plannerSlotSheet.hidden)
     || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
     || (dom.myRecipesSortSheet && !dom.myRecipesSortSheet.hidden)
-    || (dom.loginPromptModal && !dom.loginPromptModal.hidden);
+    || (dom.loginPromptModal && !dom.loginPromptModal.hidden)
+    || (dom.profileMenuModal && !dom.profileMenuModal.hidden);
   document.body.style.overflow = anyOpen ? 'hidden' : '';
+  document.body.classList.toggle('modal-open', anyOpen);
 }
 
 window.updateBodyScrollLock = updateBodyScrollLock;
@@ -9089,7 +9355,7 @@ function openModal(type) {
     'grocery-item': dom.groceryItemModal,
   }[type];
   m.hidden = false; m.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
+  updateBodyScrollLock();
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 function closeModal(type) {
@@ -9227,6 +9493,14 @@ function init() {
   window.addEventListener('resize', schedulePantryChipsRelayout);
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
+  dom.authorProfileBack?.addEventListener('click', () => {
+    navigate(state.authorProfileReturnView || 'main');
+  });
+  window.addEventListener('public-profile-updated', () => {
+    getAuthorProfilesService()?.clearCache?.();
+    if (state.view === 'author-profile') renderAuthorProfile();
+    else if (state.view === 'main') renderHome();
+  });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
   dom.quickForm.addEventListener('submit', handleQuickAdd);
   dom.quickInput.addEventListener('compositionstart', () => { state.isComposing = true; });
