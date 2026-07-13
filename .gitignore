@@ -5,6 +5,11 @@ node_modules/
 .DS_Store
 server/data/
 
+# Vercel Output=. 용: public/images 동기화 생성물 (원본은 public/images)
+/images/**
+!/images/recipes/
+!/images/recipes/.gitkeep
+
 # Firebase 서비스 계정 (절대 커밋 금지 — 환경 변수만 사용)
 *firebase*adminsdk*.json
 *serviceAccount*.json
