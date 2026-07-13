@@ -56,6 +56,7 @@
       youtubeRecipeApiUrl: buildApiUrl('/api/extract-youtube-recipe'),
       instagramRecipeApiUrl: buildApiUrl('/api/extract-instagram-recipe'),
       aiUsageApiUrl: buildApiUrl('/api/ai-usage'),
+      coupangSearchApiUrl: buildApiUrl('/api/coupang-search'),
       dailyLimit: 5,
       enableMock: false,
     },

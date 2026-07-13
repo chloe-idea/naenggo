@@ -353,9 +353,14 @@ const AffiliateService = {
     const cfg = this.getConfig();
     return cfg.enabled !== false;
   },
+  /** 수량·단위를 제거한 재료명만 keyword로 사용 */
+  keywordFromIngredient(ingredientName) {
+    const { name } = parseRecipeIngredient(String(ingredientName || ''));
+    return String(name || ingredientName || '').trim();
+  },
   buildSearchUrl(query) {
     const cfg = this.getConfig();
-    const name = parseRecipeIngredient(String(query || '')).name || String(query || '').trim();
+    const name = this.keywordFromIngredient(query);
     const encoded = encodeURIComponent(name);
     if (cfg.affiliateId) {
       const template = cfg.affiliateSearchUrlTemplate
@@ -368,17 +373,37 @@ const AffiliateService = {
     const fallback = cfg.searchUrlTemplate || 'https://www.coupang.com/np/search?q={query}';
     return fallback.replace(/\{query\}/g, encoded);
   },
+  getSearchApiUrl(keyword) {
+    const base = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.videoExtract?.coupangSearchApiUrl)
+      || '/api/coupang-search';
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}keyword=${encodeURIComponent(keyword)}`;
+  },
+  async resolveAffiliateUrl(ingredientName) {
+    const keyword = this.keywordFromIngredient(ingredientName);
+    const fallbackUrl = this.buildSearchUrl(keyword);
+    if (!keyword) return fallbackUrl;
+    try {
+      const res = await fetch(this.getSearchApiUrl(keyword), { method: 'GET' });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data?.url) return String(data.url);
+    } catch (err) {
+      console.warn('[AffiliateService] coupang-search failed, using deeplink fallback', err);
+    }
+    return fallbackUrl;
+  },
   buyButtonHTML(ingredientName, { compact = false } = {}) {
     if (!this.isEnabled()) return '';
-    const { name } = parseRecipeIngredient(ingredientName);
-    if (!name) return '';
-    const url = this.buildSearchUrl(name);
+    const keyword = this.keywordFromIngredient(ingredientName);
+    if (!keyword) return '';
+    const fallbackUrl = this.buildSearchUrl(keyword);
     const cls = compact ? 'btn-buy btn-buy--sm' : 'btn-buy';
-    return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer sponsored" class="${cls}" onclick="event.stopPropagation()">구매하기</a>`;
+    return `<a href="${esc(fallbackUrl)}" target="_blank" rel="noopener noreferrer sponsored" class="${cls}" data-coupang-keyword="${esc(keyword)}" onclick="event.preventDefault();event.stopPropagation();if(window.AppServices&&window.AppServices.AffiliateService){window.AppServices.AffiliateService.openSearch(this.getAttribute('data-coupang-keyword'));}return false;">구매하기</a>`;
   },
-  openSearch(ingredientName) {
+  async openSearch(ingredientName) {
     if (!this.isEnabled()) return;
-    window.open(this.buildSearchUrl(ingredientName), '_blank', 'noopener,noreferrer');
+    const url = await this.resolveAffiliateUrl(ingredientName);
+    window.open(url, '_blank', 'noopener,noreferrer');
   },
 };
 
@@ -8303,7 +8328,9 @@ function openRecipeDetail(result) {
       openMealModal(null, { defaultDate: todayStr(), recipeId: recipe.id, mealType: 'home-cook', hideMealType: true });
     });
   });
-  dom.modalContent.querySelector('#btn-buy-recipe-ingredients')?.addEventListener('click', () => {
+  dom.modalContent.querySelector('#btn-buy-recipe-ingredients')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const targets = hasPantry && a.missing.length ? a.missing : recipe.ingredients;
     const query = targets.map((ing) => getIngredientMatchName(ing)).slice(0, 3).join(' ');
     if (query) AffiliateService.openSearch(query);
