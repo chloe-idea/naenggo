@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -16,10 +17,10 @@ import { db, auth } from '../firebase.js';
 import { timestampToIso, nowIso } from './firestore-timestamp.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { FirestoreUserService } from './firestore-user-service.js';
+import { FirestorePublicProfilesService } from './firestore-public-profiles-service.js';
 import {
   runFirestoreWrite,
   publicRecipePath,
-  logFirestorePermissionDenied,
 } from './firestore-debug.js';
 
 const COLLECTION = 'publicRecipes';
@@ -52,11 +53,13 @@ function mapPublicRecipe(docSnap) {
     thumbnailUrl: data.thumbnailUrl || '',
     calories: data.calories ?? null,
     memo: data.memo || '',
-    sourceUrl: data.sourceUrl || null,
+    sourceUrl: data.sourceUrl || data.sourcePostUrl || null,
+    sourcePostUrl: data.sourcePostUrl || data.sourceUrl || null,
     sourcePlatform: data.sourcePlatform || null,
     authorId: data.authorId || data.userId || '',
     userId: data.userId || data.authorId || '',
-    authorName: data.authorName || '',
+    // 레거시 fallback — 카드/상세는 authorId → publicProfiles 우선
+    authorName: data.authorName || data.nickname || data.displayName || '',
     displayName: data.displayName || data.authorName || '',
     nickname: data.nickname || '',
     profileImage: data.profileImage || '',
@@ -111,9 +114,8 @@ export const FirestorePublicRecipesService = {
     const profile = await FirestoreUserService.getUserDocument(authUser.uid);
     const nickname = String(profile?.displayName || '').trim();
     const displayName = String(authUser.displayName || authUser.email?.split('@')[0] || '').trim();
-    const profileImage = String(profile?.profileImage || '').trim();
-    const authorGooglePhotoURL = String(authUser.photoURL || '').trim();
-    const authorLabel = nickname || displayName || '회원';
+    const authorLabel = nickname || displayName || '냉장GO 사용자';
+    const sourcePostUrl = recipe.sourcePostUrl || recipe.sourceUrl || null;
     const payload = {
       name: recipe.name,
       ingredients: recipe.ingredients || [],
@@ -130,15 +132,13 @@ export const FirestorePublicRecipesService = {
       image: recipe.image || '',
       thumbnailUrl: recipe.thumbnailUrl || '',
       memo: recipe.memo || '',
-      sourceUrl: recipe.sourceUrl || null,
+      sourceUrl: sourcePostUrl,
+      sourcePostUrl,
       sourcePlatform: recipe.sourcePlatform || null,
       authorId: authUser.uid,
       userId: authUser.uid,
+      // 표시용 fallback만 유지 — SNS는 publicProfiles에서 조회
       authorName: authorLabel,
-      displayName,
-      nickname,
-      profileImage,
-      authorGooglePhotoURL,
       source: recipe.source || 'user',
       isPublic: true,
       myRecipeId: recipeId,
@@ -153,7 +153,8 @@ export const FirestorePublicRecipesService = {
       () => getDoc(ref),
       { recipeId, step: 'exists-check' },
     );
-    if (!existingSnap.exists()) {
+    const isNew = !existingSnap.exists();
+    if (isNew) {
       payload.createdAt = serverTimestamp();
     }
 
@@ -168,6 +169,21 @@ export const FirestorePublicRecipesService = {
       ),
       { recipeId, visibility: 'public' },
     );
+
+    try {
+      await FirestorePublicProfilesService.syncFromUserProfile(authUser.uid, profile || {
+        displayName: authorLabel,
+        profileImageUrl: profile?.profileImageUrl || profile?.profileImage || '',
+        bio: profile?.bio || '',
+        socialLinks: profile?.socialLinks || {},
+      });
+      if (isNew) {
+        await FirestorePublicProfilesService.adjustPublicRecipeCount(authUser.uid, 1);
+      }
+    } catch (err) {
+      console.warn('[FirestorePublicRecipesService] public profile sync failed:', err);
+    }
+
     return recipeId;
   },
 
@@ -182,7 +198,8 @@ export const FirestorePublicRecipesService = {
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
 
-    const isOwner = snap.data()?.authorId && authUid && snap.data().authorId === authUid;
+    const authorId = snap.data()?.authorId || '';
+    const isOwner = authorId && authUid && authorId === authUid;
     if (!isOwner && !allowAdmin) {
       console.warn('[FirestorePublicRecipesService] unpublish skipped — not owner', { recipeId, authUid });
       return;
@@ -195,5 +212,26 @@ export const FirestorePublicRecipesService = {
       () => deleteDoc(ref),
       { recipeId, allowAdmin },
     );
+
+    if (authorId) {
+      try {
+        await FirestorePublicProfilesService.adjustPublicRecipeCount(authorId, -1);
+      } catch (err) {
+        console.warn('[FirestorePublicRecipesService] publicRecipeCount adjust failed:', err);
+      }
+    }
+  },
+
+  async listByAuthorId(authorId) {
+    if (!db || !authorId) return [];
+    const q = query(
+      collection(db, COLLECTION),
+      where('authorId', '==', authorId),
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(mapPublicRecipe)
+      .filter((r) => r.isPublic !== false)
+      .sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
   },
 };
