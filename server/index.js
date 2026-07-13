@@ -7,6 +7,7 @@ import extractYoutubeRecipeRouter from './routes/extract-youtube-recipe.js';
 import extractInstagramRecipeRouter from './routes/extract-instagram-recipe.js';
 import aiUsageRouter from './routes/ai-usage.js';
 import openaiHealthRouter from './routes/openai-health.js';
+import coupangSearchRouter from './routes/coupang-search.js';
 import { getFirebaseAdminStatus } from './lib/firebase-admin.js';
 import { describeOpenAiKeyConfig, logOpenAiKeyConfig } from './lib/openai-config.js';
 
@@ -25,6 +26,7 @@ app.use('/api', extractYoutubeRecipeRouter);
 app.use('/api', extractInstagramRecipeRouter);
 app.use('/api', aiUsageRouter);
 app.use('/api', openaiHealthRouter);
+app.use('/api', coupangSearchRouter);
 
 app.use('/images/recipes', express.static(path.join(ROOT, 'public/images/recipes'), {
   maxAge: '7d',
@@ -65,6 +67,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`       POST /api/extract-instagram-recipe`);
   console.log(`       GET  /api/ai-usage?userId=...`);
   console.log(`       GET  /api/openai-health`);
+  console.log(`       GET  /api/coupang-search?keyword=...`);
   console.log(`  OpenAI: ${openAiInfo.present ? '설정됨' : '⚠️  OPENAI_API_KEY 미설정 (.env 확인)'}`);
   if (openAiInfo.present) {
     logOpenAiKeyConfig('startup');
