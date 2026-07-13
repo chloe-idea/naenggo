@@ -3726,6 +3726,16 @@ const RecommendationService = {
     }
     return count;
   },
+  countOneMissing(recipes) {
+    const names = this.getPantryNames();
+    if (!names.length) return 0;
+    let count = 0;
+    for (const recipe of recipes) {
+      const analysis = MatchService.analyze(names, recipe.ingredients);
+      if (analysis.missing.length === 1) count += 1;
+    }
+    return count;
+  },
   getPantryUtilization(result) {
     const pantrySize = this.getPantryNames().length;
     if (!pantrySize) return 0;
@@ -3766,7 +3776,7 @@ const RecommendationService = {
     for (const filter of activeFilters) {
       if (filter === 'available' && !(result.missing.length === 0 && result.substituted.length === 0)) return false;
       if (filter === 'expiring' && result.expiryBoost <= 0) return false;
-      if (filter === 'one-missing' && result.missing.length > 1) return false;
+      if (filter === 'one-missing' && result.missing.length !== 1) return false;
       if (filter === 'high-protein' && !this.isHighProtein(recipe)) return false;
       if (filter === 'diet' && !this.isDiet(recipe)) return false;
       if (filter === 'snack' && !this.isSnack(recipe)) return false;
@@ -3812,6 +3822,90 @@ const ExpiryService = {
     if (d === 0) return '오늘까지';
     if (d <= CONFIG.EXPIRY_SOON_DAYS) return `${d}일 남음`;
     return '';
+  },
+};
+
+/** 홈 «오늘의 냉장고 브리핑» — Firestore/앱 상태만으로 계산 (AI 없음) */
+const HomeBriefingService = {
+  _cache: null,
+  _fingerprint: null,
+
+  invalidate() {
+    this._cache = null;
+    this._fingerprint = null;
+  },
+
+  _buildFingerprint() {
+    const pantryKey = getPantryItemsForUi()
+      .map((item) => `${item.id}\0${item.name}\0${item.expiryDate || ''}\0${item.quantity ?? ''}`)
+      .join('\n');
+    const recipesKey = RecipeRepository.getHomeRecipes()
+      .map((recipe) => {
+        const ings = (recipe.ingredients || []).map((ing) => formatIngredientDisplay(ing)).join('\u001f');
+        return `${recipe.id}\0${ings}`;
+      })
+      .join('\n');
+    if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
+    const budgetRaw = GroceryRepository.getBudget();
+    const groceryState = GroceryRepository._state || {};
+    const itemsKey = Object.entries(groceryState.items || {})
+      .map(([key, meta]) => `${key}:${meta?.actualAmount ?? ''}:${meta?.checked ? 1 : 0}`)
+      .join('|');
+    const ledgerKey = GroceryRepository.getPurchasedLedger()
+      .map((entry) => `${entry.id || entry.key}\0${entry.actualPrice ?? entry.actualAmount ?? ''}`)
+      .join('|');
+    return [pantryKey, recipesKey, String(budgetRaw), state.plannerWeekKey || '', itemsKey, ledgerKey].join('\n@@\n');
+  },
+
+  _countDueIngredients() {
+    return getPantryItemsForUi().filter((item) => {
+      const days = ExpiryService.daysUntil(item.expiryDate);
+      return days !== null && days <= CONFIG.EXPIRY_SOON_DAYS;
+    }).length;
+  },
+
+  _computeBudgetRemaining() {
+    if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
+    const raw = GroceryRepository.getBudget();
+    if (raw === '' || raw == null) {
+      return { hasBudget: false, remaining: null, budget: null, used: 0 };
+    }
+    const budget = Number(raw);
+    if (!Number.isFinite(budget) || budget < 0) {
+      return { hasBudget: false, remaining: null, budget: null, used: 0 };
+    }
+    const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
+    const grouped = GroceryListService.computeMissing(dates);
+    const used = computeGroceryActualTotal(grouped);
+    return {
+      hasBudget: true,
+      budget,
+      used,
+      remaining: budget - used,
+    };
+  },
+
+  _compute() {
+    const recipes = RecipeRepository.getHomeRecipes();
+    const dueCount = this._countDueIngredients();
+    const readyCount = RecommendationService.countMakeableNow(recipes);
+    const oneMissingCount = RecommendationService.countOneMissing(recipes);
+    const budgetInfo = this._computeBudgetRemaining();
+    return {
+      dueCount,
+      readyCount,
+      oneMissingCount,
+      ...budgetInfo,
+    };
+  },
+
+  get() {
+    const fingerprint = this._buildFingerprint();
+    if (this._cache && this._fingerprint === fingerprint) return this._cache;
+    const data = this._compute();
+    this._cache = data;
+    this._fingerprint = fingerprint;
+    return data;
   },
 };
 
@@ -3897,6 +3991,8 @@ const dom = {
   homeSearchFloat: $('#home-search-float'),
   homeSearchExpandArea: $('#home-search-expand-area'),
   homeTodayHero: $('#home-today-hero'),
+  homeBriefing: $('#home-briefing'),
+  homeBriefingGrid: $('#home-briefing-grid'),
   homeRecipesSeeAll: $('#home-recipes-see-all'),
   homeFilterBtn: $('#home-filter-btn'),
   homeFilterPanel: $('#home-filter-panel'),
@@ -4536,7 +4632,11 @@ function renderCurrentView() {
   }
 }
 
-function refreshAll() { renderCurrentView(); if (state.view !== 'main') renderHome(); }
+function refreshAll() {
+  HomeBriefingService.invalidate();
+  renderCurrentView();
+  if (state.view !== 'main') renderHome();
+}
 
 // ===== Render: Pantry Chips =====
 function pantryChipBadge(item) {
@@ -5412,6 +5512,220 @@ function scrollToHomeRecipes() {
   dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function applyHomeBriefingFilter(filterId) {
+  state.filters.clear();
+  if (filterId) state.filters.add(filterId);
+  state.menuSearch = '';
+  if (dom.menuSearchInput) dom.menuSearchInput.value = '';
+  if (state.view !== 'main') {
+    navigate('main');
+  } else {
+    renderHome();
+  }
+  expandHomeSearchDock();
+  toggleHomeFilterPanel(true);
+  requestAnimationFrame(() => scrollToHomeRecipes());
+}
+
+/** UI 전용 — HomeBriefingService와 독립, 1개 부족 레시피의 대표 재료 선정 */
+function getBriefingOneMissingHighlight() {
+  const pantryNames = RecommendationService.getPantryNames();
+  if (!pantryNames.length) return null;
+
+  const counts = new Map();
+  let total = 0;
+  for (const recipe of RecipeRepository.getHomeRecipes()) {
+    const analysis = MatchService.analyze(pantryNames, recipe.ingredients || []);
+    if (analysis.missing.length !== 1) continue;
+    total += 1;
+    const name = getIngredientMatchName(analysis.missing[0]) || String(analysis.missing[0] || '').trim();
+    if (!name) continue;
+    const key = MatchService.normalize(name);
+    const prev = counts.get(key);
+    if (prev) prev.count += 1;
+    else counts.set(key, { name, count: 1 });
+  }
+  if (!total || counts.size !== 1) {
+    return { total, ingredientName: null };
+  }
+  const [{ name }] = counts.values();
+  return { total, ingredientName: name };
+}
+
+function formatBriefingBudget(remaining) {
+  const amount = Math.abs(Number(remaining) || 0);
+  const code = state.currency || DEFAULT_CURRENCY;
+  const currency = CURRENCY_OPTIONS[code] || CURRENCY_OPTIONS[DEFAULT_CURRENCY];
+  const unitWord = {
+    KRW: '원',
+    USD: '달러',
+    AUD: '달러',
+    EUR: '유로',
+    GBP: '파운드',
+    JPY: '엔',
+  }[code] || '';
+  const formatted = amount.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: currency.fractionDigits,
+  });
+  return { formatted, unitWord };
+}
+
+function homeBriefingCardHTML({
+  action,
+  tone,
+  icon,
+  title,
+  num,
+  unit,
+  desc,
+  empty,
+  emptyText,
+  over = false,
+}) {
+  const emptyClass = empty ? ' home-briefing__card--empty' : '';
+  const toneClass = tone ? ` home-briefing__card--${tone}` : '';
+  const metricHtml = empty
+    ? `<span class="home-briefing__empty-text">${esc(emptyText)}</span>`
+    : `<span class="home-briefing__metric">
+        <span class="home-briefing__value-num${over ? ' home-briefing__value-num--over' : ''}">${esc(String(num))}</span>
+        ${unit ? `<span class="home-briefing__unit">${esc(unit)}</span>` : ''}
+      </span>
+      ${desc ? `<span class="home-briefing__desc">${esc(desc)}</span>` : ''}`;
+
+  return `
+    <button type="button" class="home-briefing__card${toneClass}${emptyClass}" data-briefing-action="${esc(action)}" role="listitem">
+      <span class="home-briefing__icon" aria-hidden="true">${icon}</span>
+      <span class="home-briefing__title">${esc(title)}</span>
+      ${metricHtml}
+    </button>`;
+}
+
+function renderHomeBriefing() {
+  const section = dom.homeBriefing || document.getElementById('home-briefing');
+  const grid = dom.homeBriefingGrid || document.getElementById('home-briefing-grid');
+  if (!section || !grid) {
+    console.warn('[HomeBriefing] #home-briefing / #home-briefing-grid 없음');
+    return;
+  }
+
+  section.hidden = false;
+  HomeBriefingService.invalidate();
+
+  let data;
+  try {
+    data = HomeBriefingService.get();
+  } catch (err) {
+    console.error('[HomeBriefing] 계산 실패:', err);
+    grid.innerHTML = homeBriefingCardHTML({
+      action: 'ready',
+      tone: 'ready',
+      icon: '🍳',
+      title: '오늘의 냉장고 브리핑',
+      empty: true,
+      emptyText: '브리핑을 불러오지 못했어요',
+    });
+    return;
+  }
+
+  const dueEmpty = data.dueCount <= 0;
+  const readyEmpty = data.readyCount <= 0;
+  const oneMissingEmpty = data.oneMissingCount <= 0;
+  const budgetEmpty = !data.hasBudget;
+
+  const oneMissingHighlight = oneMissingEmpty ? null : getBriefingOneMissingHighlight();
+  const oneMissingTitle = oneMissingHighlight?.ingredientName
+    ? `${oneMissingHighlight.ingredientName} 하나만 더 있으면`
+    : '재료 1개만 더 있으면';
+
+  let budgetCard;
+  if (budgetEmpty) {
+    budgetCard = homeBriefingCardHTML({
+      action: 'budget',
+      tone: 'budget',
+      icon: '💰',
+      title: '이번 주 식비',
+      empty: true,
+      emptyText: '예산을 설정해보세요',
+    });
+  } else {
+    const remaining = Number(data.remaining) || 0;
+    const over = remaining < 0;
+    const { formatted, unitWord } = formatBriefingBudget(remaining);
+    budgetCard = homeBriefingCardHTML({
+      action: 'budget',
+      tone: 'budget',
+      icon: '💰',
+      title: '이번 주 식비',
+      num: formatted,
+      unit: unitWord,
+      desc: over ? '초과했어요' : '남음',
+      over,
+    });
+  }
+
+  grid.innerHTML = [
+    homeBriefingCardHTML({
+      action: 'due',
+      tone: 'due',
+      icon: '🥕',
+      title: '오늘 먹어야 하는 재료',
+      num: data.dueCount,
+      unit: '개',
+      desc: '유통기한 임박',
+      empty: dueEmpty,
+      emptyText: '🎉 버릴 재료가 없어요',
+    }),
+    homeBriefingCardHTML({
+      action: 'ready',
+      tone: 'ready',
+      icon: '🍳',
+      title: '지금 바로 만들 수 있어요',
+      num: data.readyCount,
+      unit: '개',
+      desc: '레시피 가능',
+      empty: readyEmpty,
+      emptyText: '재료를 추가해보세요',
+    }),
+    homeBriefingCardHTML({
+      action: 'one-missing',
+      tone: 'missing',
+      icon: '🛒',
+      title: oneMissingTitle,
+      num: data.oneMissingCount,
+      unit: '개',
+      desc: '레시피 가능',
+      empty: oneMissingEmpty,
+      emptyText: '거의 다 준비됐어요',
+    }),
+    budgetCard,
+  ].join('');
+
+  grid.querySelectorAll('[data-briefing-action]').forEach((btn) => {
+    btn.onclick = () => {
+      const action = btn.dataset.briefingAction;
+      if (action === 'due') {
+        applyHomeBriefingFilter('expiring');
+        return;
+      }
+      if (action === 'ready') {
+        applyHomeBriefingFilter('available');
+        return;
+      }
+      if (action === 'one-missing') {
+        applyHomeBriefingFilter('one-missing');
+        return;
+      }
+      if (action === 'budget') {
+        navigate('planner');
+        requestAnimationFrame(() => {
+          document.getElementById('grocery-budget-box')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      }
+    };
+  });
+}
+
 function bindHomeNaengtul(container, results) {
   container.querySelector('[data-scroll-home-recipes]')?.addEventListener('click', scrollToHomeRecipes);
 
@@ -5638,6 +5952,7 @@ function initHomeSearchDock() {
 
 function renderHome() {
   renderHomeFilters();
+  renderHomeBriefing();
   const names = RecommendationService.getPantryNames();
   const query = state.menuSearch.trim();
   const hasSearchMode = Boolean(query || state.filters.size);
@@ -9629,6 +9944,8 @@ function init() {
     renderGroceryBudgetSummary(
       GroceryListService.computeMissing(GroceryListService.getPlannerDates(state.plannerWeekStart)),
     );
+    HomeBriefingService.invalidate();
+    if (state.view === 'main') renderHomeBriefing();
   };
   dom.groceryBudget?.addEventListener('change', commitGroceryBudget);
   dom.groceryBudget?.addEventListener('blur', commitGroceryBudget);

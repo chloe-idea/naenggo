@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=159">
+  <link rel="stylesheet" href="style.css?v=162">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -73,6 +73,13 @@
         </section>
 
         <div id="home-today-hero" class="home-today-hero-wrap" hidden></div>
+
+        <section id="home-briefing" class="section home-briefing" aria-labelledby="home-briefing-title">
+          <div class="section__header">
+            <h2 id="home-briefing-title" class="section__title">오늘의 냉장고 브리핑</h2>
+          </div>
+          <div id="home-briefing-grid" class="home-briefing__grid" role="list"></div>
+        </section>
 
         <section class="section home-pantry-section">
           <div class="section__header">
@@ -1018,6 +1025,6 @@
   <script src="js/ingredient-emoji.js?v=1"></script>
   <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=183" defer></script>
+  <script src="script.js?v=186" defer></script>
 </body>
 </html>
