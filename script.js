@@ -2234,6 +2234,16 @@ const GroceryRepository = {
   _emptyWeekState() {
     return { budget: '', items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] };
   },
+  _isWeekEmpty(weekState) {
+    if (!weekState || typeof weekState !== 'object') return true;
+    const budget = weekState.budget ?? weekState.weeklyBudget ?? '';
+    if (budget !== '' && budget != null) return false;
+    const items = weekState.items && typeof weekState.items === 'object' ? weekState.items : {};
+    if (Object.keys(items).length > 0) return false;
+    if (Array.isArray(weekState.manualItems) && weekState.manualItems.length > 0) return false;
+    if (Array.isArray(weekState.completedKeys) && weekState.completedKeys.length > 0) return false;
+    return !(Array.isArray(weekState.purchasedLedger) && weekState.purchasedLedger.length > 0);
+  },
   _normalizePurchasedLedgerEntry(entry, weekKey = '') {
     const key = String(entry?.key || entry?.id || '').trim();
     if (!key) return null;
@@ -2303,20 +2313,28 @@ const GroceryRepository = {
     if (!this._state.items || typeof this._state.items !== 'object') this._state.items = {};
     if (!Array.isArray(this._state.manualItems)) this._state.manualItems = [];
     this._state.weekKey = key;
-    // 깊은 복사로 저장해 주차 간 참조 공유를 방지
-    this._byWeek[key] = this._cloneWeekState(this._state);
+    const next = this._cloneWeekState(this._state);
+    const prev = this._byWeek[key];
+    // 빈 작업본으로 이미 채워진 주차 스냅샷을 덮지 않음 (새로고침 레이스)
+    if (prev && this._isWeekEmpty(next) && !this._isWeekEmpty(prev)) {
+      this._state = this._cloneWeekState(prev);
+      this._state.weekKey = key;
+      return;
+    }
+    this._byWeek[key] = next;
   },
   exportState() {
     this._syncActiveWeekToByWeek();
-    // 저장 시 정규화된 월요일 키만 보내 ISO(2026-W29) 중복이 Firestore에 남지 않게 한다.
     const byWeek = {};
     Object.entries(this._byWeek || {}).forEach(([weekKey, weekState]) => {
       const key = normalizeGroceryWeekKey(weekKey);
-      byWeek[key] = this._cloneWeekState({ ...weekState, weekKey: key });
+      const cloned = this._cloneWeekState({ ...weekState, weekKey: key });
+      // 빈 주는 Firestore로 보내지 않음
+      if (this._isWeekEmpty(cloned)) return;
+      byWeek[key] = cloned;
     });
     const activeWeekKey = normalizeGroceryWeekKey(this._activeWeekKey || todayStr());
-    this._byWeek = byWeek;
-    this._activeWeekKey = activeWeekKey;
+    // 메모리 byWeek는 유지하되, 전송 payload만 non-empty
     return { activeWeekKey, byWeek };
   },
   setActiveWeek(weekKey) {
@@ -2328,11 +2346,15 @@ const GroceryRepository = {
       return;
     }
 
-    // 현재 주차 작업본을 저장소에 커밋 (다른 주차와 공유되지 않게 clone)
+    // 현재 주차 작업본을 저장소에 커밋 (빈 값으로 non-empty를 덮지 않음)
     if (this._activeWeekKey) {
       if (!Array.isArray(this._state.purchasedLedger)) this._state.purchasedLedger = [];
       this._state.weekKey = this._activeWeekKey;
-      this._byWeek[this._activeWeekKey] = this._cloneWeekState(this._state);
+      const prev = this._byWeek[this._activeWeekKey];
+      const next = this._cloneWeekState(this._state);
+      if (!(prev && this._isWeekEmpty(next) && !this._isWeekEmpty(prev))) {
+        this._byWeek[this._activeWeekKey] = next;
+      }
     } else {
       const hasData = (Array.isArray(this._state.purchasedLedger) && this._state.purchasedLedger.length > 0)
         || Object.keys(this._state.items || {}).length > 0
@@ -3114,6 +3136,8 @@ let groceryLocalMutatedAt = 0;
 let groceryPersistTimer = null;
 /** 로그인 사용자: settings 스냅샷을 한 번 적용하기 전에는 빈 state를 Firestore에 쓰지 않음 */
 let groceryFirestoreReady = false;
+/** Firestore에서 장보기를 복원한 시각 — 직후 빈 DOM flush/blur로 덮어쓰기 방지 */
+let groceryRestoredAt = 0;
 
 function markGroceryLocalMutation() {
   groceryLocalMutatedAt = Date.now();
@@ -3123,8 +3147,18 @@ function markGroceryFirestoreReady() {
   groceryFirestoreReady = true;
 }
 
+function markGroceryRestoredFromRemote() {
+  groceryRestoredAt = Date.now();
+  groceryLocalMutatedAt = 0;
+}
+
 function resetGroceryFirestoreReady() {
   groceryFirestoreReady = false;
+  groceryRestoredAt = 0;
+}
+
+function isWithinGroceryRestoreGuard(ms = 5000) {
+  return groceryRestoredAt > 0 && Date.now() - groceryRestoredAt < ms;
 }
 
 function schedulePersistGroceryState() {
@@ -3181,9 +3215,14 @@ async function persistGroceryState() {
   if (!isLoggedInAppUser()) return;
   // 새로고침 직후 빈 기본값이 Firestore를 덮어쓰지 않도록, 스냅샷 적용 전 저장 금지
   if (!groceryFirestoreReady) return;
+  // 스냅샷 복원 직후 persist 레이스 차단
+  if (isWithinGroceryRestoreGuard()) return;
+
+  const payload = GroceryRepository.exportState();
+  // 보낼 non-empty 주가 없으면 서버를 건드리지 않음
+  if (!payload?.byWeek || !Object.keys(payload.byWeek).length) return;
 
   markGroceryLocalMutation();
-  const payload = GroceryRepository.exportState();
   const weekKey = payload.activeWeekKey
     || GroceryRepository._activeWeekKey
     || state.plannerWeekKey
@@ -6798,7 +6837,12 @@ function flushGroceryDomIntoActiveWeek() {
     GroceryRepository.setActiveWeek(getWeekKeyFromDateStr(state.plannerWeekStart));
   }
   if (dom.groceryBudget) {
-    GroceryRepository.setBudget(dom.groceryBudget.value);
+    const domBudget = dom.groceryBudget.value;
+    const repoBudget = GroceryRepository.getBudget();
+    // 복원 직후 빈 input으로 기존 예산을 지우지 않음
+    if (!(isWithinGroceryRestoreGuard() && domBudget === '' && repoBudget !== '' && repoBudget != null)) {
+      GroceryRepository.setBudget(domBudget);
+    }
   }
   dom.groceryList?.querySelectorAll('.grocery-item').forEach((row) => {
     syncGroceryAmountRow(row, { schedulePersist: false });
@@ -6812,8 +6856,8 @@ function setPlannerWeek(weekStartDateStr, { flush = true, persist = true } = {})
   state.plannerWeekStart = start;
   state.plannerWeekKey = getWeekKeyFromDateStr(start);
   GroceryRepository.setActiveWeek(state.plannerWeekKey);
-  // init·스냅샷 적용 전에는 빈 주차로 저장/덮어쓰기 방지 플래그를 올리지 않음
-  if (persist && (isGuestUser() || groceryFirestoreReady)) {
+  // init·스냅샷 적용 전, 또는 복원 직후 레이스에는 빈 주차로 저장하지 않음
+  if (persist && (isGuestUser() || groceryFirestoreReady) && !isWithinGroceryRestoreGuard(5000)) {
     markGroceryLocalMutation();
     persistGroceryState().catch((error) => {
       console.error('Failed to save grocery week', {
@@ -8450,7 +8494,17 @@ function init() {
   dom.groceryBudget?.addEventListener('click', (e) => e.stopPropagation());
   const commitGroceryBudget = () => {
     if (!dom.groceryBudget) return;
+    if (!isGuestUser() && !groceryFirestoreReady) return;
     const pendingBudget = dom.groceryBudget.value;
+    const currentBudget = GroceryRepository.getBudget();
+    // 스냅샷 복원 직후 빈 blur가 서버 예산을 지우지 않게
+    if (isWithinGroceryRestoreGuard()
+      && pendingBudget === ''
+      && currentBudget !== ''
+      && currentBudget != null) {
+      dom.groceryBudget.value = currentBudget;
+      return;
+    }
     markGroceryLocalMutation();
     GroceryRepository.setBudget(pendingBudget);
     persistGroceryState().catch((error) => {
@@ -8576,13 +8630,19 @@ function startApp() {
       StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
     }
     if (settings.grocery) {
-      const allowRemote = !groceryFirestoreReady || Date.now() - groceryLocalMutatedAt >= 2000;
+      const localGroceryEmpty = !GroceryRepository._byWeek
+        || !Object.keys(GroceryRepository._byWeek).length
+        || GroceryRepository._isWeekEmpty(GroceryRepository._state);
+      const allowRemote = !groceryFirestoreReady
+        || localGroceryEmpty
+        || Date.now() - groceryLocalMutatedAt >= 2000;
       if (allowRemote) {
-        // 첫 스냅샷은 항상 적용(빈 초기 state 위에 덮어씀). 이후엔 로컬 편집 직후 2초 가드.
+        // 첫 스냅샷·로컬 비어 있음은 항상 적용. 이후엔 로컬 편집 직후 2초 가드.
         GroceryRepository.replaceState(settings.grocery, { strategy: 'replace' });
         if (state.plannerWeekKey) {
           GroceryRepository.setActiveWeek(state.plannerWeekKey);
         }
+        markGroceryRestoredFromRemote();
       }
       markGroceryFirestoreReady();
     }

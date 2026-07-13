@@ -9,6 +9,7 @@
 import {
   doc,
   getDoc,
+  getDocFromServer,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -89,20 +90,69 @@ function cloneJson(value, fallback) {
   }
 }
 
+/** 주차에 의미 있는 장보기 데이터가 있는지 */
+function isGroceryWeekEmpty(weekState) {
+  if (!weekState || typeof weekState !== 'object') return true;
+  const budget = weekState.budget ?? weekState.weeklyBudget ?? '';
+  if (budget !== '' && budget != null) return false;
+  const items = weekState.items && typeof weekState.items === 'object'
+    ? weekState.items
+    : (weekState.groceryItems && typeof weekState.groceryItems === 'object' ? weekState.groceryItems : {});
+  if (Object.keys(items).length > 0) return false;
+  if (Array.isArray(weekState.manualItems) && weekState.manualItems.length > 0) return false;
+  if (Array.isArray(weekState.completedKeys) && weekState.completedKeys.length > 0) return false;
+  const ledger = Array.isArray(weekState.purchasedLedger)
+    ? weekState.purchasedLedger
+    : (Array.isArray(weekState.purchasedRecords) ? weekState.purchasedRecords : []);
+  return ledger.length === 0;
+}
+
+/** 같은 주의 두 스냅샷 중 데이터가 있는 쪽을 고른다 */
+function preferRicherWeekState(a, b, weekKey) {
+  const aEmpty = isGroceryWeekEmpty(a);
+  const bEmpty = isGroceryWeekEmpty(b);
+  if (aEmpty && !bEmpty) return { ...cloneJson(b, {}), weekKey };
+  if (!aEmpty && bEmpty) return { ...cloneJson(a, {}), weekKey };
+  // 둘 다 있으면 나중에 온 값(b) 우선 — 호출부가 덮어쓰기 순서를 정함
+  return { ...cloneJson(b && typeof b === 'object' ? b : {}, {}), weekKey };
+}
+
 /**
  * byWeek 키를 월요일 YYYY-MM-DD 하나로 접는다.
- * 같은 주가 ISO+날짜로 둘 다 있으면 날짜 키 값을 우선한다.
+ * 같은 주가 ISO+날짜로 둘 다 있으면, 빈 값보다 데이터가 있는 쪽을 우선한다.
  */
 function collapseByWeek(byWeek) {
   const entries = Object.entries(byWeek && typeof byWeek === 'object' ? byWeek : {});
+  // 날짜 키를 뒤에 두되, 빈 날짜 키가 찬 ISO를 덮지 않도록 preferRicher 사용
   entries.sort(([a], [b]) => Number(isCanonicalWeekKey(a)) - Number(isCanonicalWeekKey(b)));
   const out = {};
   for (const [rawKey, weekState] of entries) {
     const key = normalizeGroceryWeekKey(rawKey);
     const cloned = cloneJson(weekState && typeof weekState === 'object' ? weekState : {}, {});
-    out[key] = { ...cloned, weekKey: key };
+    if (out[key]) {
+      out[key] = preferRicherWeekState(out[key], { ...cloned, weekKey: key }, key);
+    } else {
+      out[key] = { ...cloned, weekKey: key };
+    }
   }
   return out;
+}
+
+/**
+ * 서버 byWeek ← 클라이언트 byWeek 병합.
+ * - 빈 클라이언트 주는 서버 non-empty를 덮지 않음
+ * - 빈 클라이언트 주는 payload에서 빠져도 되므로, 여기 들어오면 스킵해 서버 유지
+ */
+function mergeByWeekProtectNonEmpty(existingByWeek, incomingByWeek) {
+  const merged = { ...existingByWeek };
+  Object.entries(incomingByWeek || {}).forEach(([key, incoming]) => {
+    if (isGroceryWeekEmpty(incoming)) {
+      // 빈 주로는 신규 키도 넣지 않음 — 새로고침 레이스의 빈 현재 주 삽입 방지
+      return;
+    }
+    merged[key] = incoming;
+  });
+  return merged;
 }
 
 /** 저장용: activeWeekKey + byWeek(정규화)만. 레거시 flat은 한 주로 승격. */
@@ -259,13 +309,48 @@ export const FirestoreSettingsService = {
     if (!user?.uid || !db) throw new Error('로그인 후 설정을 저장할 수 있습니다.');
     const ref = settingsDoc(user.uid);
     const incoming = canonicalizeGroceryForSave(grocery);
+    // 빈 주는 아예 보내지 않음 → 서버 기존 값 유지
+    const incomingNonEmpty = {};
+    Object.entries(incoming.byWeek || {}).forEach(([key, week]) => {
+      if (!isGroceryWeekEmpty(week)) incomingNonEmpty[key] = week;
+    });
+    if (!Object.keys(incomingNonEmpty).length) {
+      // 저장할 실데이터가 없으면 no-op (새로고침 직후 빈 persist가 서버를 건드리지 않음)
+      return;
+    }
 
     try {
-      const snap = await getDoc(ref);
-      const existingByWeek = snap.exists()
+      // 캐시에 남은 빈 스냅샷보다 서버 값을 우선
+      let snap;
+      try {
+        snap = await getDocFromServer(ref);
+      } catch {
+        snap = await getDoc(ref);
+      }
+      let existingByWeek = snap.exists()
         ? collapseByWeek(snap.data()?.grocery?.byWeek || {})
         : {};
-      const mergedByWeek = { ...existingByWeek, ...incoming.byWeek };
+      // 레거시 flat grocery도 한 주로 승격해 보호
+      if (!Object.keys(existingByWeek).length && snap.exists()) {
+        const g = snap.data()?.grocery;
+        if (g && typeof g === 'object' && !isGroceryWeekEmpty(g)) {
+          const key = normalizeGroceryWeekKey(g.activeWeekKey || incoming.activeWeekKey || new Date());
+          existingByWeek = {
+            ...existingByWeek,
+            [key]: {
+              weekKey: key,
+              budget: g.budget ?? g.weeklyBudget ?? '',
+              items: g.items && typeof g.items === 'object' ? g.items : {},
+              manualItems: Array.isArray(g.manualItems) ? g.manualItems : [],
+              completedKeys: Array.isArray(g.completedKeys) ? g.completedKeys : [],
+              purchasedLedger: Array.isArray(g.purchasedLedger)
+                ? g.purchasedLedger
+                : (Array.isArray(g.purchasedRecords) ? g.purchasedRecords : []),
+            },
+          };
+        }
+      }
+      const mergedByWeek = mergeByWeekProtectNonEmpty(existingByWeek, incomingNonEmpty);
       const nextGrocery = {
         activeWeekKey: incoming.activeWeekKey || Object.keys(mergedByWeek)[0] || '',
         byWeek: mergedByWeek,
@@ -284,7 +369,7 @@ export const FirestoreSettingsService = {
       console.error('Failed to save grocery week', {
         uid: user.uid,
         weekKey: incoming.activeWeekKey,
-        data: weekPayloadForLog(incoming),
+        data: weekPayloadForLog({ ...incoming, byWeek: incomingNonEmpty }),
         error: {
           code: error?.code || '',
           message: error?.message || String(error),
