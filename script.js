@@ -1482,6 +1482,7 @@ const USER_DATA_LOCAL_STORAGE_KEYS = [
   CONFIG.STORAGE.MEAL_PLAN,
   CONFIG.STORAGE.GROCERY,
   CONFIG.STORAGE.LEGACY_RECIPES,
+  CONFIG.STORAGE.MONTHLY_FOOD_BUDGET,
 ];
 
 function purgeLegacyUserDataFromLocalStorage({ includePantry = false } = {}) {
@@ -2922,6 +2923,7 @@ function clearAllUserDataState() {
   ShoppingRecordRepository.clearSession();
   MealPlanRepository.clearSession();
   GroceryRepository.clearSession();
+  state.monthlyFoodBudget = 0;
   mealPlanLocalMutatedAt = 0;
   groceryLocalMutatedAt = 0;
   resetGroceryFirestoreReady();
@@ -3264,11 +3266,8 @@ async function persistCurrencySetting() {
 }
 
 async function persistMonthlyFoodBudget() {
-  if (isLoggedInAppUser()) {
-    await getFirestoreUserDataSync().settings.saveMonthlyFoodBudget(state.monthlyFoodBudget);
-    return;
-  }
-  StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
+  if (!isLoggedInAppUser()) return;
+  await getFirestoreUserDataSync().settings.saveMonthlyFoodBudget(state.monthlyFoodBudget);
 }
 
 async function persistSavedRecipeIds() {
@@ -3792,7 +3791,7 @@ const state = {
   currency: CURRENCY_OPTIONS[StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)]
     ? StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)
     : DEFAULT_CURRENCY,
-  monthlyFoodBudget: Number(StorageAdapter.get(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, '')) || 0,
+  monthlyFoodBudget: 0,
   shoppingRecipePicker: null,
   pantryRecipePicker: null,
   recipeFormTab: 'manual',
@@ -4209,10 +4208,11 @@ function formatDateLabel(dateStr) {
 
 let toastTimer = null;
 function showToast(msg) {
+  if (!dom.toast) return;
   dom.toast.textContent = msg;
   dom.toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { dom.toast.hidden = true; }, 2200);
+  toastTimer = setTimeout(() => { dom.toast.hidden = true; }, 2000);
 }
 
 function compressImage(file) {
@@ -4307,6 +4307,12 @@ function pantryChipBadge(item) {
 
 const HOME_PANTRY_PREVIEW_COUNT = 4;
 let pantryChipsExpanded = Boolean(StorageAdapter.get(CONFIG.STORAGE.HOME_PANTRY_EXPANDED, false));
+let pantryChipsRelayoutTimer = null;
+let pantryMeasureHost = null;
+
+function isMobilePantryChipsViewport() {
+  return window.matchMedia('(max-width: 480px)').matches;
+}
 
 function pantryChipHTML(item) {
   return `
@@ -4317,19 +4323,124 @@ function pantryChipHTML(item) {
     </span>`;
 }
 
-function buildPantryChipsHTML(items, { expanded } = {}) {
-  const needsCollapse = items.length > HOME_PANTRY_PREVIEW_COUNT;
-  const showAll = expanded || !needsCollapse;
-  const visible = showAll ? items : items.slice(0, HOME_PANTRY_PREVIEW_COUNT);
-  const overflow = Math.max(0, items.length - HOME_PANTRY_PREVIEW_COUNT);
-  let html = visible.map(pantryChipHTML).join('');
-  if (needsCollapse && overflow > 0) {
-    const caret = showAll ? '▲' : '▼';
-    const aria = showAll ? '보유 재료 접기' : `외 ${overflow}개 재료 펼치기`;
-    html += `<button type="button" class="tag tag--overflow" data-pantry-expand aria-expanded="${showAll ? 'true' : 'false'}" aria-label="${aria}">
+function pantryOverflowButtonHTML(overflow, expanded) {
+  const caret = expanded ? '▲' : '▼';
+  const aria = expanded ? '보유 재료 접기' : `외 ${overflow}개 재료 펼치기`;
+  return `<button type="button" class="tag tag--overflow" data-pantry-expand aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${aria}">
       <span class="tag__overflow-count">+${overflow}</span>
       <span class="tag__overflow-caret" aria-hidden="true">${caret}</span>
     </button>`;
+}
+
+function getPantryChipsGapPx(el) {
+  const styles = getComputedStyle(el);
+  const gap = Number.parseFloat(styles.columnGap || styles.gap || '0');
+  return Number.isFinite(gap) ? gap : 8;
+}
+
+function pantryChipsFitInRows(widths, containerWidth, gap, maxRows) {
+  if (!widths.length) return true;
+  if (containerWidth <= 0) return false;
+  let row = 1;
+  let used = 0;
+  for (const width of widths) {
+    const w = Math.max(0, Number(width) || 0);
+    const need = used === 0 ? w : used + gap + w;
+    if (need <= containerWidth + 0.5) {
+      used = need;
+      continue;
+    }
+    row += 1;
+    if (row > maxRows) return false;
+    used = w;
+    if (w > containerWidth + 0.5) return false;
+  }
+  return true;
+}
+
+function ensurePantryMeasureHost() {
+  if (pantryMeasureHost?.isConnected) return pantryMeasureHost;
+  pantryMeasureHost = document.createElement('div');
+  pantryMeasureHost.className = 'tags home-tags pantry-chips-measure-host';
+  pantryMeasureHost.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(pantryMeasureHost);
+  return pantryMeasureHost;
+}
+
+function measurePantryOverflowWidth(host, overflow) {
+  const probe = document.createElement('button');
+  probe.type = 'button';
+  probe.className = 'tag tag--overflow';
+  probe.innerHTML = `<span class="tag__overflow-count">+${overflow}</span><span class="tag__overflow-caret" aria-hidden="true">▼</span>`;
+  host.appendChild(probe);
+  const width = probe.offsetWidth;
+  probe.remove();
+  return width;
+}
+
+function measureHomePantryChipWidths(items) {
+  const source = dom.pantryChips;
+  const host = ensurePantryMeasureHost();
+  const width = source?.clientWidth || source?.parentElement?.clientWidth || 0;
+  host.style.width = width ? `${width}px` : '';
+  host.innerHTML = (items || []).map(pantryChipHTML).join('');
+  const chipWidths = [...host.querySelectorAll('.tag')].map((el) => el.offsetWidth);
+  const gap = getPantryChipsGapPx(source || host);
+  host.innerHTML = '';
+  return { containerWidth: width, gap, chipWidths };
+}
+
+function getDesktopPantryCollapsedPlan(items) {
+  const total = items.length;
+  if (total <= HOME_PANTRY_PREVIEW_COUNT) {
+    return { visibleCount: total, overflow: 0, needsToggle: false };
+  }
+  return {
+    visibleCount: HOME_PANTRY_PREVIEW_COUNT,
+    overflow: total - HOME_PANTRY_PREVIEW_COUNT,
+    needsToggle: true,
+  };
+}
+
+function getMobilePantryCollapsedPlan(items) {
+  const total = items.length;
+  if (!total) return { visibleCount: 0, overflow: 0, needsToggle: false };
+
+  const { containerWidth, gap, chipWidths } = measureHomePantryChipWidths(items);
+  if (!containerWidth || chipWidths.length !== total) {
+    return getDesktopPantryCollapsedPlan(items);
+  }
+
+  if (pantryChipsFitInRows(chipWidths, containerWidth, gap, 2)) {
+    return { visibleCount: total, overflow: 0, needsToggle: false };
+  }
+
+  const host = ensurePantryMeasureHost();
+  host.style.width = `${containerWidth}px`;
+
+  for (let visibleCount = total - 1; visibleCount >= 0; visibleCount -= 1) {
+    const overflow = total - visibleCount;
+    const overflowWidth = measurePantryOverflowWidth(host, overflow);
+    const widths = chipWidths.slice(0, visibleCount).concat(overflowWidth);
+    if (pantryChipsFitInRows(widths, containerWidth, gap, 2)) {
+      return { visibleCount, overflow, needsToggle: true };
+    }
+  }
+
+  return { visibleCount: 0, overflow: total, needsToggle: true };
+}
+
+function getPantryCollapsedPlan(items) {
+  if (isMobilePantryChipsViewport()) return getMobilePantryCollapsedPlan(items);
+  return getDesktopPantryCollapsedPlan(items);
+}
+
+function buildPantryChipsHTML(items, { expanded, visibleCount, overflow, needsToggle } = {}) {
+  const showAll = expanded || !needsToggle;
+  const visible = showAll ? items : items.slice(0, Math.max(0, visibleCount || 0));
+  let html = visible.map(pantryChipHTML).join('');
+  if (needsToggle && overflow > 0) {
+    html += pantryOverflowButtonHTML(overflow, showAll);
   }
   return html;
 }
@@ -4357,6 +4468,15 @@ function bindPantryChipExpandHandler(root = dom.pantryChips) {
 function bindPantryChipsHandlers(root = dom.pantryChips) {
   bindPantryChipRemoveHandlers(root);
   bindPantryChipExpandHandler(root);
+}
+
+function schedulePantryChipsRelayout() {
+  clearTimeout(pantryChipsRelayoutTimer);
+  pantryChipsRelayoutTimer = setTimeout(() => {
+    if (!dom.pantryChips || state.view !== 'main') return;
+    if (!isMobilePantryChipsViewport()) return;
+    renderPantryChips({ animate: false });
+  }, 120);
 }
 
 function updateHomeRecipesSubtitle() {
@@ -4407,22 +4527,39 @@ function renderPantryChips({ animate = false } = {}) {
   const items = getPantryItemsForUi();
   const count = items.length;
   if (dom.pantryChipsCount) {
-    dom.pantryChipsCount.textContent = count > 0 ? ` (${count})` : '';
+    dom.pantryChipsCount.textContent = count > 0 ? `${count}개` : '';
     dom.pantryChipsCount.hidden = count === 0;
   }
   const clip = dom.pantryChipsClip;
   const chips = dom.pantryChips;
-  const needsCollapse = count > HOME_PANTRY_PREVIEW_COUNT;
-  const effectivelyExpanded = pantryChipsExpanded && needsCollapse;
-  dom.homePantrySection?.classList.toggle('is-expanded', effectivelyExpanded);
+  if (!chips) return;
 
   if (!count) {
+    dom.homePantrySection?.classList.remove('is-expanded');
     chips.innerHTML = '<p class="hint hint--inline">재료를 추가하면 맞춤 레시피를 추천해 드려요.</p>';
     return;
   }
 
+  const plan = getPantryCollapsedPlan(items);
+  const needsCollapse = plan.needsToggle;
+  const effectivelyExpanded = pantryChipsExpanded && needsCollapse;
+  dom.homePantrySection?.classList.toggle('is-expanded', effectivelyExpanded);
+
+  const collapsedHTML = buildPantryChipsHTML(items, {
+    expanded: false,
+    visibleCount: plan.visibleCount,
+    overflow: plan.overflow,
+    needsToggle: needsCollapse,
+  });
+  const expandedHTML = buildPantryChipsHTML(items, {
+    expanded: true,
+    visibleCount: plan.visibleCount,
+    overflow: plan.overflow,
+    needsToggle: needsCollapse,
+  });
+
   if (!needsCollapse) {
-    chips.innerHTML = buildPantryChipsHTML(items, { expanded: true });
+    chips.innerHTML = expandedHTML;
     bindPantryChipsHandlers();
     return;
   }
@@ -4430,16 +4567,14 @@ function renderPantryChips({ animate = false } = {}) {
   if (animate && clip) {
     const startHeight = clip.offsetHeight;
     if (effectivelyExpanded) {
-      chips.innerHTML = buildPantryChipsHTML(items, { expanded: true });
+      chips.innerHTML = expandedHTML;
       bindPantryChipsHandlers();
       const endHeight = chips.scrollHeight;
       runPantryChipsHeightTransition(clip, startHeight, endHeight);
     } else {
-      const fullHTML = buildPantryChipsHTML(items, { expanded: true });
-      const collapsedHTML = buildPantryChipsHTML(items, { expanded: false });
       chips.innerHTML = collapsedHTML;
       const endHeight = chips.scrollHeight;
-      chips.innerHTML = fullHTML;
+      chips.innerHTML = expandedHTML;
       bindPantryChipsHandlers();
       runPantryChipsHeightTransition(clip, startHeight, endHeight, () => {
         chips.innerHTML = collapsedHTML;
@@ -4449,7 +4584,7 @@ function renderPantryChips({ animate = false } = {}) {
     return;
   }
 
-  chips.innerHTML = buildPantryChipsHTML(items, { expanded: effectivelyExpanded });
+  chips.innerHTML = effectivelyExpanded ? expandedHTML : collapsedHTML;
   bindPantryChipsHandlers();
 }
 
@@ -4507,23 +4642,37 @@ function groceryAddButtonHTML(recipeId, { compact = false } = {}) {
   return `<button type="button" class="${cls}" data-grocery-add-rid="${esc(recipeId)}" onclick="event.stopPropagation()">장보기 추가</button>`;
 }
 
-async function addRecipeMissingToGroceryList(recipeId) {
+async function addRecipeMissingToGroceryList(recipeId, { button = null } = {}) {
+  if (button?.disabled) return;
   const recipe = RecipeRepository.getById(recipeId);
   if (!recipe) return;
-  const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
-  const grouped = GroceryListService.computeMissing(dates);
-  const { added, missingCount } = GroceryListService.addMissingIngredientsFromRecipe(recipe, grouped);
-  if (!missingCount) {
-    showToast('이미 모든 재료가 있어요');
-    return;
+
+  if (button) button.disabled = true;
+  try {
+    const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
+    const grouped = GroceryListService.computeMissing(dates);
+    const { added, missingCount } = GroceryListService.addMissingIngredientsFromRecipe(recipe, grouped);
+    if (!missingCount) {
+      showToast('이미 모든 재료가 있어요');
+      return;
+    }
+    if (!added) {
+      showToast('이미 장보기 리스트에 추가되어 있어요');
+      return;
+    }
+    await persistGroceryState();
+    if (state.view === 'planner') renderGroceryList();
+    showToast(
+      added === 1
+        ? '장보기 리스트에 재료 1개를 추가했어요'
+        : `장보기 리스트에 재료 ${added}개를 추가했어요`,
+    );
+  } catch (err) {
+    console.error('[Grocery] addRecipeMissingToGroceryList failed', { recipeId, err });
+    showToast('장보기 리스트에 추가하지 못했어요');
+  } finally {
+    if (button) button.disabled = false;
   }
-  if (!added) {
-    showToast('이미 장보기 리스트에 있어요');
-    return;
-  }
-  await persistGroceryState();
-  if (state.view === 'planner') renderGroceryList();
-  showToast('장보기 리스트에 추가되었습니다');
 }
 
 // ===== Render: Home Recipe Card (4-row layout) =====
@@ -4934,7 +5083,8 @@ function bindRecipeCards(container, results) {
   container.querySelectorAll('[data-grocery-add-rid]').forEach((btn) => {
     btn.onclick = (e) => {
       e.stopPropagation();
-      addRecipeMissingToGroceryList(btn.dataset.groceryAddRid).catch(() => showToast('장보기 추가에 실패했습니다.'));
+      if (btn.disabled) return;
+      addRecipeMissingToGroceryList(btn.dataset.groceryAddRid, { button: btn });
     };
   });
   requestAnimationFrame(() => fitMobileHomeCardMissingStatuses(container));
@@ -5774,20 +5924,26 @@ function buildCalendarDayEntriesHTML(meals, shoppingRecords) {
   const homeCooks = meals.filter((log) => isHomeCookMealType(log.mealType));
   const icons = getCalendarDayIcons(meals, shoppingRecords);
   const parts = [];
+  const emoji = mealTypeInfo('home-cook').emoji;
+  const shown = homeCooks.slice(0, 2);
+  const moreCount = Math.max(0, homeCooks.length - 2);
 
-  if (homeCooks.length) {
-    const firstName = homeCooks[0].name || '직접 요리';
-    const emoji = mealTypeInfo('home-cook').emoji;
+  shown.forEach((log) => {
+    const name = log.name || '직접 요리';
     parts.push(
-      `<span class="calendar-day__dish" title="${esc(firstName)}">${emoji} <span class="calendar-day__dish-name">${esc(firstName)}</span></span>`,
+      `<span class="calendar-day__dish">${emoji} <span class="calendar-day__dish-name">${esc(name)}</span></span>`,
     );
-    if (homeCooks.length > 1) {
-      parts.push(`<span class="calendar-day__more">+${homeCooks.length - 1}</span>`);
-    }
-  }
+  });
 
+  const metaParts = [];
+  if (moreCount > 0) {
+    metaParts.push(`<span class="calendar-day__more">+${moreCount}</span>`);
+  }
   if (icons.length) {
-    parts.push(`<span class="calendar-day__icons" aria-hidden="true">${icons.join('')}</span>`);
+    metaParts.push(`<span class="calendar-day__icons" aria-hidden="true">${icons.join('')}</span>`);
+  }
+  if (metaParts.length) {
+    parts.push(`<span class="calendar-day__meta">${metaParts.join('')}</span>`);
   }
 
   if (!parts.length) return '';
@@ -5878,6 +6034,10 @@ function renderMealStats() {
   if (dom.monthlyFoodBudget) {
     dom.monthlyFoodBudget.onchange = () => {
       state.monthlyFoodBudget = Number(dom.monthlyFoodBudget.value) || 0;
+      if (isGuestUser()) {
+        renderMealStats();
+        return;
+      }
       persistMonthlyFoodBudget().catch(() => undefined);
       renderMealStats();
     };
@@ -8911,6 +9071,7 @@ function init() {
   initHomeSearchDock();
   initMyRecipesSortUi();
   window.addEventListener('resize', scheduleFitMobileHomeCardMissingStatuses);
+  window.addEventListener('resize', schedulePantryChipsRelayout);
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
@@ -9122,7 +9283,6 @@ function startApp() {
     }
     if (settings.monthlyFoodBudget != null) {
       state.monthlyFoodBudget = Number(settings.monthlyFoodBudget) || 0;
-      StorageAdapter.set(CONFIG.STORAGE.MONTHLY_FOOD_BUDGET, state.monthlyFoodBudget || '');
     }
     if (settings.grocery) {
       const localGroceryEmpty = !GroceryRepository._byWeek

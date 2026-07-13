@@ -1209,12 +1209,10 @@ body.home-search-keyboard-active .home-search-dock {
   margin-bottom: 0.25rem;
 }
 
-.home-pantry-section__icon {
-  margin-right: 0.125rem;
-}
-
 .pantry-chips-count {
-  font-weight: 600;
+  margin-left: 0.2rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
   color: var(--color-text-muted);
 }
 
@@ -1286,6 +1284,16 @@ body.home-search-keyboard-active .home-search-dock {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   line-height: 1.45;
+}
+
+.pantry-chips-measure-host {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  margin: 0;
+  max-width: none;
 }
 
 .home-today-hero-wrap {
@@ -5432,9 +5440,10 @@ body.home-search-keyboard-active .home-search-dock {
 /* ===== Toast ===== */
 .toast {
   position: fixed;
-  bottom: calc(var(--tab-bar-space) + 0.75rem);
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  bottom: auto;
+  transform: translate(-50%, -50%);
   max-width: calc(var(--max-width) - 2rem);
   padding: 0.625rem 1rem;
   background: rgba(33, 37, 41, 0.92);
@@ -5965,13 +5974,13 @@ body.home-search-keyboard-active .home-search-dock {
 
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.1875rem;
 }
 
 .calendar-grid--days {
   flex: 1;
-  grid-auto-rows: 1fr;
+  grid-auto-rows: minmax(3.75rem, 1fr);
   min-height: 14.5rem;
 }
 
@@ -5984,7 +5993,11 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .calendar-day {
-  min-height: 2.75rem;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 3.75rem;
+  height: 100%;
   padding: 0.1875rem 0.125rem 0.125rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -5995,6 +6008,7 @@ body.home-search-keyboard-active .home-search-dock {
   justify-content: space-between;
   gap: 0.0625rem;
   text-align: center;
+  overflow: hidden;
 }
 
 .calendar-day--empty {
@@ -6002,6 +6016,8 @@ body.home-search-keyboard-active .home-search-dock {
   background: transparent;
   pointer-events: none;
   min-height: 0;
+  height: auto;
+  overflow: visible;
 }
 
 .calendar-day--today {
@@ -6011,10 +6027,6 @@ body.home-search-keyboard-active .home-search-dock {
 .calendar-day--selected {
   background: var(--color-primary-light);
   border-color: var(--color-primary);
-}
-
-.calendar-day--has-meals {
-  min-height: 3.25rem;
 }
 
 .calendar-day--has-meals .calendar-day__num {
@@ -6032,16 +6044,21 @@ body.home-search-keyboard-active .home-search-dock {
 .calendar-day__entries {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 0.0625rem;
   width: 100%;
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .calendar-day__dish {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   font-size: 0.5625rem;
   font-weight: 600;
   line-height: 1.15;
@@ -6055,7 +6072,21 @@ body.home-search-keyboard-active .home-search-dock {
   display: inline;
 }
 
+.calendar-day__meta {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .calendar-day__more {
+  flex: 0 0 auto;
   font-size: 0.5rem;
   font-weight: 700;
   line-height: 1;
@@ -6064,6 +6095,8 @@ body.home-search-keyboard-active .home-search-dock {
 
 .calendar-day__icons {
   display: block;
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 0.5625rem;
   line-height: 1;
   letter-spacing: -0.04em;
