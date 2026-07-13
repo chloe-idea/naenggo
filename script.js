@@ -407,6 +407,11 @@ const AffiliateService = {
   },
 };
 
+/** 쿠팡파트너스 구매하기 고지 (레시피 모달 부족 재료 목록 하단) */
+function affiliateDisclosureHTML() {
+  return `<p class="affiliate-disclosure" role="note" data-affiliate-disclosure>ⓘ 구매하기 버튼은 쿠팡파트너스 활동의 일환으로, 구매 시 이에 따른 일정액의 수수료를 제공받습니다.</p>`;
+}
+
 // ===== 영상 레시피 추출 (Recime-style pipeline — js/video-extract-platform.js) =====
 const VEP = () => window.VideoExtractPlatform || {};
 const VIDEO_EXTRACT_FALLBACK_MSG = '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.';
@@ -8297,6 +8302,7 @@ function openRecipeDetail(result) {
               ${AffiliateService.buyButtonHTML(name, { compact: true })}
             </li>`;
           }).join('')}</ul>`}
+          ${hasPantry && a.missing?.length && AffiliateService.isEnabled() ? affiliateDisclosureHTML() : ''}
         </section>
         ${MatchService.renderSubstitutionGuideHTML(substitutionAdvices)}
         ${recipe.ingredientSubstitutes?.length ? `

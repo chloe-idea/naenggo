@@ -4401,6 +4401,16 @@ body.home-search-keyboard-active .home-search-dock {
   color: var(--color-text-muted);
 }
 
+.affiliate-disclosure {
+  display: block;
+  margin: 14px 0 0;
+  padding: 0;
+  font-size: 0.75rem; /* 12px */
+  line-height: 1.45;
+  color: var(--color-text-muted);
+  text-align: left;
+}
+
 .match-sub-hint {
   font-weight: 500;
   color: var(--color-text-muted);
