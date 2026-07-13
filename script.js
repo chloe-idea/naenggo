@@ -2188,18 +2188,30 @@ const MealPlanRepository = {
   },
   get(date, slot) {
     const raw = this._plans?.[date]?.[slot] || {};
+    const recipeId = raw.recipeId || '';
+    const name = raw.name || '';
+    const type = raw.type === 'manual' || (!recipeId && name)
+      ? 'manual'
+      : (recipeId ? 'recipe' : (raw.type || ''));
     return {
-      recipeId: raw.recipeId || '',
-      name: raw.name || '',
+      type,
+      recipeId,
+      name,
       memo: raw.memo || '',
       recorded: Boolean(raw.recorded),
     };
   },
   set(date, slot, data) {
     if (!this._plans[date]) this._plans[date] = {};
+    const recipeId = data.recipeId || '';
+    const name = data.name || '';
+    const type = data.type === 'manual' || (!recipeId && name)
+      ? 'manual'
+      : (recipeId ? 'recipe' : '');
     const next = {
-      recipeId: data.recipeId || '',
-      name: data.name || '',
+      type,
+      recipeId,
+      name,
       memo: data.memo || '',
       recorded: Boolean(data.recorded),
     };
@@ -3794,6 +3806,8 @@ const state = {
   plannerWeekKey: getWeekKeyFromDateStr(todayStr()),
   plannerAnimate: null,
   plannerSheet: { date: null, slot: null, action: 'add', tab: 'recommend', search: '' },
+  /** 식단에서 «레시피 등록 후 추가» 시 저장 완료 후 슬롯에 연결 */
+  plannerPendingMeal: null,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -3996,6 +4010,61 @@ function formatMoney(value, currencyCode = null) {
     minimumFractionDigits: 0,
     maximumFractionDigits: currency.fractionDigits,
   })}`;
+}
+
+/**
+ * 통화별 금액 입력 예시 (placeholder)
+ * KRW: 5,000 / 10,000 · JPY: 500 · USD/AUD/CAD: 50
+ * scale: item | weekly | monthly
+ */
+function getCurrencyAmountExample(currencyCode = null, scale = 'item') {
+  const code = currencyCode || state.currency || DEFAULT_CURRENCY;
+  if (code === 'JPY') {
+    if (scale === 'monthly') return '50,000';
+    if (scale === 'weekly') return '5,000';
+    return '500';
+  }
+  if (code === 'USD' || code === 'AUD' || code === 'CAD' || code === 'EUR' || code === 'GBP') {
+    if (scale === 'monthly') return '500';
+    if (scale === 'weekly') return '80';
+    return '50';
+  }
+  // KRW (기본)
+  if (scale === 'monthly') return '500,000';
+  if (scale === 'weekly') return '50,000';
+  return '5,000';
+}
+
+function currencyAmountPlaceholder(scale = 'item', currencyCode = null) {
+  const example = getCurrencyAmountExample(currencyCode, scale);
+  if (scale === 'item' && (currencyCode || state.currency || DEFAULT_CURRENCY) === 'KRW') {
+    return '예: 5,000 또는 10,000';
+  }
+  return `예: ${example}`;
+}
+
+function currencyAmountInputStep(currencyCode = null) {
+  const code = currencyCode || state.currency || DEFAULT_CURRENCY;
+  const currency = CURRENCY_OPTIONS[code] || CURRENCY_OPTIONS[DEFAULT_CURRENCY];
+  return currency.fractionDigits > 0 ? '0.01' : '1';
+}
+
+/** 금액 입력 placeholder·step을 현재 통화에 맞춤 */
+function syncCurrencyAmountPlaceholders() {
+  const code = state.currency || DEFAULT_CURRENCY;
+  const step = currencyAmountInputStep(code);
+  const apply = (el, scale) => {
+    if (!el) return;
+    el.placeholder = currencyAmountPlaceholder(scale, code);
+    if (el.tagName === 'INPUT' && el.type === 'number') {
+      el.step = step;
+      el.inputMode = CURRENCY_OPTIONS[code]?.fractionDigits > 0 ? 'decimal' : 'numeric';
+    }
+  };
+  apply(dom.groceryBudget, 'weekly');
+  apply(dom.mealCost, 'item');
+  apply(dom.shoppingAmount, 'item');
+  apply(dom.monthlyFoodBudget, 'monthly');
 }
 function formatMoneyTotalsByCurrency(totalsMap) {
   const entries = Object.entries(totalsMap).filter(([, amount]) => amount > 0);
@@ -5532,8 +5601,8 @@ function buildBudgetFooterHTML(primaryTotal, budget, currencyCode) {
       <div class="calendar-spend-card__budget-field">
         <label for="monthly-food-budget" class="calendar-spend-card__budget-label">월 예산</label>
         <input type="number" id="monthly-food-budget" class="calendar-spend-card__budget-input"
-          min="0" step="0.01" inputmode="decimal"
-          placeholder="예: 500000"
+          min="0" step="${esc(currencyAmountInputStep(currencyCode))}" inputmode="${CURRENCY_OPTIONS[currencyCode]?.fractionDigits > 0 ? 'decimal' : 'numeric'}"
+          placeholder="${esc(currencyAmountPlaceholder('monthly', currencyCode))}"
           value="${budgetValue > 0 ? esc(String(budgetValue)) : ''}" aria-label="이번 달 식비 예산">
       </div>
     </div>`;
@@ -6229,22 +6298,34 @@ function plannerSlotHasEntry(date, slotId) {
   return Boolean(entry.recipeId || entry.name);
 }
 
+function isPlannerMealManual(entry) {
+  if (!entry) return false;
+  return entry.type === 'manual' || (!entry.recipeId && Boolean(entry.name));
+}
+
 function getPlannerMealDisplay(entry) {
-  if (entry.recipeId) {
+  if (!isPlannerMealManual(entry) && entry.recipeId) {
     const recipe = RecipeRepository.getById(entry.recipeId);
-    if (recipe) return recipe;
+    if (recipe) return { ...recipe, manual: false };
   }
   if (entry.name) {
-    return { id: '', name: entry.name, cookTime: null, difficulty: null, ingredients: [] };
+    return {
+      id: '',
+      name: entry.name,
+      cookTime: null,
+      difficulty: null,
+      ingredients: [],
+      manual: true,
+    };
   }
   return null;
 }
 
 function plannerMealThumbHTML(recipe) {
-  if (recipe?.id && typeof RecipeImageService !== 'undefined') {
+  if (recipe?.id && !recipe.manual && typeof RecipeImageService !== 'undefined') {
     return `<div class="planner-meal__thumb">${RecipeImageService.renderImg(recipe, { variant: 'thumb', alt: '' })}</div>`;
   }
-  return '<div class="planner-meal__thumb planner-meal__thumb--empty" aria-hidden="true">📷</div>';
+  return '<div class="planner-meal__thumb planner-meal__thumb--empty" aria-hidden="true">🍽️</div>';
 }
 
 function plannerMealRecordLabel(entry) {
@@ -6304,13 +6385,18 @@ function plannerMealCardHTML(date, slot, animate = false) {
   const entry = MealPlanRepository.get(date, slot.id);
   const recipe = getPlannerMealDisplay(entry);
   if (!recipe) return '';
+  const manual = isPlannerMealManual(entry) || recipe.manual;
   const names = RecommendationService.getPantryNames();
-  const matchPercent = recipe.ingredients?.length && names.length
+  const matchPercent = !manual && recipe.ingredients?.length && names.length
     ? MatchService.analyze(names, recipe.ingredients).matchPercent
     : null;
   const metaParts = [];
-  if (recipe.cookTime != null) metaParts.push(`${recipe.cookTime}분`);
-  if (recipe.difficulty) metaParts.push(recipe.difficulty);
+  if (manual) {
+    metaParts.push('직접 입력');
+  } else {
+    if (recipe.cookTime != null) metaParts.push(`${recipe.cookTime}분`);
+    if (recipe.difficulty) metaParts.push(recipe.difficulty);
+  }
   const meta = metaParts.join(' · ');
   const matchLine = matchPercent != null
     ? `<p class="planner-meal__match">${matchPercent}% 재료 일치</p>`
@@ -6318,7 +6404,7 @@ function plannerMealCardHTML(date, slot, animate = false) {
   const animClass = animate ? ' planner-meal--enter' : '';
   const recordBtnClass = entry.recorded ? ' planner-meal__record--done' : '';
   return `
-    <article class="planner-meal${animClass}" data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}">
+    <article class="planner-meal${animClass}${manual ? ' planner-meal--manual' : ''}" data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" data-meal-type="${manual ? 'manual' : 'recipe'}">
       <div class="planner-meal__head">
         <p class="planner-meal__slot">${slot.emoji} ${esc(slot.label)}</p>
         <button type="button" class="planner-meal__remove" data-planner-remove data-meal-date="${esc(date)}" data-meal-slot="${esc(slot.id)}" aria-label="${esc(slot.label)} ${esc(recipe.name)} 삭제">×</button>
@@ -6496,6 +6582,7 @@ function closePlannerSheet(sheet, { immediate = false } = {}) {
 
 function closePlannerSheets({ immediate = false } = {}) {
   dom.plannerRecipeSearch?.blur();
+  setPlannerRecipeSheetKeyboardActive(false);
   closePlannerSheet(dom.plannerSlotSheet, { immediate });
   closePlannerSheet(dom.plannerRecipeSheet, { immediate });
   updateBodyScrollLock();
@@ -6585,6 +6672,42 @@ function plannerRecipePickRowHTML({ recipe, matchPercent }) {
     </button>`;
 }
 
+function normalizePlannerFreeAddQuery(query) {
+  return String(query || '').trim();
+}
+
+function findRecommendableRecipeByExactTitle(title) {
+  const norm = MatchService.normalize(title);
+  if (!norm) return null;
+  return RecipeRepository.getRecommendableRecipes().find(
+    (r) => MatchService.normalize(r.name) === norm,
+  ) || null;
+}
+
+function findOwnedRecipeByExactTitle(title) {
+  const norm = MatchService.normalize(title);
+  if (!norm) return null;
+  return RecipeRepository.getUserRecipes().find(
+    (r) => MatchService.normalize(r.name) === norm,
+  ) || null;
+}
+
+function plannerRecipeFreeAddHTML(query) {
+  const q = normalizePlannerFreeAddQuery(query);
+  if (q.length < 2) return '';
+  const exact = findRecommendableRecipeByExactTitle(q);
+  const hint = exact
+    ? `<p class="planner-recipe-free-add__hint">같은 이름의 레시피가 있어요. 위 목록에서 선택하는 걸 권장해요.</p>`
+    : '';
+  return `
+    <div class="planner-recipe-free-add" role="group" aria-label="직접 추가">
+      <p class="planner-recipe-free-add__label">직접 추가</p>
+      ${hint}
+      <button type="button" class="planner-recipe-free-add__btn" data-planner-free="manual">“${esc(q)}” 메뉴로 추가</button>
+      <button type="button" class="planner-recipe-free-add__btn planner-recipe-free-add__btn--recipe" data-planner-free="recipe">“${esc(q)}” 레시피 등록 후 추가</button>
+    </div>`;
+}
+
 function renderPlannerRecipePicker() {
   if (!dom.plannerRecipeList || !dom.plannerRecipeTabs) return;
   const { tab, search } = state.plannerSheet;
@@ -6592,9 +6715,18 @@ function renderPlannerRecipePicker() {
     btn.classList.toggle('planner-recipe-tabs__btn--active', btn.dataset.plannerTab === tab);
   });
   const items = getPlannerRecipePickerItems(tab, search);
-  if (dom.plannerRecipeEmpty) dom.plannerRecipeEmpty.hidden = items.length > 0;
-  dom.plannerRecipeList.hidden = items.length === 0;
-  dom.plannerRecipeList.innerHTML = items.map(plannerRecipePickRowHTML).join('');
+  const freeAddQuery = normalizePlannerFreeAddQuery(search);
+  const showFreeAdd = freeAddQuery.length >= 2;
+  const freeAddHTML = showFreeAdd ? plannerRecipeFreeAddHTML(freeAddQuery) : '';
+  if (dom.plannerRecipeEmpty) {
+    dom.plannerRecipeEmpty.hidden = items.length > 0 || showFreeAdd;
+    if (!showFreeAdd && items.length === 0) {
+      dom.plannerRecipeEmpty.textContent = '검색 결과가 없습니다.';
+    }
+  }
+  const hasContent = items.length > 0 || showFreeAdd;
+  dom.plannerRecipeList.hidden = !hasContent;
+  dom.plannerRecipeList.innerHTML = `${items.map(plannerRecipePickRowHTML).join('')}${freeAddHTML}`;
   dom.plannerRecipeList.querySelectorAll('.planner-recipe-pick').forEach((btn) => {
     btn.onclick = () => {
       const recipe = RecipeRepository.getById(btn.dataset.recipeId);
@@ -6602,6 +6734,102 @@ function renderPlannerRecipePicker() {
       confirmPlannerRecipe(recipe);
     };
   });
+  dom.plannerRecipeList.querySelectorAll('[data-planner-free]').forEach((btn) => {
+    btn.onclick = () => {
+      const mode = btn.dataset.plannerFree;
+      if (mode === 'manual') confirmPlannerManualMeal(freeAddQuery);
+      else if (mode === 'recipe') openPlannerRecipeCreateThenAdd(freeAddQuery);
+    };
+  });
+  if (showFreeAdd) {
+    requestAnimationFrame(() => {
+      const freeAdd = dom.plannerRecipeList.querySelector('.planner-recipe-free-add');
+      freeAdd?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+}
+
+function confirmPlannerManualMeal(title) {
+  const name = normalizePlannerFreeAddQuery(title);
+  const { date, slot, action } = state.plannerSheet;
+  if (!date || !slot || name.length < 2) return;
+  setPlannerMeal(date, slot, {
+    type: 'manual',
+    recipeId: null,
+    name,
+    memo: '',
+    recorded: false,
+  }, { animate: true });
+  closePlannerSheets();
+  const slotLabel = plannerSlotInfo(slot).label;
+  showToast(action === 'edit' ? `${slotLabel} 식단을 수정했어요` : `${slotLabel}에 ${name}을(를) 추가했어요`);
+}
+
+function openPlannerRecipeCreateThenAdd(title) {
+  const name = normalizePlannerFreeAddQuery(title);
+  if (name.length < 2) return;
+  const dup = findOwnedRecipeByExactTitle(name);
+  if (dup) {
+    const ok = window.confirm(
+      `같은 제목의 내 레시피(“${dup.name}”)가 이미 있어요. 그래도 새로 등록할까요?`,
+    );
+    if (!ok) return;
+  }
+  const { date, slot, action } = state.plannerSheet;
+  if (!date || !slot) return;
+  state.plannerPendingMeal = { date, slot, action, prefillName: name };
+  closePlannerSheets({ immediate: true });
+  openRecipeForm(null, { prefillName: name, fromPlanner: true });
+}
+
+function confirmPlannerRecipe(recipe) {
+  const { date, slot, action } = state.plannerSheet;
+  if (!date || !slot || !recipe) return;
+  setPlannerMeal(date, slot, {
+    type: 'recipe',
+    recipeId: recipe.id,
+    name: recipe.name,
+    memo: '',
+    recorded: false,
+  }, { animate: true });
+  closePlannerSheets();
+  const slotLabel = plannerSlotInfo(slot).label;
+  showToast(action === 'edit' ? `${slotLabel} 식단을 수정했어요` : `${slotLabel}에 ${recipe.name}을(를) 추가했어요`);
+}
+
+let plannerRecipeViewportHandler = null;
+
+function syncPlannerRecipeSheetKeyboard() {
+  const sheet = dom.plannerRecipeSheet;
+  if (!sheet || sheet.hidden) {
+    document.documentElement.style.removeProperty('--planner-sheet-keyboard-inset');
+    return;
+  }
+  const vv = window.visualViewport;
+  if (!vv) {
+    document.documentElement.style.setProperty('--planner-sheet-keyboard-inset', '0px');
+    return;
+  }
+  const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  document.documentElement.style.setProperty('--planner-sheet-keyboard-inset', `${inset}px`);
+}
+
+function setPlannerRecipeSheetKeyboardActive(active) {
+  if (active) {
+    syncPlannerRecipeSheetKeyboard();
+    if (!plannerRecipeViewportHandler && window.visualViewport) {
+      plannerRecipeViewportHandler = () => syncPlannerRecipeSheetKeyboard();
+      window.visualViewport.addEventListener('resize', plannerRecipeViewportHandler);
+      window.visualViewport.addEventListener('scroll', plannerRecipeViewportHandler);
+    }
+    return;
+  }
+  document.documentElement.style.removeProperty('--planner-sheet-keyboard-inset');
+  if (plannerRecipeViewportHandler && window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', plannerRecipeViewportHandler);
+    window.visualViewport.removeEventListener('scroll', plannerRecipeViewportHandler);
+    plannerRecipeViewportHandler = null;
+  }
 }
 
 function openPlannerRecipeSheet(date, slotId, action) {
@@ -6661,15 +6889,6 @@ function initPlannerSheetGestures(sheet) {
 
   panel.addEventListener('touchend', endDrag, { passive: true });
   panel.addEventListener('touchcancel', endDrag, { passive: true });
-}
-
-function confirmPlannerRecipe(recipe) {
-  const { date, slot, action } = state.plannerSheet;
-  if (!date || !slot || !recipe) return;
-  setPlannerMeal(date, slot, { recipeId: recipe.id, name: recipe.name, memo: '', recorded: false }, { animate: true });
-  closePlannerSheets();
-  const slotLabel = plannerSlotInfo(slot).label;
-  showToast(action === 'edit' ? `${slotLabel} 식단을 수정했어요` : `${slotLabel}에 ${recipe.name}을(를) 추가했어요`);
 }
 
 async function recordPlannerMealToCalendar(dateKey, slotId) {
@@ -6883,6 +7102,15 @@ function initPlannerSheets() {
   dom.plannerRecipeSearch?.addEventListener('input', () => {
     state.plannerSheet.search = dom.plannerRecipeSearch.value;
     renderPlannerRecipePicker();
+  });
+  dom.plannerRecipeSearch?.addEventListener('focus', () => {
+    setPlannerRecipeSheetKeyboardActive(true);
+  });
+  dom.plannerRecipeSearch?.addEventListener('blur', () => {
+    window.setTimeout(() => {
+      if (document.activeElement === dom.plannerRecipeSearch) return;
+      setPlannerRecipeSheetKeyboardActive(false);
+    }, 120);
   });
   document.querySelectorAll('[data-close-modal="planner-slot"], [data-close-modal="planner-recipe"]').forEach((el) => {
     el.onclick = () => closePlannerSheets();
@@ -7188,7 +7416,8 @@ function renderGroceryList({ force = false } = {}) {
       const manualBadge = item.manual ? '<span class="grocery-item__badge">직접</span>' : '';
       const actualField = `
         <input type="text" class="grocery-item__actual" data-actual-key="${esc(item.key)}"
-          inputmode="decimal" placeholder="실금액"
+          inputmode="${CURRENCY_OPTIONS[state.currency]?.fractionDigits > 0 ? 'decimal' : 'numeric'}"
+          placeholder="${esc(currencyAmountPlaceholder('item'))}"
           value="${meta.actualAmount !== '' && meta.actualAmount != null ? esc(String(meta.actualAmount)) : ''}"
           aria-label="${esc(item.name)} 실금액">`;
       return `
@@ -7918,7 +8147,7 @@ function handleVideoRecipeSave() {
     });
 }
 
-function prepareRecipeForm(id = null) {
+function prepareRecipeForm(id = null, { prefillName = '' } = {}) {
   state.editingRecipeId = id;
   state.formImage = null;
   state.videoReviewDraft = null;
@@ -7952,22 +8181,30 @@ function prepareRecipeForm(id = null) {
     if (dom.recipeFormTabs) dom.recipeFormTabs.hidden = false;
     dom.formVisibilityPrivate.checked = true;
     setRecipeFormTab('manual');
+    if (prefillName) dom.formName.value = prefillName;
   }
   return true;
 }
 
 // ===== Recipe Form =====
-function openRecipeForm(id = null) {
+function openRecipeForm(id = null, options = {}) {
+  if (!options.fromPlanner) state.plannerPendingMeal = null;
   if (!isLoggedInAppUser()) {
     requireAppLogin({
-      redirectAfterLogin: () => openRecipeForm(id),
+      redirectAfterLogin: () => openRecipeForm(id, options),
     });
     return;
   }
   if (id && !RecipeRepository.getById(id)) return;
-  if (!prepareRecipeForm(id)) return;
+  if (!prepareRecipeForm(id, options)) return;
   openModal('form');
-  requestAnimationFrame(() => dom.formName.focus());
+  requestAnimationFrame(() => {
+    if (options.prefillName && !id) {
+      dom.formIngredients?.focus();
+    } else {
+      dom.formName.focus();
+    }
+  });
 }
 
 function handleRecipeFormSubmit(e) {
@@ -7997,10 +8234,24 @@ function handleRecipeFormSubmit(e) {
     if (existing?.image) data.image = existing.image;
   }
 
-  saveUserRecipe(data, state.editingRecipeId)
-    .then(() => {
+  const editingId = state.editingRecipeId;
+  saveUserRecipe(data, editingId)
+    .then((saved) => {
+      const pending = state.plannerPendingMeal;
       closeModal('form');
       refreshAll();
+      if (!editingId && pending?.date && pending?.slot && saved) {
+        const recipeId = saved.id || saved.firestoreId;
+        setPlannerMeal(pending.date, pending.slot, {
+          type: 'recipe',
+          recipeId,
+          name: saved.name || data.name,
+          memo: '',
+          recorded: false,
+        }, { animate: true });
+        const slotLabel = plannerSlotInfo(pending.slot).label;
+        showToast(`${slotLabel}에 ${saved.name || data.name}을(를) 추가했어요`);
+      }
     })
     .catch((err) => showError(err.message || '레시피 저장에 실패했습니다.'));
 }
@@ -8305,6 +8556,7 @@ function closeModal(type) {
   }[type];
   if (!m) return;
   m.hidden = true; m.setAttribute('aria-hidden', 'true');
+  if (type === 'form') state.plannerPendingMeal = null;
   if (type === 'meal' && (state.calendarModalType === 'editRecord' || state.calendarModalType === 'addRecord')) {
     clearCalendarSubModalState();
   }
@@ -8415,6 +8667,7 @@ function init() {
   // 초기화: 빈 메모리 state를 Firestore에 쓰지 않음 (스냅샷 적용 후 저장 허용)
   setPlannerWeek(state.plannerWeekStart, { flush: false, persist: false });
   dom.currencySelect.value = state.currency;
+  syncCurrencyAmountPlaceholders();
   initRecipePickers();
   initVideoExtractUi();
   initPlannerSheets();
@@ -8461,7 +8714,9 @@ function init() {
     } else {
       StorageAdapter.set(CONFIG.STORAGE.CURRENCY, state.currency);
     }
+    syncCurrencyAmountPlaceholders();
     renderCalendar();
+    if (state.view === 'planner') renderGroceryList();
   };
   dom.calendarPrev.onclick = () => changeCalendarMonth(-1);
   dom.calendarNext.onclick = () => changeCalendarMonth(1);
@@ -8565,6 +8820,7 @@ function init() {
       else if (type === 'calendar-day') closeCalendarDaySheet();
       else if (type === 'calendar-expense') closeCalendarExpenseSheet();
       else if (type === 'grocery-spend') closeGrocerySpendSheet();
+      else if (type === 'planner-slot' || type === 'planner-recipe') closePlannerSheets();
       else if (type !== 'profile') closeModal(type);
     };
   });
@@ -8624,6 +8880,7 @@ function startApp() {
     if (settings.currency && CURRENCY_OPTIONS[settings.currency]) {
       state.currency = settings.currency;
       if (dom.currencySelect) dom.currencySelect.value = settings.currency;
+      syncCurrencyAmountPlaceholders();
     }
     if (settings.monthlyFoodBudget != null) {
       state.monthlyFoodBudget = Number(settings.monthlyFoodBudget) || 0;

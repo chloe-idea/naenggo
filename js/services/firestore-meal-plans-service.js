@@ -82,6 +82,7 @@ export const FirestoreMealPlansService = {
     // 호출측에서 savePlans(전체)를 쓰도록 유지한다. 호환용으로 merge 필드 경로 유지.
     const payload = {};
     payload[`plans.${date}.${slot}`] = {
+      type: data.type === 'manual' || (!data.recipeId && data.name) ? 'manual' : (data.recipeId ? 'recipe' : ''),
       recipeId: data.recipeId || '',
       name: data.name || '',
       memo: data.memo || '',

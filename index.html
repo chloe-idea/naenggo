@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=128">
+  <link rel="stylesheet" href="style.css?v=131">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -211,7 +211,7 @@
           </div>
           <div class="budget-box" id="grocery-budget-box" role="button" tabindex="0" aria-label="이번 주 사용 내역 보기">
             <label for="grocery-budget" class="budget-box__label">이번 주 예산</label>
-            <input type="number" id="grocery-budget" class="budget-box__input" min="0" step="0.01" inputmode="decimal" placeholder="예: 80">
+            <input type="number" id="grocery-budget" class="budget-box__input" min="0" step="1" inputmode="numeric" placeholder="예: 50,000">
             <span id="grocery-budget-summary" class="budget-box__summary"></span>
           </div>
           <div id="grocery-list" class="grocery-list"></div>
@@ -291,7 +291,7 @@
             </div>
             <div class="form-field" id="meal-cost-field" hidden>
               <label for="meal-cost" class="form-field__label">비용 <span class="optional">(선택)</span></label>
-              <input type="number" id="meal-cost" class="form-field__input" min="0" step="0.01" inputmode="decimal" placeholder="예: 12.90">
+              <input type="number" id="meal-cost" class="form-field__input" min="0" step="1" inputmode="numeric" placeholder="예: 5,000 또는 10,000">
             </div>
             <div class="form-field" id="meal-recipe-field">
               <label for="meal-recipe-select" class="form-field__label">연결된 레시피 <span class="optional">(선택)</span></label>
@@ -341,7 +341,7 @@
               </div>
               <div class="form-field">
                 <label for="shopping-amount" class="form-field__label">금액 <span class="required">*</span></label>
-                <input type="number" id="shopping-amount" class="form-field__input" min="0" step="0.01" inputmode="decimal" placeholder="예: 42.80" required>
+                <input type="number" id="shopping-amount" class="form-field__input" min="0" step="1" inputmode="numeric" placeholder="예: 5,000 또는 10,000" required>
               </div>
               <div class="form-field">
                 <label for="shopping-store" class="form-field__label">마트명 <span class="optional">(선택)</span></label>
@@ -808,7 +808,7 @@
     </div>
 
     <!-- 장보기: 이번 주 사용 내역 -->
-    <div id="grocery-spend-sheet" class="modal modal--sheet" hidden aria-hidden="true">
+    <div id="grocery-spend-sheet" class="modal modal--sheet modal--sheet-tab-safe" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="grocery-spend"></div>
       <div class="modal__panel planner-sheet calendar-expense-sheet" role="dialog" aria-modal="true" aria-labelledby="grocery-spend-sheet-title">
         <div class="calendar-expense-sheet__header">
@@ -816,7 +816,7 @@
           <h3 id="grocery-spend-sheet-title" class="planner-sheet__title">이번 주 사용 내역</h3>
         </div>
         <div class="calendar-expense-sheet__scroll">
-          <ul id="grocery-spend-list" class="day-record-list calendar-day-sheet__list"></ul>
+          <ul id="grocery-spend-list" class="day-record-list calendar-day-sheet__list grocery-spend-list"></ul>
           <div id="grocery-spend-empty" class="empty-state empty-state--compact calendar-expense-sheet__empty" hidden>
             <p class="empty-state__text">이번 주에 기록된 장보기 내역이 없어요.</p>
           </div>
@@ -825,7 +825,7 @@
     </div>
 
     <!-- 식단 플래너: 식사 슬롯 선택 -->
-    <div id="planner-slot-sheet" class="modal modal--sheet" hidden aria-hidden="true">
+    <div id="planner-slot-sheet" class="modal modal--sheet modal--sheet-tab-safe" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="planner-slot"></div>
       <div class="modal__panel planner-sheet" role="dialog" aria-modal="true" aria-labelledby="planner-slot-sheet-title">
         <div class="planner-sheet__handle" aria-hidden="true"></div>
@@ -836,7 +836,7 @@
     </div>
 
     <!-- 식단 플래너: 레시피 선택 -->
-    <div id="planner-recipe-sheet" class="modal modal--sheet" hidden aria-hidden="true">
+    <div id="planner-recipe-sheet" class="modal modal--sheet modal--sheet-tab-safe" hidden aria-hidden="true">
       <div class="modal__backdrop" data-close-modal="planner-recipe"></div>
       <div class="modal__panel planner-sheet planner-sheet--recipe" role="dialog" aria-modal="true" aria-labelledby="planner-recipe-sheet-title">
         <div class="planner-sheet__handle" aria-hidden="true"></div>
@@ -962,6 +962,6 @@
   <script src="js/ingredient-emoji.js?v=1"></script>
   <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=156" defer></script>
+  <script src="script.js?v=159" defer></script>
 </body>
 </html>
