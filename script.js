@@ -3668,19 +3668,23 @@ const RecommendationService = {
     return RecipeSaveCountRepository.getCount(b.recipe.id) - RecipeSaveCountRepository.getCount(a.recipe.id);
   },
   compareHomeResults(a, b) {
-    const tier = (r) => {
-      const missingCount = r.missing?.length ?? 0;
-      const subCount = r.substituted?.length ?? 0;
-      if (missingCount === 0 && subCount === 0) return 0;
-      if (missingCount === 1) return 1;
-      if (missingCount === 2) return 2;
-      return 3;
-    };
-    const tierDiff = tier(a) - tier(b);
-    if (tierDiff !== 0) return tierDiff;
-    if ((b.matchPercent || 0) !== (a.matchPercent || 0)) return (b.matchPercent || 0) - (a.matchPercent || 0);
-    if ((b.expiryBoost || 0) !== (a.expiryBoost || 0)) return (b.expiryBoost || 0) - (a.expiryBoost || 0);
-    return this.compareHomeResultsByDate(a, b);
+    const matchA = Number(a.matchPercent);
+    const matchB = Number(b.matchPercent);
+    const rateA = Number.isFinite(matchA) ? matchA : -1;
+    const rateB = Number.isFinite(matchB) ? matchB : -1;
+    if (rateB !== rateA) return rateB - rateA;
+
+    const missingA = a.missing?.length ?? 0;
+    const missingB = b.missing?.length ?? 0;
+    if (missingA !== missingB) return missingA - missingB;
+
+    const timeA = Number(a.recipe?.cookTime);
+    const timeB = Number(b.recipe?.cookTime);
+    const cookA = Number.isFinite(timeA) ? timeA : Number.POSITIVE_INFINITY;
+    const cookB = Number.isFinite(timeB) ? timeB : Number.POSITIVE_INFINITY;
+    if (cookA !== cookB) return cookA - cookB;
+
+    return 0;
   },
   recommendHome(recipes, { activeFilters = new Set(), query = '' } = {}) {
     const names = this.getPantryNames();
@@ -3692,12 +3696,14 @@ const RecommendationService = {
     for (const recipe of recipes) {
       if (q && !this.matchesHomeSearch(recipe, q)) continue;
       const analysis = MatchService.analyze(names, recipe.ingredients);
+      const matchPercent = Number(analysis.matchPercent);
       const result = {
         recipe,
         ...analysis,
+        matchPercent: Number.isFinite(matchPercent) ? matchPercent : 0,
         expiryBoost: this.getExpiryBoost(analysis.matchedPantryNames),
       };
-      if (hasPantry && !hasSearchMode && analysis.matchPercent <= 0) continue;
+      if (hasPantry && !hasSearchMode && result.matchPercent <= 0) continue;
       if (activeFilters?.size && !this.matchesFilters(result, activeFilters)) continue;
       results.push({
         ...result,
