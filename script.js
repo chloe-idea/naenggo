@@ -4569,23 +4569,52 @@ function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost })
 }
 
 /** 홈 카드 준비 상태 문구 — 목업: 🛒 + 주황 Bold 재료명 + 기본색 나머지 */
+function uniqueShortIngredientLabels(missing) {
+  const out = [];
+  const seen = new Set();
+  for (const item of missing || []) {
+    const label = shortIngredientLabel(item);
+    if (!label) continue;
+    const key = MatchService.normalize(label);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+  }
+  return out;
+}
+
+function homeCardMissingStatusInnerHTML(namesText, restText) {
+  return `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(namesText)}</span><span class="recipe-card-status__rest">${esc(restText)}</span>`;
+}
+
+/** 부족 재료 표시 후보 (선호 순). 모바일에서 한 줄에 맞는 첫 후보를 고른다. */
+function buildHomeCardMissingStatusVariants(names) {
+  const count = names.length;
+  if (count <= 0) return [];
+  if (count <= 2) {
+    const joined = names.join(', ');
+    return [
+      { namesText: joined, restText: '만 있으면 가능' },
+      { namesText: joined, restText: ' 부족' },
+    ];
+  }
+  return [
+    { namesText: `${names[0]}, ${names[1]} 외 ${count - 2}개`, restText: ' 부족' },
+    { namesText: `${names[0]} 외 ${count - 1}개`, restText: ' 부족' },
+  ];
+}
+
 function formatHomeReadyMessage(missing, { readyHtml = '바로 가능' } = {}) {
-  const names = (missing || []).map(shortIngredientLabel).filter(Boolean);
+  const names = uniqueShortIngredientLabels(missing);
   const count = names.length;
   if (count <= 0) {
-    return { html: readyHtml, mod: 'available' };
+    return { html: readyHtml, mod: 'available', names: [] };
   }
-  let namesHtml;
-  if (count === 1) {
-    namesHtml = esc(names[0]);
-  } else if (count === 2) {
-    namesHtml = `${esc(names[0])}, ${esc(names[1])}`;
-  } else {
-    namesHtml = `${esc(names[0])}, ${esc(names[1])} 외 ${count - 2}개`;
-  }
+  const preferred = buildHomeCardMissingStatusVariants(names)[0];
   return {
-    html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${namesHtml}</span><span class="recipe-card-status__rest">만 있으면 가능</span>`,
+    html: homeCardMissingStatusInnerHTML(preferred.namesText, preferred.restText),
     mod: count <= 2 ? 'low' : 'medium',
+    names,
   };
 }
 
@@ -4603,29 +4632,9 @@ function formatHomeSubstitutionLine(substituted) {
   };
 }
 
-/** 내 레시피 카드 준비 상태 — 바로 가능 / 긍정형 부족 안내 */
+/** 내 레시피 카드 준비 상태 — 홈과 동일한 긍정형 부족 안내 */
 function formatMyRecipeReadyMessage(missing) {
-  const names = (missing || []).map(shortIngredientLabel).filter(Boolean);
-  const count = names.length;
-  if (count <= 0) {
-    return { html: '바로 가능', mod: 'available' };
-  }
-  if (count === 1) {
-    return {
-      html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(names[0])}</span><span class="recipe-card-status__rest">만 있으면 가능</span>`,
-      mod: 'low',
-    };
-  }
-  if (count === 2) {
-    return {
-      html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(names[0])}, ${esc(names[1])}</span><span class="recipe-card-status__rest">만 있으면 가능</span>`,
-      mod: 'low',
-    };
-  }
-  return {
-    html: `${HOME_CARD_CART_ICON}<span class="recipe-card-status__names">${esc(names[0])}, ${esc(names[1])} 외 ${count - 2}개</span><span class="recipe-card-status__rest"> 필요</span>`,
-    mod: 'medium',
-  };
+  return formatHomeReadyMessage(missing, { readyHtml: '바로 가능' });
 }
 
 /** 내 레시피 대체 문구 — 초록 교체 아이콘 + 초록 "A → B" + 회색 "로 대체 가능" */
@@ -4640,6 +4649,80 @@ function formatMyRecipeSubstitutionLine(substituted) {
     owned,
     html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-pair">${esc(required)} → ${esc(owned)}</span><span class="recipe-card-home__sub-rest">로 대체 가능</span>`,
   };
+}
+
+function isMobileHomeCardMissingFitViewport() {
+  return window.matchMedia('(max-width: 480px)').matches;
+}
+
+function applyHomeCardMissingStatusVariant(statusEl, variant) {
+  const namesEl = statusEl.querySelector('.recipe-card-status__names');
+  const restEl = statusEl.querySelector('.recipe-card-status__rest');
+  if (!namesEl || !restEl || !variant) return;
+  namesEl.textContent = variant.namesText;
+  restEl.textContent = variant.restText;
+}
+
+function homeCardMissingStatusOverflows(statusEl) {
+  const prev = {
+    whiteSpace: statusEl.style.whiteSpace,
+    display: statusEl.style.display,
+    webkitLineClamp: statusEl.style.webkitLineClamp,
+    lineClamp: statusEl.style.lineClamp,
+    overflow: statusEl.style.overflow,
+    maxHeight: statusEl.style.maxHeight,
+  };
+  statusEl.style.whiteSpace = 'nowrap';
+  statusEl.style.display = 'block';
+  statusEl.style.webkitLineClamp = 'unset';
+  statusEl.style.lineClamp = 'unset';
+  statusEl.style.overflow = 'hidden';
+  statusEl.style.maxHeight = 'none';
+  const overflows = statusEl.scrollWidth > statusEl.clientWidth + 0.5;
+  statusEl.style.whiteSpace = prev.whiteSpace;
+  statusEl.style.display = prev.display;
+  statusEl.style.webkitLineClamp = prev.webkitLineClamp;
+  statusEl.style.lineClamp = prev.lineClamp;
+  statusEl.style.overflow = prev.overflow;
+  statusEl.style.maxHeight = prev.maxHeight;
+  return overflows;
+}
+
+/** 모바일에서만: 카드별 실제 폭으로 부족 재료 문구를 한 줄에 맞게 축소 */
+function fitMobileHomeCardMissingStatuses(container) {
+  if (!container) return;
+  const statusNodes = container.querySelectorAll('.recipe-card--home .recipe-card-status[data-missing-labels]');
+  if (!statusNodes.length) return;
+  const mobile = isMobileHomeCardMissingFitViewport();
+  statusNodes.forEach((statusEl) => {
+    const names = String(statusEl.dataset.missingLabels || '').split('\u001f').filter(Boolean);
+    if (!names.length) return;
+    const variants = buildHomeCardMissingStatusVariants(names);
+    if (!variants.length) return;
+    if (!mobile) {
+      applyHomeCardMissingStatusVariant(statusEl, variants[0]);
+      return;
+    }
+    let chosen = variants[variants.length - 1];
+    for (const variant of variants) {
+      applyHomeCardMissingStatusVariant(statusEl, variant);
+      if (!homeCardMissingStatusOverflows(statusEl)) {
+        chosen = variant;
+        break;
+      }
+    }
+    applyHomeCardMissingStatusVariant(statusEl, chosen);
+  });
+}
+
+let homeCardMissingFitResizeTimer = null;
+function scheduleFitMobileHomeCardMissingStatuses() {
+  clearTimeout(homeCardMissingFitResizeTimer);
+  homeCardMissingFitResizeTimer = setTimeout(() => {
+    [dom.recipeList, dom.myRecipesList, dom.savedList].forEach((el) => {
+      if (el && !el.hidden) fitMobileHomeCardMissingStatuses(el);
+    });
+  }, 120);
 }
 
 function homeGroceryAddButtonHTML(recipeId) {
@@ -4709,7 +4792,7 @@ function homeRecipeCardHTML(result, options = {}) {
 
   const statusRow = missingCount > 0
     ? `<div class="recipe-card-home__row recipe-card-home__row--status">
-        <span class="recipe-card-status recipe-card-status--${status.mod}">${status.html}</span>
+        <span class="recipe-card-status recipe-card-status--${status.mod}"${status.names?.length ? ` data-missing-labels="${esc(status.names.join('\u001f'))}"` : ''}>${status.html}</span>
         ${homeGroceryAddButtonHTML(recipe.id)}
       </div>`
     : `<div class="recipe-card-home__row recipe-card-home__row--status">
@@ -4849,6 +4932,7 @@ function bindRecipeCards(container, results) {
       addRecipeMissingToGroceryList(btn.dataset.groceryAddRid).catch(() => showToast('장보기 추가에 실패했습니다.'));
     };
   });
+  requestAnimationFrame(() => fitMobileHomeCardMissingStatuses(container));
 }
 
 // ===== Render: Home =====
@@ -8674,6 +8758,7 @@ function init() {
   initGroceryListAmountHandlers();
   initCalendarDaySheetGestures();
   initHomeSearchDock();
+  window.addEventListener('resize', scheduleFitMobileHomeCardMissingStatuses);
 
   dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
