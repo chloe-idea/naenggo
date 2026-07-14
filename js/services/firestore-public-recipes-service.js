@@ -222,6 +222,15 @@ export const FirestorePublicRecipesService = {
     }
   },
 
+  async getById(recipeId) {
+    const ref = publicRecipeDoc(recipeId);
+    if (!ref) return null;
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const recipe = mapPublicRecipe(snap);
+    return recipe.isPublic === false ? null : recipe;
+  },
+
   async listByAuthorId(authorId) {
     if (!db || !authorId) return [];
     const q = query(

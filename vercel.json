@@ -12,6 +12,10 @@
     {
       "source": "/images/:path*",
       "destination": "/public/images/:path*"
+    },
+    {
+      "source": "/recipes/:path*",
+      "destination": "/index.html"
     }
   ],
   "headers": [

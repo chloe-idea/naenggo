@@ -404,7 +404,7 @@ function closeProfileMenu() {
 
   if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
   else {
-    const anyModalOpen = ['recipe-form-modal', 'meal-modal', 'shopping-modal', 'pantry-modal', 'recipe-modal']
+    const anyModalOpen = ['recipe-form-modal', 'meal-modal', 'shopping-modal', 'pantry-modal']
       .some((id) => {
         const el = document.getElementById(id);
         return el && !el.hidden;

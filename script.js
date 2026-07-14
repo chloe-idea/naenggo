@@ -3928,7 +3928,7 @@ const HomeBriefingService = {
 const state = {
   view: 'main', filters: new Set(), menuSearch: '', homeSavedOnly: false,
   editingRecipeId: null, editingPantryId: null,
-  editingMealId: null, editingShoppingId: null, formImage: null, mealFormImage: null, isComposing: false, detailRecipeId: null,
+  editingMealId: null, editingShoppingId: null, formImage: null, mealFormImage: null, isComposing: false,
   calendarYear: new Date().getFullYear(), calendarMonth: new Date().getMonth(),
   selectedCalendarDate: null, selectedMealType: 'home-cook', mealPhotoRemoved: false,
   calendarModalType: null,
@@ -3957,6 +3957,9 @@ const state = {
   myRecipesSortSheetSection: null,
   authorProfileId: null,
   authorProfileReturnView: 'main',
+  detailRecipeId: null,
+  detailReturnView: 'main',
+  detailReturnScrollY: 0,
 };
 
 const $ = (s) => document.querySelector(s);
@@ -3967,7 +3970,7 @@ const dom = {
   views: {
     main: $('#view-main'), 'my-recipes': $('#view-my-recipes'),
     pantry: $('#view-pantry'), planner: $('#view-planner'), calendar: $('#view-calendar'),
-    'author-profile': $('#view-author-profile'),
+    'author-profile': $('#view-author-profile'), 'recipe-detail': $('#view-recipe-detail'),
   },
   authorProfileBack: $('#author-profile-back'),
   authorProfileHeader: $('#author-profile-header'),
@@ -4059,7 +4062,11 @@ const dom = {
   pantryModalExpiry: $('#pantry-modal-expiry'),
   pantryRecipeInput: $('#pantry-recipe-input'), pantryRecipeId: $('#pantry-recipe-id'),
   pantryRecipeSuggestions: $('#pantry-recipe-suggestions'),
-  recipeModal: $('#recipe-modal'), modalContent: $('#modal-content'),
+  recipeDetailContent: $('#recipe-detail-content'),
+  recipeDetailTitle: $('#recipe-detail-page-title'),
+  recipeDetailBack: $('#recipe-detail-back'),
+  recipeDetailSaveIcon: $('#recipe-detail-save-icon'),
+  recipeDetailShare: $('#recipe-detail-share'),
   recipeFormModal: $('#recipe-form-modal'), recipeForm: $('#recipe-form'),
   formModalTitle: $('#form-modal-title'), formError: $('#form-error'),
   formName: $('#recipe-name'), formIngredients: $('#recipe-ingredients'),
@@ -4294,7 +4301,7 @@ function closeImageLightbox() {
   dom.imageLightbox.hidden = true;
   dom.imageLightbox.setAttribute('aria-hidden', 'true');
   dom.imageLightboxImg.removeAttribute('src');
-  const modalOpen = [dom.recipeModal, dom.recipeFormModal, dom.pantryModal, dom.mealModal, dom.shoppingModal, dom.groceryItemModal]
+  const modalOpen = [dom.recipeFormModal, dom.pantryModal, dom.mealModal, dom.shoppingModal, dom.groceryItemModal]
     .some((m) => m && !m.hidden);
   if (!modalOpen) document.body.style.overflow = '';
 }
@@ -4605,13 +4612,14 @@ function switchView(view) {
   document.body.classList.toggle('view--main', view === 'main');
   document.body.classList.toggle('view--calendar', view === 'calendar');
   document.body.classList.toggle('view--author-profile', view === 'author-profile');
+  document.body.classList.toggle('view--recipe-detail', view === 'recipe-detail');
   if (prevView === 'main' && view !== 'main') {
     toggleHomeFilterPanel(false);
     collapseHomeSearchDock();
     setHomeSearchKeyboardActive(false);
   }
   if (dom.headerSubtitle) {
-    if (view === 'main') {
+    if (view === 'main' || view === 'recipe-detail') {
       dom.headerSubtitle.hidden = true;
       dom.headerSubtitle.textContent = '';
     } else {
@@ -4653,6 +4661,7 @@ function renderCurrentView() {
     case 'planner': renderPlanner(); break;
     case 'calendar': renderCalendar(); break;
     case 'author-profile': renderAuthorProfile(); break;
+    case 'recipe-detail': renderRecipeDetailPage(); break;
   }
 }
 
@@ -4950,7 +4959,6 @@ function forkRecipeFrom(sourceId) {
   };
   saveUserRecipe(data)
     .then((saved) => {
-      closeModal('recipe');
       switchView('my-recipes');
       openRecipeForm(saved?.id || saved?.firestoreId);
       showToast(`"${source.name}"을(를) 내 레시피로 복사했어요`);
@@ -8665,137 +8673,250 @@ async function handleGroceryPurchaseComplete() {
   }
 }
 
-// ===== Recipe Detail Modal =====
+// ===== Recipe Detail Page =====
+function getRecipeDetailPath(recipeId) {
+  return `/recipes/${encodeURIComponent(recipeId)}`;
+}
+
+function getRecipeIdFromPath(pathname = window.location.pathname) {
+  const match = pathname.match(/^\/recipes\/([^/]+)\/?$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 function openRecipeDetail(result) {
-  const { recipe } = result;
-  if (!recipe) return;
+  const recipe = result?.recipe || result;
+  if (!recipe?.id) return;
+  state.detailReturnView = state.view === 'recipe-detail' ? state.detailReturnView : state.view;
+  state.detailReturnScrollY = state.view === 'recipe-detail' ? state.detailReturnScrollY : window.scrollY;
+  history.replaceState({
+    ...(history.state || {}),
+    appView: state.detailReturnView,
+    scrollY: state.detailReturnScrollY,
+  }, '', window.location.href);
+  history.pushState({ recipeDetail: true, recipeId: recipe.id }, '', getRecipeDetailPath(recipe.id));
   state.detailRecipeId = recipe.id;
+  switchView('recipe-detail');
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+}
+
+async function resolveRecipeDetail(recipeId) {
+  const local = RecipeRepository.getById(recipeId);
+  if (local) return local;
+  const publicRecipes = window.FirebaseServices?.FirestorePublicRecipesService;
+  if (!publicRecipes?.getById) return null;
+  const remote = await publicRecipes.getById(recipeId);
+  if (remote) {
+    PublicRecipeRepository.replaceAll([...PublicRecipeRepository.getAll(), remote]);
+  }
+  return remote;
+}
+
+function renderRecipeDetailLoading(message = '레시피를 불러오는 중이에요') {
+  if (!dom.recipeDetailContent) return;
+  dom.recipeDetailContent.innerHTML = `<div class="recipe-detail-page__state"><span class="material-symbols-outlined" aria-hidden="true">progress_activity</span><p>${esc(message)}</p></div>`;
+}
+
+function renderRecipeDetailUnavailable(message = '레시피를 찾을 수 없습니다') {
+  if (!dom.recipeDetailContent) return;
+  dom.recipeDetailContent.innerHTML = `<div class="recipe-detail-page__state"><span class="material-symbols-outlined" aria-hidden="true">menu_book</span><p>${esc(message)}</p><button type="button" class="btn btn--outline" data-detail-back>레시피 탐색으로</button></div>`;
+  dom.recipeDetailContent.querySelector('[data-detail-back]')?.addEventListener('click', leaveRecipeDetail);
+}
+
+function recipeDetailContentHTML(recipe, analysis) {
   const names = RecommendationService.getPantryNames();
-  const a = result.matchPercent != null ? result : MatchService.analyze(names, recipe.ingredients);
-  const owned = RecipeRepository.isOwned(recipe);
-  const saved = SavedRecipeRepository.isSaved(recipe.id);
   const hasPantry = names.length > 0;
+  const owned = RecipeRepository.isOwned(recipe);
+  const substitutionAdvices = analysis.substitutionAdvices?.length
+    ? analysis.substitutionAdvices
+    : MatchService.getSubstitutionAdvices(hasPantry ? analysis.missing : recipe.ingredients);
+  const ingredientsHtml = hasPantry
+    ? MatchService.renderMatchDetailHTML(analysis)
+    : `<ul class="ingredient-list">${(recipe.ingredients || []).map((ing) => {
+      const name = getIngredientMatchName(ing);
+      return `<li class="ingredient-list__item ingredient-list__item--buy">
+        <span>${esc(formatIngredientDisplay(ing))}</span>
+        ${AffiliateService.buyButtonHTML(name, { compact: true })}
+      </li>`;
+    }).join('')}</ul>`;
 
-  const substitutionAdvices = a.substitutionAdvices?.length
-    ? a.substitutionAdvices
-    : MatchService.getSubstitutionAdvices(hasPantry ? a.missing : recipe.ingredients);
-
-  dom.modalContent.innerHTML = `
-    <div class="recipe-detail">
+  return `
+    <article class="recipe-detail">
       <div class="recipe-detail__hero">
         ${recipeHeroHTML(recipe)}
         <div class="recipe-detail__hero-overlay"></div>
-        <h2 class="recipe-detail__hero-title">${esc(recipe.name)}</h2>
+        <h1 class="recipe-detail__hero-title">${esc(recipe.name)}</h1>
       </div>
       <div class="recipe-detail__content">
         ${recipeOriginHTML(recipe)}
         ${recipeSourcePostLinkHTML(recipe)}
         <div class="recipe-detail__tags">
-          ${recipe.tags.map((t) => `<span class="recipe-detail__tag">${esc(t)}</span>`).join('')}
+          ${(recipe.tags || []).map((t) => `<span class="recipe-detail__tag">${esc(t)}</span>`).join('')}
           <span class="recipe-detail__tag">${recipeVisibilityLabelHTML(recipe.visibility)}</span>
-          ${isPublicCommunityRecipe(recipe) ? '' : `<span class="recipe-detail__tag">👤 ${esc(recipe.authorName || '냉장GO')}</span>`}
+          ${isPublicCommunityRecipe(recipe) ? '' : `<span class="recipe-detail__tag">${esc(recipe.authorName || '냉장GO')}</span>`}
         </div>
         ${isPublicCommunityRecipe(recipe) ? `<div class="recipe-detail__author-wrap">${recipeAuthorRowHTML(recipe)}</div>` : ''}
         <div class="recipe-detail__stats">
           <div class="stat"><span class="stat__label">조리시간</span><span class="stat__value">${recipe.cookTime}분</span></div>
-          <div class="stat"><span class="stat__label">난이도</span><span class="stat__value">${recipe.difficulty}</span></div>
-          <div class="stat"><span class="stat__label">일치율</span><span class="stat__value">${a.matchPercent}%</span></div>
+          <div class="stat"><span class="stat__label">난이도</span><span class="stat__value">${esc(recipe.difficulty)}</span></div>
+          <div class="stat"><span class="stat__label">일치율</span><span class="stat__value">${analysis.matchPercent}%</span></div>
         </div>
         <section class="recipe-detail__section">
-          <h3 class="recipe-detail__section-title">🥬 재료 ${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${a.matchPercent}%</span>` : ''}</h3>
-          ${hasPantry ? MatchService.renderMatchDetailHTML(a) : `<ul class="ingredient-list">${recipe.ingredients.map((ing) => {
-            const name = getIngredientMatchName(ing);
-            return `<li class="ingredient-list__item ingredient-list__item--buy">
-              <span>${esc(formatIngredientDisplay(ing))}</span>
-              ${AffiliateService.buyButtonHTML(name, { compact: true })}
-            </li>`;
-          }).join('')}</ul>`}
-          ${hasPantry && a.missing?.length && AffiliateService.isEnabled() ? affiliateDisclosureHTML() : ''}
+          <h3 class="recipe-detail__section-title">재료 ${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${analysis.matchPercent}%</span>` : ''}</h3>
+          ${ingredientsHtml}
+          ${hasPantry && analysis.missing?.length && AffiliateService.isEnabled() ? affiliateDisclosureHTML() : ''}
         </section>
         ${MatchService.renderSubstitutionGuideHTML(substitutionAdvices)}
-        ${recipe.ingredientSubstitutes?.length ? `
-        <section class="recipe-detail__section">
-          <h3 class="recipe-detail__section-title">🔄 대체 가능 재료 (레시피 기록)</h3>
-          <ul class="recipe-detail__substitutes">
-            ${recipe.ingredientSubstitutes.map((s) => `<li>${esc(s)}</li>`).join('')}
-          </ul>
+        ${recipe.ingredientSubstitutes?.length ? `<section class="recipe-detail__section">
+          <h3 class="recipe-detail__section-title">대체 가능 재료 (레시피 기록)</h3>
+          <ul class="recipe-detail__substitutes">${recipe.ingredientSubstitutes.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
         </section>` : ''}
         <section class="recipe-detail__section">
-          <h3 class="recipe-detail__section-title">👨‍🍳 조리 순서</h3>
-          <ol class="step-list">${recipe.steps.map((s) => `<li class="step-list__item">${esc(s)}</li>`).join('')}</ol>
+          <h3 class="recipe-detail__section-title">조리 순서</h3>
+          <ol class="step-list">${(recipe.steps || []).map((s) => `<li class="step-list__item">${esc(s)}</li>`).join('')}</ol>
         </section>
-        ${recipe.memo ? `<section class="recipe-detail__section"><h3 class="recipe-detail__section-title">📝 메모</h3><p class="recipe-detail__memo">${linkifyText(recipe.memo)}</p></section>` : ''}
+        ${recipe.memo ? `<section class="recipe-detail__section"><h3 class="recipe-detail__section-title">메모</h3><p class="recipe-detail__memo">${linkifyText(recipe.memo)}</p></section>` : ''}
         <div class="recipe-detail__actions">
-          ${AffiliateService.isEnabled() ? `<button type="button" class="btn btn--outline" id="btn-buy-recipe-ingredients">🛒 부족 재료 구매</button>` : ''}
-          <button type="button" class="btn btn--meal-log" id="btn-log-meal-recipe" data-auth-required>🍳 식사 기록</button>
-          <button type="button" class="btn ${saved ? 'btn--primary' : 'btn--outline'}" id="btn-save-recipe" data-auth-required>${saved ? '⭐ 저장됨' : '☆ 레시피 저장'}</button>
-          ${canForkRecipe(recipe) ? `<button type="button" class="btn btn--outline" id="btn-fork-recipe">✏️ 내 버전 만들기</button>` : ''}
-          ${owned ? `<button type="button" class="btn btn--ghost" id="btn-edit-recipe">수정</button>
-            <button type="button" class="btn btn--danger" id="btn-delete-recipe">삭제</button>` : ''}
+          <div class="recipe-detail__secondary-actions">
+            <button type="button" class="btn btn--outline" data-detail-meal data-auth-required><span class="material-symbols-outlined" aria-hidden="true">restaurant</span>식사 기록</button>
+            ${canForkRecipe(recipe) ? `<button type="button" class="btn btn--outline" data-detail-fork><span class="material-symbols-outlined" aria-hidden="true">content_copy</span>내 버전 만들기</button>` : ''}
+          </div>
+          ${owned ? `<div class="recipe-detail__owner-actions"><button type="button" class="btn btn--ghost" data-detail-edit>수정</button><button type="button" class="btn btn--danger" data-detail-delete>삭제</button></div>` : ''}
         </div>
       </div>
-    </div>`;
+    </article>`;
+}
 
-  dom.modalContent.querySelector('#btn-log-meal-recipe')?.addEventListener('click', () => {
-    requireAppLogin(() => {
-      closeModal('recipe');
-      openMealModal(null, { defaultDate: todayStr(), recipeId: recipe.id, mealType: 'home-cook', hideMealType: true });
-    });
-  });
-  dom.modalContent.querySelector('#btn-buy-recipe-ingredients')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const targets = hasPantry && a.missing.length ? a.missing : recipe.ingredients;
-    const query = targets.map((ing) => getIngredientMatchName(ing)).slice(0, 3).join(' ');
-    if (query) AffiliateService.openSearch(query);
-  });
-  dom.modalContent.querySelector('#btn-save-recipe')?.addEventListener('click', () => {
-    requireAppLogin(() => {
-      SavedRecipeRepository.toggle(recipe.id);
-      persistSavedRecipeIds().catch(() => undefined);
-      openRecipeDetail({ recipe, ...MatchService.analyze(names, recipe.ingredients) });
+function updateRecipeDetailSaveIcon(saved) {
+  if (!dom.recipeDetailSaveIcon) return;
+  dom.recipeDetailSaveIcon.innerHTML = saved ? HOME_CARD_BOOKMARK_ICON_FILLED : HOME_CARD_BOOKMARK_ICON;
+  dom.recipeDetailSaveIcon.setAttribute('aria-label', saved ? '저장 해제' : '레시피 저장');
+  dom.recipeDetailSaveIcon.classList.toggle('recipe-detail-page__icon-btn--saved', saved);
+}
+
+function updateRecipeDetailHeader(recipe) {
+  if (dom.recipeDetailTitle) dom.recipeDetailTitle.textContent = recipe.name || '레시피 상세';
+  updateRecipeDetailSaveIcon(SavedRecipeRepository.isSaved(recipe.id));
+}
+
+function toggleRecipeDetailSave() {
+  const recipeId = state.detailRecipeId;
+  if (!recipeId) return;
+  requireAppLogin(() => {
+    const saved = SavedRecipeRepository.toggle(recipeId);
+    persistSavedRecipeIds().catch(() => undefined);
+    showToast(saved ? '레시피를 저장했어요' : '저장을 해제했어요');
+    updateRecipeDetailSaveIcon(saved);
+    // 홈·내 레시피 목록의 저장 표시를 바로 최신화한다.
+    if (state.view === 'recipe-detail') {
+      renderHome();
       renderMyRecipes();
-    });
-  });
-  dom.modalContent.querySelector('#btn-fork-recipe')?.addEventListener('click', () => {
-    forkRecipeFrom(recipe.id);
-  });
-  dom.modalContent.querySelector('[data-open-parent]')?.addEventListener('click', (e) => {
-    const parent = RecipeRepository.getById(e.currentTarget.dataset.openParent);
-    if (parent) openRecipeDetail({ recipe: parent, ...MatchService.analyze(names, parent.ingredients) });
-  });
-  dom.modalContent.querySelector('#btn-edit-recipe')?.addEventListener('click', () => {
-    closeModal('recipe'); openRecipeForm(recipe.id);
-  });
-  dom.modalContent.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const authorId = e.currentTarget.dataset.authorId;
-    closeModal('recipe');
-    openAuthorProfile(authorId);
-  });
-  if (isPublicCommunityRecipe(recipe) && recipe.authorId) {
-    hydrateAuthorProfiles([recipe]).then(() => {
-      if (state.detailRecipeId !== recipe.id) return;
-      const wrap = dom.modalContent?.querySelector('.recipe-detail__author-wrap');
-      if (!wrap) return;
-      wrap.innerHTML = recipeAuthorRowHTML(recipe);
-      wrap.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
-        e.preventDefault();
-        closeModal('recipe');
-        openAuthorProfile(e.currentTarget.dataset.authorId);
-      });
-    });
-  }
-  dom.modalContent.querySelector('#btn-delete-recipe')?.addEventListener('click', () => {
-    if (confirm(`"${recipe.name}" 삭제할까요?`)) {
-      deleteUserRecipe(recipe.id)
-        .then(() => { closeModal('recipe'); refreshAll(); })
-        .catch((err) => showToast(err.message || '삭제에 실패했습니다.'));
+    } else {
+      renderCurrentView();
     }
   });
-  bindZoomableImages(dom.modalContent);
-  openModal('recipe');
-  syncAuthGateUi();
+}
+
+function bindRecipeDetailActions(recipe) {
+  const root = dom.recipeDetailContent;
+  if (!root) return;
+  root.querySelector('[data-detail-meal]')?.addEventListener('click', () => {
+    requireAppLogin(() => openMealModal(null, { defaultDate: todayStr(), recipeId: recipe.id, mealType: 'home-cook', hideMealType: true }));
+  });
+  root.querySelector('[data-detail-fork]')?.addEventListener('click', () => forkRecipeFrom(recipe.id));
+  root.querySelector('[data-detail-edit]')?.addEventListener('click', () => openRecipeForm(recipe.id));
+  root.querySelector('[data-detail-delete]')?.addEventListener('click', () => {
+    if (!confirm(`"${recipe.name}" 삭제할까요?`)) return;
+    deleteUserRecipe(recipe.id)
+      .then(() => { showToast('레시피를 삭제했어요'); leaveRecipeDetail(); refreshAll(); })
+      .catch((err) => showToast(err.message || '삭제에 실패했습니다.'));
+  });
+  root.querySelector('[data-open-parent]')?.addEventListener('click', (e) => {
+    const parent = RecipeRepository.getById(e.currentTarget.dataset.openParent);
+    if (parent) openRecipeDetail(parent);
+  });
+  root.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openAuthorProfile(e.currentTarget.dataset.authorId);
+  });
+  bindZoomableImages(root);
+}
+
+async function renderRecipeDetailPage() {
+  const recipeId = state.detailRecipeId || getRecipeIdFromPath();
+  if (!recipeId) return renderRecipeDetailUnavailable();
+  renderRecipeDetailLoading();
+  try {
+    const recipe = await resolveRecipeDetail(recipeId);
+    if (!recipe) return renderRecipeDetailUnavailable();
+    if (recipe.visibility === 'private' && !RecipeRepository.isOwned(recipe)) {
+      return renderRecipeDetailUnavailable('비공개 레시피입니다');
+    }
+    state.detailRecipeId = recipe.id;
+    const analysis = MatchService.analyze(RecommendationService.getPantryNames(), recipe.ingredients);
+    updateRecipeDetailHeader(recipe);
+    dom.recipeDetailContent.innerHTML = recipeDetailContentHTML(recipe, analysis);
+    bindRecipeDetailActions(recipe);
+    if (isPublicCommunityRecipe(recipe) && recipe.authorId) {
+      hydrateAuthorProfiles([recipe]).then(() => {
+        if (state.view !== 'recipe-detail' || state.detailRecipeId !== recipe.id) return;
+        const wrap = dom.recipeDetailContent?.querySelector('.recipe-detail__author-wrap');
+        if (wrap) wrap.innerHTML = recipeAuthorRowHTML(recipe);
+      });
+    }
+  } catch (err) {
+    console.error('[RecipeDetail] load failed', err);
+    renderRecipeDetailUnavailable('레시피를 불러오지 못했습니다');
+  }
+}
+
+function leaveRecipeDetail() {
+  if (history.state?.recipeDetail && history.length > 1) {
+    history.back();
+    return;
+  }
+  history.replaceState({ appView: 'main', scrollY: 0 }, '', '/');
+  state.detailRecipeId = null;
+  switchView('main');
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+}
+
+async function shareRecipeDetail() {
+  const recipe = RecipeRepository.getById(state.detailRecipeId);
+  const url = new URL(getRecipeDetailPath(state.detailRecipeId), window.location.origin).href;
+  const shareData = { title: recipe?.name || '냉장GO 레시피', text: recipe?.name || '냉장GO 레시피', url };
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      return;
+    }
+    await navigator.clipboard?.writeText(url);
+    showToast('레시피 링크를 복사했어요');
+  } catch (err) {
+    if (err?.name !== 'AbortError') showToast('링크를 복사하지 못했습니다');
+  }
+}
+
+function syncRecipeDetailRouteFromLocation({ restoreScroll = false } = {}) {
+  const recipeId = getRecipeIdFromPath();
+  if (recipeId) {
+    state.detailRecipeId = recipeId;
+    switchView('recipe-detail');
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    return;
+  }
+  const historyView = history.state?.appView;
+  state.detailRecipeId = null;
+  switchView(historyView && dom.views[historyView] ? historyView : 'main');
+  if (restoreScroll) {
+    requestAnimationFrame(() => window.scrollTo({ top: Number(history.state?.scrollY) || 0, left: 0, behavior: 'auto' }));
+  }
+}
+
+function initRecipeDetailRouting() {
+  window.addEventListener('popstate', () => syncRecipeDetailRouteFromLocation({ restoreScroll: true }));
+  dom.recipeDetailBack?.addEventListener('click', leaveRecipeDetail);
+  dom.recipeDetailShare?.addEventListener('click', shareRecipeDetail);
+  dom.recipeDetailSaveIcon?.addEventListener('click', toggleRecipeDetailSave);
 }
 
 function updateVideoFlowStep(step) {
@@ -9763,8 +9884,7 @@ async function handleQuickAdd(e) {
 
 // ===== Modals =====
 function updateBodyScrollLock() {
-  const anyOpen = !dom.recipeModal.hidden
-    || !dom.recipeFormModal.hidden
+  const anyOpen = !dom.recipeFormModal.hidden
     || !dom.pantryModal.hidden
     || !dom.mealModal.hidden
     || !dom.shoppingModal.hidden
@@ -9788,7 +9908,6 @@ function openModal(type) {
     closeCalendarDaySheet({ immediate: true });
   }
   const m = {
-    recipe: dom.recipeModal,
     form: dom.recipeFormModal,
     pantry: dom.pantryModal,
     meal: dom.mealModal,
@@ -9801,7 +9920,6 @@ function openModal(type) {
 }
 function closeModal(type) {
   const m = {
-    recipe: dom.recipeModal,
     form: dom.recipeFormModal,
     pantry: dom.pantryModal,
     meal: dom.mealModal,
@@ -9821,7 +9939,7 @@ function closeModal(type) {
   window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 function closeAllModals() {
-  ['recipe', 'form', 'pantry', 'meal', 'shopping', 'grocery-item'].forEach(closeModal);
+  ['form', 'pantry', 'meal', 'shopping', 'grocery-item'].forEach(closeModal);
   closePlannerSheets();
   closeMyRecipesSortSheet();
   closeCalendarDaySheet({ immediate: true });
@@ -9930,6 +10048,7 @@ function init() {
   initCalendarDaySheetGestures();
   initHomeSearchDock();
   initMyRecipesSortUi();
+  initRecipeDetailRouting();
   window.addEventListener('resize', scheduleFitMobileHomeCardMissingStatuses);
   window.addEventListener('resize', schedulePantryChipsRelayout);
 
@@ -10107,7 +10226,12 @@ function init() {
     el.onclick = closeImageLightbox;
   });
 
-  navigate('main');
+  if (getRecipeIdFromPath()) {
+    syncRecipeDetailRouteFromLocation();
+  } else {
+    history.replaceState({ appView: 'main', scrollY: 0 }, '', window.location.href);
+    navigate('main');
+  }
 }
 
 function startApp() {

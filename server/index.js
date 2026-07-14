@@ -49,6 +49,11 @@ app.use(express.static(ROOT, {
   },
 }));
 
+// 공유된 SPA 레시피 상세 URL도 앱 진입점으로 제공한다.
+app.get('/recipes/:recipeId', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'index.html'));
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   const openAiInfo = describeOpenAiKeyConfig();
   const firebaseStatus = getFirebaseAdminStatus();

@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="냉장GO">
+  <base href="/">
   <title>냉장GO - 재료로 찾는 레시피</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -17,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=169">
+  <link rel="stylesheet" href="style.css?v=172">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -494,13 +495,25 @@
       </div>
     </div>
 
-    <!-- 레시피 상세 -->
-    <div id="recipe-modal" class="modal" hidden aria-hidden="true">
-      <div class="modal__backdrop" data-close-modal="recipe"></div>
-      <div class="modal__panel" role="dialog" aria-modal="true">
-        <button type="button" class="modal__close" data-close-modal="recipe">&times;</button>
-        <div id="modal-content"></div>
-      </div>
+    <!-- 레시피 상세 페이지 -->
+    <div id="view-recipe-detail" class="view recipe-detail-page" hidden>
+      <header class="recipe-detail-page__header">
+        <div class="recipe-detail-page__header-inner">
+          <button type="button" id="recipe-detail-back" class="recipe-detail-page__icon-btn" aria-label="뒤로가기">
+            <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+          </button>
+          <h2 id="recipe-detail-page-title" class="recipe-detail-page__title">레시피 상세</h2>
+          <div class="recipe-detail-page__header-actions">
+            <button type="button" id="recipe-detail-save-icon" class="recipe-detail-page__icon-btn recipe-detail-page__icon-btn--bookmark" data-auth-required aria-label="레시피 저장">
+              <svg class="recipe-card-home__bookmark-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 3.75h8a1 1 0 011 1V16l-5-2.75L5 16V4.75a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" id="recipe-detail-share" class="recipe-detail-page__icon-btn" aria-label="공유하기">
+              <span class="material-symbols-outlined" aria-hidden="true">share</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <main id="recipe-detail-content" class="recipe-detail-page__content" aria-live="polite"></main>
     </div>
 
     <!-- 레시피 등록/수정 -->
@@ -1031,6 +1044,6 @@
   <script src="js/ingredient-emoji.js?v=1"></script>
   <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=190" defer></script>
+  <script src="script.js?v=192" defer></script>
 </body>
 </html>
