@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=162">
+  <link rel="stylesheet" href="style.css?v=169">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -58,11 +58,6 @@
     <main class="main">
       <!-- 홈: 재료 입력 + 추천 -->
       <div id="view-main" class="view">
-        <section class="home-intro" aria-label="홈 안내">
-          <h2 class="home-intro__title">냉장고에 뭐가 있나요?</h2>
-          <p class="home-intro__desc">재료를 입력하면 만들 수 있는 레시피를 추천해드려요 🧡</p>
-        </section>
-
         <section class="section home-input-section">
           <form id="quick-ingredient-form" class="home-ingredient-card">
             <span class="home-ingredient-card__icon" aria-hidden="true">+</span>
@@ -72,35 +67,74 @@
           </form>
         </section>
 
-        <div id="home-today-hero" class="home-today-hero-wrap" hidden></div>
+        <section class="section home-pantry-section">
+          <div class="section__header home-section-header">
+            <h2 class="section__title home-section-title">
+              보유 재료<span id="pantry-chips-count" class="pantry-chips-count" hidden></span>
+            </h2>
+            <button type="button" id="open-pantry-manage-btn" class="home-see-all">재료 관리 &gt;</button>
+          </div>
+          <div class="home-pantry-chips-panel">
+            <div id="pantry-chips-clip" class="home-pantry-chips-clip">
+              <div id="pantry-chips" class="tags home-tags home-tags--rail" role="list"></div>
+            </div>
+          </div>
+        </section>
 
         <section id="home-briefing" class="section home-briefing" aria-labelledby="home-briefing-title">
-          <div class="section__header">
-            <h2 id="home-briefing-title" class="section__title">오늘의 냉장고 브리핑</h2>
+          <div class="section__header home-section-header">
+            <h2 id="home-briefing-title" class="section__title home-section-title">냉장고 브리핑</h2>
           </div>
           <div id="home-briefing-grid" class="home-briefing__grid" role="list"></div>
         </section>
 
-        <section class="section home-pantry-section">
-          <div class="section__header">
-            <h2 class="section__title">보유 재료<span id="pantry-chips-count" class="pantry-chips-count" hidden></span></h2>
-            <button type="button" id="open-pantry-manage-btn" class="btn btn--ghost btn--sm">재료 관리</button>
+        <section id="home-recommend" class="section home-recommend" aria-labelledby="home-recommend-title">
+          <div class="section__header home-section-header">
+            <h2 id="home-recommend-title" class="section__title home-section-title">추천 레시피</h2>
+            <button type="button" id="home-recommend-see-all" class="home-see-all">전체보기 &gt;</button>
           </div>
-          <div class="home-pantry-chips-panel">
-            <div id="pantry-chips-clip" class="home-pantry-chips-clip">
-              <div id="pantry-chips" class="tags home-tags" role="list"></div>
-            </div>
+          <div id="home-recommend-list" class="home-recommend-rail" role="list"></div>
+          <div id="home-recommend-empty" class="home-recommend-empty" hidden>
+            <p class="home-recommend-empty__text">재료를 추가하면 추천 레시피가 쌓여요</p>
           </div>
         </section>
 
-        <section class="section section--home-recipes home-main-content">
-          <div class="section__header section__header--home-recipes">
-            <div class="section__header-row">
-              <h2 class="section__title">레시피 탐색</h2>
-              <button type="button" id="home-recipes-see-all" class="home-see-all">전체 보기 &gt;</button>
-            </div>
-            <p id="home-recipes-subtitle" class="home-recipes-subtitle" hidden></p>
+        <div id="home-today-hero" class="home-today-hero-wrap" hidden></div>
+
+        <section class="section section--home-recipes home-main-content home-explore">
+          <div class="section__header home-section-header">
+            <h2 class="section__title home-section-title">레시피 탐색</h2>
           </div>
+          <p id="home-recipes-subtitle" class="home-recipes-subtitle" hidden></p>
+
+          <section class="home-search-dock home-search-dock--inline" aria-label="레시피 검색">
+            <div id="home-search-float" class="home-search-float">
+              <div class="home-search-bar">
+                <span class="home-search-bar__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"/>
+                    <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                  </svg>
+                </span>
+                <input type="search" id="menu-search-input" class="home-search-bar__input"
+                  placeholder="레시피 검색 (예: 계란볶음, 김치찌개)" autocomplete="off" aria-label="레시피 검색" enterkeyhint="search">
+                <button type="button" id="home-filter-btn" class="home-filter-btn" aria-label="필터 열기" aria-expanded="false" aria-controls="home-filter-panel">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                  <span class="home-filter-btn__label visually-hidden">필터</span>
+                </button>
+              </div>
+              <div id="home-search-expand-area" class="home-search-float__expand" aria-hidden="true">
+                <div class="home-search-float__expand-inner">
+                  <div id="home-filter-panel" class="home-filter-panel" hidden>
+                    <div id="home-filter-chips" class="filter-chips home-explore-chips"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <span id="results-count" class="results-count visually-hidden" aria-hidden="true"></span>
           <div id="recipe-list" class="recipe-list"></div>
           <div id="empty-state" class="empty-state empty-state--home" hidden>
@@ -112,34 +146,6 @@
             <span class="empty-state__icon">🔍</span>
             <p class="empty-state__title">일치하는 레시피가 없어요</p>
             <p class="empty-state__text">다른 재료를 추가하거나 검색어를 변경해 보세요</p>
-          </div>
-        </section>
-
-        <section class="home-search-dock" aria-label="먹고 싶은 메뉴 검색">
-          <h2 class="visually-hidden">먹고 싶은 메뉴 검색</h2>
-          <div id="home-search-float" class="home-search-float">
-            <div class="home-search-bar">
-              <span class="home-search-bar__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.75"/>
-                  <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
-                </svg>
-              </span>
-              <input type="search" id="menu-search-input" class="home-search-bar__input"
-                placeholder="오늘 뭐 먹지?" autocomplete="off" aria-label="메뉴 검색" enterkeyhint="search">
-              <button type="button" id="home-filter-btn" class="home-filter-btn" aria-label="필터" aria-expanded="false" aria-controls="home-filter-panel">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                </svg>
-              </button>
-            </div>
-            <div id="home-search-expand-area" class="home-search-float__expand" aria-hidden="true">
-              <div class="home-search-float__expand-inner">
-                <div id="home-filter-panel" class="home-filter-panel" hidden>
-                  <div id="home-filter-chips" class="filter-chips"></div>
-                </div>
-              </div>
-            </div>
           </div>
         </section>
       </div>
@@ -1025,6 +1031,6 @@
   <script src="js/ingredient-emoji.js?v=1"></script>
   <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=186" defer></script>
+  <script src="script.js?v=190" defer></script>
 </body>
 </html>

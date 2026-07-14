@@ -66,6 +66,21 @@ const FILTERS = [
   { id: 'quick', label: '⏱️ 15분 이하' },
 ];
 
+/** 홈 레시피 탐색에 항상 노출하는 필터 칩 (기존 FILTERS id 재사용) */
+const HOME_EXPLORE_FILTERS = [
+  { id: 'recommend', label: '추천' },
+  { id: 'available', label: '바로 가능' },
+  { id: 'one-missing', label: '1개만 더 필요' },
+  { id: 'saved', label: '찜한 레시피' },
+];
+
+const HOME_BRIEFING_ICONS = {
+  due: `<svg class="home-briefing__svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4v2M17 4v2M5 8h14v11a2 2 0 01-2 2H7a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+  ready: `<svg class="home-briefing__svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 10V7a4 4 0 118 0v3M6 10h12l-1 9a2 2 0 01-2 1.5H9A2 2 0 017 19l-1-9z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  missing: `<svg class="home-briefing__svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 5h2l1.4 8.4A2 2 0 008.4 15h8.3a2 2 0 001.96-1.6L20 7H6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="19" r="1.25" fill="currentColor"/><circle cx="17" cy="19" r="1.25" fill="currentColor"/></svg>`,
+  budget: `<svg class="home-briefing__svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 016.5 6h11A2.5 2.5 0 0120 8.5v7A2.5 2.5 0 0117.5 18h-11A2.5 2.5 0 014 15.5v-7z" stroke="currentColor" stroke-width="1.7"/><path d="M4 10h16M16 14h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
+};
+
 function pantryItemEmoji(name) {
   if (typeof IngredientEmojiUtil !== 'undefined') {
     return IngredientEmojiUtil.getIngredientEmoji(name);
@@ -3911,7 +3926,7 @@ const HomeBriefingService = {
 
 // ===== State & DOM =====
 const state = {
-  view: 'main', filters: new Set(), menuSearch: '',
+  view: 'main', filters: new Set(), menuSearch: '', homeSavedOnly: false,
   editingRecipeId: null, editingPantryId: null,
   editingMealId: null, editingShoppingId: null, formImage: null, mealFormImage: null, isComposing: false, detailRecipeId: null,
   calendarYear: new Date().getFullYear(), calendarMonth: new Date().getMonth(),
@@ -3994,6 +4009,10 @@ const dom = {
   homeBriefing: $('#home-briefing'),
   homeBriefingGrid: $('#home-briefing-grid'),
   homeRecipesSeeAll: $('#home-recipes-see-all'),
+  homeRecommendList: $('#home-recommend-list'),
+  homeRecommendEmpty: $('#home-recommend-empty'),
+  homeRecommendSeeAll: $('#home-recommend-see-all'),
+  quickIngredientScanBtn: $('#quick-ingredient-scan-btn'),
   homeFilterBtn: $('#home-filter-btn'),
   homeFilterPanel: $('#home-filter-panel'),
   homeFilterChips: $('#home-filter-chips'),
@@ -4592,8 +4611,13 @@ function switchView(view) {
     setHomeSearchKeyboardActive(false);
   }
   if (dom.headerSubtitle) {
-    dom.headerSubtitle.hidden = false;
-    dom.headerSubtitle.textContent = VIEW_TITLES[view] || VIEW_TITLES.main;
+    if (view === 'main') {
+      dom.headerSubtitle.hidden = true;
+      dom.headerSubtitle.textContent = '';
+    } else {
+      dom.headerSubtitle.hidden = false;
+      dom.headerSubtitle.textContent = VIEW_TITLES[view] || VIEW_TITLES.main;
+    }
   }
   renderCurrentView();
 }
@@ -4646,7 +4670,7 @@ function pantryChipBadge(item) {
   return `<span class="tag__expiry-badge">${esc(label)}</span>`;
 }
 
-const HOME_PANTRY_PREVIEW_COUNT = 4;
+const HOME_PANTRY_PREVIEW_COUNT = 5;
 let pantryChipsExpanded = Boolean(StorageAdapter.get(CONFIG.STORAGE.HOME_PANTRY_EXPANDED, false));
 let pantryChipsRelayoutTimer = null;
 let pantryMeasureHost = null;
@@ -4664,12 +4688,27 @@ function pantryChipHTML(item) {
     </span>`;
 }
 
+/** 홈 보유 재료 칩 — 삭제/배지 없이 아이콘+이름만 */
+function pantryChipHomeHTML(item) {
+  return `
+    <span class="tag tag--home-rail" role="listitem">
+      <span class="tag__emoji" aria-hidden="true">${pantryItemEmoji(item.name)}</span>
+      <span class="tag__name">${esc(item.name)}</span>
+    </span>`;
+}
+
 function pantryOverflowButtonHTML(overflow, expanded) {
   const caret = expanded ? '▲' : '▼';
   const aria = expanded ? '보유 재료 접기' : `외 ${overflow}개 재료 펼치기`;
   return `<button type="button" class="tag tag--overflow" data-pantry-expand aria-expanded="${expanded ? 'true' : 'false'}" aria-label="${aria}">
       <span class="tag__overflow-count">+${overflow}</span>
       <span class="tag__overflow-caret" aria-hidden="true">${caret}</span>
+    </button>`;
+}
+
+function pantryHomeMoreChipHTML(overflow) {
+  return `<button type="button" class="tag tag--overflow tag--home-more" data-pantry-home-more aria-label="외 ${overflow}개 재료 더보기">
+      <span class="tag__overflow-count">+${overflow} 더보기</span>
     </button>`;
 }
 
@@ -4821,21 +4860,11 @@ function schedulePantryChipsRelayout() {
 }
 
 function updateHomeRecipesSubtitle() {
+  // 홈 화면에서는 안내 문구를 표시하지 않음 (계산 로직 countMakeableNow 등은 다른 곳에서 유지)
   const el = dom.homeRecipesSubtitle;
   if (!el) return;
-  const names = RecommendationService.getPantryNames();
-  if (!names.length) {
-    el.hidden = true;
-    el.textContent = '';
-    return;
-  }
-  const count = RecommendationService.countMakeableNow(RecipeRepository.getHomeRecipes());
-  if (count > 0) {
-    el.textContent = `🥕 현재 재료로 바로 만들 수 있는 레시피 ${count}개`;
-  } else {
-    el.textContent = '🥕 현재 재료로 만들 수 있는 레시피가 없습니다. 부족한 재료를 추가해보세요.';
-  }
-  el.hidden = false;
+  el.hidden = true;
+  el.textContent = '';
 }
 
 function runPantryChipsHeightTransition(clip, fromHeight, toHeight, onComplete) {
@@ -4868,66 +4897,30 @@ function renderPantryChips({ animate = false } = {}) {
   const items = getPantryItemsForUi();
   const count = items.length;
   if (dom.pantryChipsCount) {
-    dom.pantryChipsCount.textContent = count > 0 ? `${count}개` : '';
+    dom.pantryChipsCount.textContent = count > 0 ? ` ${count}개` : '';
     dom.pantryChipsCount.hidden = count === 0;
   }
-  const clip = dom.pantryChipsClip;
   const chips = dom.pantryChips;
   if (!chips) return;
 
+  dom.homePantrySection?.classList.remove('is-expanded');
   if (!count) {
-    dom.homePantrySection?.classList.remove('is-expanded');
     chips.innerHTML = '<p class="hint hint--inline">재료를 추가하면 맞춤 레시피를 추천해 드려요.</p>';
     return;
   }
 
-  const plan = getPantryCollapsedPlan(items);
-  const needsCollapse = plan.needsToggle;
-  const effectivelyExpanded = pantryChipsExpanded && needsCollapse;
-  dom.homePantrySection?.classList.toggle('is-expanded', effectivelyExpanded);
-
-  const collapsedHTML = buildPantryChipsHTML(items, {
-    expanded: false,
-    visibleCount: plan.visibleCount,
-    overflow: plan.overflow,
-    needsToggle: needsCollapse,
+  const preview = Math.min(HOME_PANTRY_PREVIEW_COUNT, count);
+  const overflow = Math.max(0, count - preview);
+  const visible = items.slice(0, preview);
+  let html = visible.map(pantryChipHomeHTML).join('');
+  if (overflow > 0) html += pantryHomeMoreChipHTML(overflow);
+  chips.innerHTML = html;
+  chips.querySelector('[data-pantry-home-more]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigate('pantry');
   });
-  const expandedHTML = buildPantryChipsHTML(items, {
-    expanded: true,
-    visibleCount: plan.visibleCount,
-    overflow: plan.overflow,
-    needsToggle: needsCollapse,
-  });
-
-  if (!needsCollapse) {
-    chips.innerHTML = expandedHTML;
-    bindPantryChipsHandlers();
-    return;
-  }
-
-  if (animate && clip) {
-    const startHeight = clip.offsetHeight;
-    if (effectivelyExpanded) {
-      chips.innerHTML = expandedHTML;
-      bindPantryChipsHandlers();
-      const endHeight = chips.scrollHeight;
-      runPantryChipsHeightTransition(clip, startHeight, endHeight);
-    } else {
-      chips.innerHTML = collapsedHTML;
-      const endHeight = chips.scrollHeight;
-      chips.innerHTML = expandedHTML;
-      bindPantryChipsHandlers();
-      runPantryChipsHeightTransition(clip, startHeight, endHeight, () => {
-        chips.innerHTML = collapsedHTML;
-        bindPantryChipsHandlers();
-      });
-    }
-    return;
-  }
-
-  chips.innerHTML = effectivelyExpanded ? expandedHTML : collapsedHTML;
-  bindPantryChipsHandlers();
 }
+
 
 function canForkRecipe(recipe) {
   return Boolean(recipe);
@@ -5514,6 +5507,7 @@ function scrollToHomeRecipes() {
 
 function applyHomeBriefingFilter(filterId) {
   state.filters.clear();
+  state.homeSavedOnly = false;
   if (filterId) state.filters.add(filterId);
   state.menuSearch = '';
   if (dom.menuSearchInput) dom.menuSearchInput.value = '';
@@ -5552,8 +5546,8 @@ function getBriefingOneMissingHighlight() {
   return { total, ingredientName: name };
 }
 
-function formatBriefingBudget(remaining) {
-  const amount = Math.abs(Number(remaining) || 0);
+function formatBriefingBudget(amount) {
+  const value = Math.abs(Number(amount) || 0);
   const code = state.currency || DEFAULT_CURRENCY;
   const currency = CURRENCY_OPTIONS[code] || CURRENCY_OPTIONS[DEFAULT_CURRENCY];
   const unitWord = {
@@ -5564,11 +5558,30 @@ function formatBriefingBudget(remaining) {
     GBP: '파운드',
     JPY: '엔',
   }[code] || '';
-  const formatted = amount.toLocaleString(undefined, {
+  const formatted = value.toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: currency.fractionDigits,
   });
   return { formatted, unitWord };
+}
+
+/** UI 전용 — 임박 재료 이름 최대 2개 (HomeBriefingService 계산과 독립) */
+function getBriefingDueIngredientNames(limit = 2) {
+  return getPantryItemsForUi()
+    .filter((item) => {
+      const days = ExpiryService.daysUntil(item.expiryDate);
+      return days !== null && days <= CONFIG.EXPIRY_SOON_DAYS;
+    })
+    .map((item) => item.name)
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function homeBriefingBudgetProgressHTML(used, budget) {
+  const b = Math.max(0, Number(budget) || 0);
+  const u = Math.max(0, Number(used) || 0);
+  const pct = b > 0 ? Math.min(100, Math.round((u / b) * 100)) : 0;
+  return `<span class="home-briefing__progress" aria-hidden="true"><span class="home-briefing__progress-bar" style="width:${pct}%"></span></span>`;
 }
 
 function homeBriefingCardHTML({
@@ -5582,16 +5595,19 @@ function homeBriefingCardHTML({
   empty,
   emptyText,
   over = false,
+  accentNum = false,
+  progressHtml = '',
 }) {
   const emptyClass = empty ? ' home-briefing__card--empty' : '';
   const toneClass = tone ? ` home-briefing__card--${tone}` : '';
   const metricHtml = empty
     ? `<span class="home-briefing__empty-text">${esc(emptyText)}</span>`
     : `<span class="home-briefing__metric">
-        <span class="home-briefing__value-num${over ? ' home-briefing__value-num--over' : ''}">${esc(String(num))}</span>
+        <span class="home-briefing__value-num${over ? ' home-briefing__value-num--over' : ''}${accentNum ? ' home-briefing__value-num--accent' : ''}">${esc(String(num))}</span>
         ${unit ? `<span class="home-briefing__unit">${esc(unit)}</span>` : ''}
       </span>
-      ${desc ? `<span class="home-briefing__desc">${esc(desc)}</span>` : ''}`;
+      ${desc ? `<span class="home-briefing__desc">${esc(desc)}</span>` : ''}
+      ${progressHtml || ''}`;
 
   return `
     <button type="button" class="home-briefing__card${toneClass}${emptyClass}" data-briefing-action="${esc(action)}" role="listitem">
@@ -5620,8 +5636,8 @@ function renderHomeBriefing() {
     grid.innerHTML = homeBriefingCardHTML({
       action: 'ready',
       tone: 'ready',
-      icon: '🍳',
-      title: '오늘의 냉장고 브리핑',
+      icon: HOME_BRIEFING_ICONS.ready,
+      title: '냉장고 브리핑',
       empty: true,
       emptyText: '브리핑을 불러오지 못했어요',
     });
@@ -5632,18 +5648,15 @@ function renderHomeBriefing() {
   const readyEmpty = data.readyCount <= 0;
   const oneMissingEmpty = data.oneMissingCount <= 0;
   const budgetEmpty = !data.hasBudget;
-
-  const oneMissingHighlight = oneMissingEmpty ? null : getBriefingOneMissingHighlight();
-  const oneMissingTitle = oneMissingHighlight?.ingredientName
-    ? `${oneMissingHighlight.ingredientName} 하나만 더 있으면`
-    : '재료 1개만 더 있으면';
+  const dueNames = dueEmpty ? [] : getBriefingDueIngredientNames(2);
+  const dueDesc = dueNames.length ? dueNames.join(', ') : '유통기한 임박';
 
   let budgetCard;
   if (budgetEmpty) {
     budgetCard = homeBriefingCardHTML({
       action: 'budget',
       tone: 'budget',
-      icon: '💰',
+      icon: HOME_BRIEFING_ICONS.budget,
       title: '이번 주 식비',
       empty: true,
       emptyText: '예산을 설정해보세요',
@@ -5651,16 +5664,21 @@ function renderHomeBriefing() {
   } else {
     const remaining = Number(data.remaining) || 0;
     const over = remaining < 0;
-    const { formatted, unitWord } = formatBriefingBudget(remaining);
+    const usedFmt = formatBriefingBudget(data.used);
+    const remainFmt = formatBriefingBudget(remaining);
+    const remainLabel = over
+      ? `${remainFmt.formatted}${remainFmt.unitWord} 초과`
+      : `남은 예산 ${remainFmt.formatted}${remainFmt.unitWord}`;
     budgetCard = homeBriefingCardHTML({
       action: 'budget',
       tone: 'budget',
-      icon: '💰',
+      icon: HOME_BRIEFING_ICONS.budget,
       title: '이번 주 식비',
-      num: formatted,
-      unit: unitWord,
-      desc: over ? '초과했어요' : '남음',
+      num: usedFmt.formatted,
+      unit: usedFmt.unitWord,
+      desc: remainLabel,
       over,
+      progressHtml: homeBriefingBudgetProgressHTML(data.used, data.budget),
     });
   }
 
@@ -5668,18 +5686,19 @@ function renderHomeBriefing() {
     homeBriefingCardHTML({
       action: 'due',
       tone: 'due',
-      icon: '🥕',
+      icon: HOME_BRIEFING_ICONS.due,
       title: '오늘 먹어야 하는 재료',
       num: data.dueCount,
       unit: '개',
-      desc: '유통기한 임박',
+      desc: dueDesc,
       empty: dueEmpty,
-      emptyText: '🎉 버릴 재료가 없어요',
+      emptyText: '버릴 재료가 없어요',
+      accentNum: true,
     }),
     homeBriefingCardHTML({
       action: 'ready',
       tone: 'ready',
-      icon: '🍳',
+      icon: HOME_BRIEFING_ICONS.ready,
       title: '지금 바로 만들 수 있어요',
       num: data.readyCount,
       unit: '개',
@@ -5690,8 +5709,8 @@ function renderHomeBriefing() {
     homeBriefingCardHTML({
       action: 'one-missing',
       tone: 'missing',
-      icon: '🛒',
-      title: oneMissingTitle,
+      icon: HOME_BRIEFING_ICONS.missing,
+      title: '재료 1개만 더 있으면',
       num: data.oneMissingCount,
       unit: '개',
       desc: '레시피 가능',
@@ -5725,6 +5744,7 @@ function renderHomeBriefing() {
     };
   });
 }
+
 
 function bindHomeNaengtul(container, results) {
   container.querySelector('[data-scroll-home-recipes]')?.addEventListener('click', scrollToHomeRecipes);
@@ -5766,30 +5786,73 @@ function bindHomeNaengtul(container, results) {
   });
 }
 
+function getActiveHomeExploreChip() {
+  if (state.homeSavedOnly) return 'saved';
+  if (state.filters.size === 0) return 'recommend';
+  if (state.filters.size === 1 && state.filters.has('available')) return 'available';
+  if (state.filters.size === 1 && state.filters.has('one-missing')) return 'one-missing';
+  return '';
+}
+
+function applyHomeExploreChip(chipId) {
+  state.homeSavedOnly = false;
+  state.filters.clear();
+  if (chipId === 'saved') {
+    state.homeSavedOnly = true;
+  } else if (chipId === 'available' || chipId === 'one-missing') {
+    state.filters.add(chipId);
+  }
+}
+
 function renderHomeFilters() {
   if (!dom.homeFilterChips) return;
-  dom.homeFilterChips.innerHTML = FILTERS.map((f) => `
-    <button type="button" class="filter-chip${state.filters.has(f.id) ? ' filter-chip--active' : ''}" data-home-f="${f.id}">${f.label}</button>
+  const activeExplore = getActiveHomeExploreChip();
+  const showExtra = Boolean(dom.homeFilterPanel && !dom.homeFilterPanel.hidden && dom.homeFilterPanel.dataset.extra === '1');
+  const exploreHtml = HOME_EXPLORE_FILTERS.map((f) => `
+    <button type="button" class="filter-chip${activeExplore === f.id ? ' filter-chip--active' : ''}" data-home-explore="${f.id}">${f.label}</button>
   `).join('');
+  const extraHtml = showExtra
+    ? FILTERS.filter((f) => !['available', 'one-missing'].includes(f.id)).map((f) => `
+    <button type="button" class="filter-chip${state.filters.has(f.id) ? ' filter-chip--active' : ''}" data-home-f="${f.id}">${f.label}</button>
+  `).join('')
+    : '';
+  dom.homeFilterChips.innerHTML = exploreHtml + extraHtml;
+
+  dom.homeFilterChips.querySelectorAll('[data-home-explore]').forEach((chip) => {
+    chip.onclick = () => {
+      applyHomeExploreChip(chip.dataset.homeExplore);
+      renderHomeFilters();
+      renderHome();
+    };
+  });
   dom.homeFilterChips.querySelectorAll('[data-home-f]').forEach((chip) => {
     chip.onclick = () => {
+      state.homeSavedOnly = false;
       if (state.filters.has(chip.dataset.homeF)) state.filters.delete(chip.dataset.homeF);
       else state.filters.add(chip.dataset.homeF);
       renderHomeFilters();
       renderHome();
-      if (state.filters.size > 0) {
-        expandHomeSearchDock();
-        toggleHomeFilterPanel(true);
-      } else if (!dom.menuSearchInput?.value.trim()) {
-        toggleHomeFilterPanel(false);
-        maybeCollapseHomeSearchDock();
-      }
     };
   });
 }
 
+function isHomeSearchInline() {
+  return Boolean(dom.homeSearchDock?.classList.contains('home-search-dock--inline'));
+}
+
 function toggleHomeFilterPanel(force) {
   if (!dom.homeFilterPanel || !dom.homeFilterBtn) return;
+  if (isHomeSearchInline()) {
+    const open = typeof force === 'boolean' ? force : dom.homeFilterPanel.hidden;
+    dom.homeFilterPanel.hidden = !open;
+    dom.homeFilterPanel.dataset.extra = open ? '1' : '0';
+    dom.homeSearchFloat?.classList.toggle('home-search-float--show-filters', open);
+    document.body.classList.remove('home-search-filter-open', 'home-search-expanded');
+    dom.homeFilterBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (dom.homeSearchExpandArea) dom.homeSearchExpandArea.setAttribute('aria-hidden', open ? 'false' : 'true');
+    renderHomeFilters();
+    return;
+  }
   const open = typeof force === 'boolean' ? force : dom.homeFilterPanel.hidden;
   if (open) expandHomeSearchDock();
   dom.homeFilterPanel.hidden = !open;
@@ -5832,6 +5895,7 @@ function syncHomeSearchKeyboardPosition() {
 }
 
 function setHomeSearchKeyboardActive(active) {
+  if (isHomeSearchInline()) active = false;
   if (!shouldUseHomeSearchKeyboardMode()) active = false;
   if (active) {
     homeSearchKeyboardActive = true;
@@ -5859,6 +5923,10 @@ function endHomeSearchKeyboardMode() {
 }
 
 function expandHomeSearchDock() {
+  if (isHomeSearchInline()) {
+    dom.homeSearchFloat?.classList.add('home-search-float--expanded', 'home-search-float--show-filters');
+    return;
+  }
   if (homeSearchDockExpanded) return;
   homeSearchDockExpanded = true;
   dom.homeSearchFloat?.classList.add('home-search-float--expanded');
@@ -5867,6 +5935,11 @@ function expandHomeSearchDock() {
 }
 
 function collapseHomeSearchDock() {
+  if (isHomeSearchInline()) {
+    dom.homeSearchFloat?.classList.add('home-search-float--expanded', 'home-search-float--show-filters');
+    document.body.classList.remove('home-search-expanded', 'home-search-filter-open');
+    return;
+  }
   if (!homeSearchDockExpanded) return;
   homeSearchDockExpanded = false;
   dom.homeSearchFloat?.classList.remove('home-search-float--expanded', 'home-search-float--show-filters');
@@ -5950,12 +6023,36 @@ function initHomeSearchDock() {
   });
 }
 
+function renderHomeRecommendRail(homeRecipes) {
+  const list = dom.homeRecommendList;
+  const empty = dom.homeRecommendEmpty;
+  if (!list) return;
+  const names = RecommendationService.getPantryNames();
+  if (!names.length) {
+    list.innerHTML = '';
+    if (empty) empty.hidden = false;
+    return;
+  }
+  const railResults = RecommendationService.recommendHome(homeRecipes, {
+    activeFilters: new Set(),
+    query: '',
+  }).slice(0, 4);
+  if (!railResults.length) {
+    list.innerHTML = '';
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+  list.innerHTML = railResults.map((r) => homeRecipeCardHTML(r)).join('');
+  bindRecipeCards(list, railResults);
+}
+
 function renderHome() {
   renderHomeFilters();
   renderHomeBriefing();
   const names = RecommendationService.getPantryNames();
   const query = state.menuSearch.trim();
-  const hasSearchMode = Boolean(query || state.filters.size);
+  const hasSearchMode = Boolean(query || state.filters.size || state.homeSavedOnly);
   const homeRecipes = RecipeRepository.getHomeRecipes();
 
   dom.emptyState.hidden = names.length > 0 || hasSearchMode || homeRecipes.length > 0;
@@ -5966,16 +6063,14 @@ function renderHome() {
     dom.homeTodayHero.innerHTML = '';
   }
 
-  const results = RecommendationService.recommendHome(homeRecipes, { activeFilters: state.filters, query });
+  renderHomeRecommendRail(homeRecipes);
+
+  let results = RecommendationService.recommendHome(homeRecipes, { activeFilters: state.filters, query });
+  if (state.homeSavedOnly) {
+    results = results.filter((r) => SavedRecipeRepository.isSaved(r.recipe.id));
+  }
   dom.noResults.hidden = results.length > 0;
   dom.resultsCount.textContent = results.length ? `${results.length}개` : '';
-
-  if (names.length && dom.homeTodayHero) {
-    const naengtulResults = RecommendationService.recommendNaengtul(homeRecipes);
-    dom.homeTodayHero.hidden = false;
-    dom.homeTodayHero.innerHTML = homeNaengtulHTML(naengtulResults);
-    bindHomeNaengtul(dom.homeTodayHero, naengtulResults);
-  }
 
   dom.recipeList.innerHTML = results.map((r) => homeRecipeCardHTML(r)).join('');
   bindRecipeCards(dom.recipeList, results);
@@ -9851,9 +9946,14 @@ function init() {
   dom.quickForm.addEventListener('submit', handleQuickAdd);
   dom.quickInput.addEventListener('compositionstart', () => { state.isComposing = true; });
   dom.quickInput.addEventListener('compositionend', () => { state.isComposing = false; });
-  dom.homeRecipesSeeAll?.addEventListener('click', () => {
-    dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  dom.quickIngredientScanBtn?.addEventListener('click', () => {
+    requireAppLogin(() => openPantryModal());
   });
+  const scrollToExplore = () => {
+    dom.recipeList?.closest('.section--home-recipes')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  dom.homeRecipesSeeAll?.addEventListener('click', scrollToExplore);
+  dom.homeRecommendSeeAll?.addEventListener('click', scrollToExplore);
   dom.headerNotifyBtn?.addEventListener('click', () => showToast('알림 기능은 준비 중이에요'));
   dom.openPantryAdd.onclick = () => openPantryModal();
   dom.openRecipeForm.onclick = (e) => {
