@@ -10,7 +10,7 @@ import { isFirebaseAdminConfigured } from './firebase-admin.js';
 function mapDailyLimitError(err) {
   if (err.code === 'DAILY_LIMIT_EXCEEDED') {
     err.code = 'ANALYSIS_LIMIT_EXCEEDED';
-    err.message = '오늘 무료 AI 분석 5회를 모두 사용했습니다.';
+    err.message = '이번 주 무료 AI 분석 5회를 모두 사용했습니다.';
   }
   return err;
 }

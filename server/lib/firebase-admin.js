@@ -67,6 +67,10 @@ export function getFirebaseAdmin() {
     credential: admin.credential.cert(serviceAccount),
   });
   initialized = true;
+  console.log('[firebase-admin] initialized', {
+    projectId: serviceAccount.project_id || null,
+    clientEmail: serviceAccount.client_email || null,
+  });
   return admin;
 }
 
@@ -81,9 +85,15 @@ export async function verifyFirebaseIdToken(idToken) {
     const decoded = await getFirebaseAdmin().auth().verifyIdToken(token);
     return decoded;
   } catch (err) {
-    console.warn('[firebase-admin] verifyIdToken failed:', err?.message || err);
+    const firebaseCode = err?.code || err?.errorInfo?.code || null;
+    console.warn('[firebase-admin] verifyIdToken failed:', {
+      code: firebaseCode,
+      message: err?.message || String(err),
+    });
     const error = new Error('로그인 정보가 유효하지 않습니다. 다시 로그인해 주세요.');
     error.code = 'INVALID_ID_TOKEN';
+    error.firebaseCode = firebaseCode;
+    error.httpStatus = firebaseCode === 'auth/argument-error' ? 400 : 401;
     throw error;
   }
 }

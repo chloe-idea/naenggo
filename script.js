@@ -475,6 +475,8 @@ function dishNamesLikelyMismatch(sourceDish, recipeName) {
   return maxCommon < 2;
 }
 
+const VIDEO_DUPLICATE_TOAST = '이미 등록된 영상입니다.';
+
 function clearVideoExtractResultState() {
   state.videoReviewDraft = null;
   state.videoDishMismatchAcknowledged = false;
@@ -626,6 +628,19 @@ function mapOpenAiStatusUserMessage(apiData, err) {
 
 function mapVideoExtractUserError(err, apiData = null) {
   const code = apiData?.failureReason || apiData?.error || err?.code || '';
+  if (code === 'DUPLICATE_VIDEO_SOURCE') {
+    return { message: VIDEO_DUPLICATE_TOAST, showFallback: false };
+  }
+  if (code === 'AUTH_REQUIRED' || code === 'AUTH_TOKEN_UNAVAILABLE' || code === 'AUTH_NOT_INITIALIZED') {
+    return { message: '로그인이 필요해요.', showFallback: false, requireLogin: true };
+  }
+  if (code === 'INVALID_ID_TOKEN') {
+    const firebaseCode = apiData?.firebaseCode || err?.firebaseCode || null;
+    const message = firebaseCode === 'auth/id-token-expired'
+      ? '로그인 세션이 만료되었어요. 다시 로그인해 주세요.'
+      : '로그인 정보가 유효하지 않습니다. 다시 로그인해 주세요.';
+    return { message, showFallback: false, requireLogin: true };
+  }
   const genericServerMsg = '레시피 추출 중 오류가 발생했습니다';
   const openAiCodes = new Set([
     'MISSING_OPENAI_KEY',
@@ -841,6 +856,14 @@ const VideoRecipeAnalysisService = {
     return { ok: false, error: '영상 링크를 확인할 수 없습니다.' };
   },
 
+  normalizeVideoSource(rawUrl) {
+    return VEP().normalizeVideoSource?.(rawUrl) || null;
+  },
+
+  findDuplicateRecipe(sourceUrl, excludeRecipeId = null) {
+    return findDuplicateVideoRecipe(sourceUrl, excludeRecipeId);
+  },
+
   extractYouTubeVideoId(url) {
     return VEP().extractYouTubeVideoId?.(url) || null;
   },
@@ -911,10 +934,14 @@ const VideoRecipeAnalysisService = {
   normalizeApiRecipe(data, fallbackUrl) {
     const categoryKeys = Object.keys(CATEGORY_MAP);
     const category = categoryKeys.includes(data.category) ? data.category : 'korean';
+    const sourceUrl = data.sourceUrl || fallbackUrl;
+    const videoNorm = this.normalizeVideoSource(sourceUrl);
     return {
-      sourceUrl: data.sourceUrl || fallbackUrl,
+      sourceUrl,
       sourcePlatform: data.sourcePlatform || 'youtube',
       thumbnailUrl: data.thumbnailUrl || null,
+      normalizedVideoId: videoNorm?.normalizedVideoId || null,
+      normalizedSourceUrl: videoNorm?.normalizedSourceUrl || null,
       videoTitle: data.sourceTitle || data.title || '',
       name: String(data.title || '영상 레시피').trim().slice(0, 60),
       ingredients: (data.ingredients || []).map((s) => String(s).trim()).filter(Boolean),
@@ -960,7 +987,7 @@ const VideoRecipeAnalysisService = {
     };
   },
 
-  async callVideoRecipeApi(apiUrl, url, textPayload = {}) {
+  async callVideoRecipeApi(apiUrl, url, textPayload = {}, options = {}) {
     if (!apiUrl) {
       const err = new Error('레시피 추출 API URL이 설정되지 않았습니다.');
       err.code = 'API_NOT_CONFIGURED';
@@ -989,13 +1016,24 @@ const VideoRecipeAnalysisService = {
       captionLength: payload.caption.length,
     });
 
-    const headers = { 'Content-Type': 'application/json' };
-    const idToken = await window.FirebaseServices?.AnalysisQuotaService?.getIdTokenForApi?.();
-    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+    const buildAuthHeaders = async (forceRefresh = false) => {
+      const headers = { 'Content-Type': 'application/json' };
+      if (!isLoggedInAppUser()) return headers;
+      const quotaSvc = window.FirebaseServices?.AnalysisQuotaService;
+      const idToken = await quotaSvc?.getIdTokenForApi?.({ forceRefresh });
+      if (!idToken) {
+        const err = new Error('AUTH_TOKEN_UNAVAILABLE');
+        err.code = 'AUTH_TOKEN_UNAVAILABLE';
+        throw err;
+      }
+      headers.Authorization = `Bearer ${idToken}`;
+      return headers;
+    };
 
     const platform = this.detectVideoPlatform(url);
     const apiUrls = [apiUrl, ...this.getRecipeApiFallbackUrls(platform, apiUrl)];
     let lastNotFoundErr = null;
+    const forceRefresh = Boolean(options.forceRefresh);
 
     for (let i = 0; i < apiUrls.length; i += 1) {
       const currentApiUrl = apiUrls[i];
@@ -1005,12 +1043,24 @@ const VideoRecipeAnalysisService = {
 
       let res;
       try {
+        const headers = await buildAuthHeaders(forceRefresh);
+        console.log('[VideoAuth] request sent', {
+          apiUrl: currentApiUrl,
+          hasAuthorization: Boolean(headers.Authorization),
+        });
         res = await fetch(currentApiUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify(payload),
         });
+        console.log('[VideoAuth] response status', {
+          apiUrl: currentApiUrl,
+          status: res.status,
+        });
       } catch (networkErr) {
+        if (networkErr?.code === 'AUTH_REQUIRED' || networkErr?.code === 'AUTH_TOKEN_UNAVAILABLE') {
+          throw networkErr;
+        }
         logVideoExtractError('callVideoRecipeApi:network', networkErr, { apiUrl: currentApiUrl, url });
         const isLocalDev = APP_CONFIG?.runtime?.isLocalDev;
         const hint = isLocalDev
@@ -1019,6 +1069,11 @@ const VideoRecipeAnalysisService = {
         const err = new Error(`레시피 추출 서버에 연결할 수 없습니다. ${hint}`);
         err.code = 'NETWORK_ERROR';
         throw err;
+      }
+
+      if (res.status === 401 && isLoggedInAppUser() && !forceRefresh) {
+        console.warn('[VideoAuth] 401 — refreshing token and retrying once');
+        return this.callVideoRecipeApi(apiUrl, url, textPayload, { forceRefresh: true });
       }
 
       if (res.status === 404) {
@@ -1048,6 +1103,19 @@ const VideoRecipeAnalysisService = {
           const err = new Error(data.message || '무료 AI 분석 횟수를 모두 사용했습니다.');
           err.code = data.error;
           err.aiUsage = data.aiUsage;
+          throw err;
+        }
+        if (data.error === 'DUPLICATE_VIDEO_SOURCE' || res.status === 409) {
+          const err = new Error(data.message || VIDEO_DUPLICATE_TOAST);
+          err.code = 'DUPLICATE_VIDEO_SOURCE';
+          err.apiResponse = data;
+          throw err;
+        }
+        if (data.error === 'INVALID_ID_TOKEN' || res.status === 401) {
+          const err = new Error(data.message || '로그인 정보가 유효하지 않습니다. 다시 로그인해 주세요.');
+          err.code = 'INVALID_ID_TOKEN';
+          err.apiResponse = data;
+          err.httpStatus = res.status;
           throw err;
         }
         if (data.fallback) {
@@ -1395,7 +1463,11 @@ const AiUsageService = {
   },
 
   getDailyLimit() {
-    return Number(this.getConfig().dailyLimit) || 5;
+    return Number(this.getQuotaService()?.getWeeklyLimit?.() ?? this.getConfig().weeklyLimit ?? this.getConfig().dailyLimit) || 5;
+  },
+
+  getWeeklyLimit() {
+    return this.getDailyLimit();
   },
 
   async fetchUsage() {
@@ -1418,6 +1490,13 @@ const AiUsageService = {
 
   updateDisplay(usage) {
     if (!dom.videoAiUsage) return;
+
+    if (isAuthInitializing()) {
+      dom.videoAiUsage.hidden = false;
+      dom.videoAiUsage.textContent = '로그인 상태 확인 중…';
+      dom.videoAiUsage.classList.remove('video-ai-usage--exhausted');
+      return;
+    }
 
     if (!isLoggedInAppUser()) {
       state.aiUsageRemaining = null;
@@ -1442,11 +1521,15 @@ const AiUsageService = {
     }
 
     if (dom.videoAnalyzeBtn) {
-      dom.videoAnalyzeBtn.disabled = remaining <= 0;
+      dom.videoAnalyzeBtn.disabled = false;
     }
   },
 
   async refreshDisplay() {
+    if (isAuthInitializing()) {
+      this.updateDisplay(null);
+      return;
+    }
     if (!isLoggedInAppUser()) {
       this.updateDisplay(null);
       return;
@@ -1803,6 +1886,8 @@ const RecipeRepository = {
       createdFrom: data.createdFrom || null,
       sourceUrl: data.sourceUrl || null,
       sourcePlatform: data.sourcePlatform || null,
+      normalizedVideoId: data.normalizedVideoId || null,
+      normalizedSourceUrl: data.normalizedSourceUrl || null,
       thumbnailUrl: data.thumbnailUrl || null,
       ingredientSubstitutes: Array.isArray(data.ingredientSubstitutes) ? data.ingredientSubstitutes : [],
       optionalIngredients: Array.isArray(data.optionalIngredients) ? data.optionalIngredients : [],
@@ -1828,6 +1913,8 @@ const RecipeRepository = {
       createdFrom: data.createdFrom !== undefined ? data.createdFrom : this._userRecipes[i].createdFrom,
       sourceUrl: data.sourceUrl !== undefined ? data.sourceUrl : this._userRecipes[i].sourceUrl,
       sourcePlatform: data.sourcePlatform !== undefined ? data.sourcePlatform : this._userRecipes[i].sourcePlatform,
+      normalizedVideoId: data.normalizedVideoId !== undefined ? data.normalizedVideoId : this._userRecipes[i].normalizedVideoId,
+      normalizedSourceUrl: data.normalizedSourceUrl !== undefined ? data.normalizedSourceUrl : this._userRecipes[i].normalizedSourceUrl,
       thumbnailUrl: data.thumbnailUrl !== undefined ? data.thumbnailUrl : this._userRecipes[i].thumbnailUrl,
       ingredientSubstitutes: data.ingredientSubstitutes !== undefined
         ? data.ingredientSubstitutes
@@ -1852,6 +1939,90 @@ const RecipeRepository = {
     return recipe.authorId === CONFIG.LOCAL_USER_ID;
   },
 };
+
+function findDuplicateVideoRecipe(sourceUrl, excludeRecipeId = null) {
+  const norm = VEP().normalizeVideoSource?.(sourceUrl);
+  const normalizedVideoId = norm?.normalizedVideoId || null;
+  if (!normalizedVideoId) {
+    return null;
+  }
+
+  const duplicate = RecipeRepository.getUserRecipes().find((recipe) => {
+    if (excludeRecipeId && (recipe.id === excludeRecipeId || recipe.firestoreId === excludeRecipeId)) {
+      return false;
+    }
+    const existingId = VEP().resolveRecipeNormalizedVideoId?.(recipe);
+    return existingId === normalizedVideoId;
+  }) || null;
+
+  return duplicate;
+}
+
+function checkVideoSourceDuplicate(sourceUrl, excludeRecipeId = null) {
+  try {
+    const duplicate = findDuplicateVideoRecipe(sourceUrl, excludeRecipeId);
+    return {
+      isDuplicate: Boolean(duplicate),
+      duplicate,
+      normalizedVideoId: VEP().normalizeVideoSource?.(sourceUrl)?.normalizedVideoId || null,
+    };
+  } catch (err) {
+    console.error('[VideoDuplicate] check failed — 추출은 계속 진행', err);
+    return { isDuplicate: false, duplicate: null, normalizedVideoId: null, error: err };
+  }
+}
+
+function assertVideoSourceNotDuplicate(sourceUrl, excludeRecipeId = null) {
+  const result = checkVideoSourceDuplicate(sourceUrl, excludeRecipeId);
+  if (!result.isDuplicate) return false;
+  showToast(VIDEO_DUPLICATE_TOAST);
+  return true;
+}
+
+function assertVideoAnalysisQuotaAvailable() {
+  if (!isLoggedInAppUser()) return true;
+  if (state.aiUsageRemaining == null) return true;
+  if (state.aiUsageRemaining > 0) return true;
+  showToast('이번 주 무료 AI 분석 횟수를 모두 사용했어요.');
+  return false;
+}
+
+function reportVideoExtractFailure(err, fallbackMessage = '레시피 추출에 실패했어요. 잠시 후 다시 시도해 주세요.') {
+  const message = err?.message || fallbackMessage;
+  showVideoFormError(message);
+  return message;
+}
+
+function bindVideoExtractClick() {
+  const panel = dom.recipeFormPanelVideo;
+  if (!panel || panel.dataset.videoExtractBound === '1') return;
+  panel.dataset.videoExtractBound = '1';
+  panel.addEventListener('click', (e) => {
+    const analyzeBtn = e.target.closest('#video-analyze-btn');
+    if (analyzeBtn) {
+      e.preventDefault();
+      void runVideoExtractFromClick();
+      return;
+    }
+    const fallbackBtn = e.target.closest('#video-fallback-analyze-btn');
+    if (fallbackBtn) {
+      e.preventDefault();
+      void handleVideoFallbackAnalyze().catch((err) => reportVideoExtractFailure(err));
+    }
+  });
+}
+
+async function runVideoExtractFromClick() {
+  if (state.videoExtractInFlight) {
+    showToast('레시피 분석이 진행 중이에요…');
+    return;
+  }
+  try {
+    await handleVideoExtract();
+  } catch (err) {
+    reportVideoExtractFailure(err, '레시피 추출을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.');
+  }
+}
 
 const PublicRecipeRepository = {
   _recipes: [],
@@ -2937,10 +3108,21 @@ const PantryIngredientService = {
   },
 };
 
+function isAuthInitializing() {
+  const gate = window.__authGateState || window.FirebaseServices?.getAuthGateState?.() || {};
+  return gate.authLoading === true && !window.FirebaseServices?.AuthService?.isInitialAuthResolved?.();
+}
+
+async function ensureVideoAuthReady() {
+  const authSvc = window.FirebaseServices?.AuthService;
+  if (!authSvc?.waitForInitialAuth) return null;
+  return authSvc.waitForInitialAuth();
+}
+
 function isLoggedInAppUser() {
+  if (isAuthInitializing()) return false;
   const authSvc = window.FirebaseServices?.AuthService;
   if (authSvc?.isLoggedIn?.()) return true;
-  if (window.__authGateState?.user?.uid) return true;
   return Boolean(window.FirebaseServices?.auth?.currentUser?.uid);
 }
 
@@ -3013,6 +3195,8 @@ function buildRecipePayload(data, existing = null) {
   const now = new Date().toISOString();
   const base = existing || {};
   const recipeId = base.id || StorageAdapter.createId('recipe');
+  const sourceUrl = data.sourceUrl ?? base.sourceUrl ?? null;
+  const videoNorm = sourceUrl ? VideoRecipeAnalysisService.normalizeVideoSource(sourceUrl) : null;
   return {
     ...base,
     id: recipeId,
@@ -3032,8 +3216,10 @@ function buildRecipePayload(data, existing = null) {
     memo: data.memo || '',
     parentRecipeId: data.parentRecipeId ?? base.parentRecipeId ?? null,
     createdFrom: data.createdFrom ?? base.createdFrom ?? null,
-    sourceUrl: data.sourceUrl ?? base.sourceUrl ?? null,
+    sourceUrl,
     sourcePlatform: data.sourcePlatform ?? base.sourcePlatform ?? null,
+    normalizedVideoId: data.normalizedVideoId ?? videoNorm?.normalizedVideoId ?? base.normalizedVideoId ?? null,
+    normalizedSourceUrl: data.normalizedSourceUrl ?? videoNorm?.normalizedSourceUrl ?? base.normalizedSourceUrl ?? null,
     thumbnailUrl: data.thumbnailUrl ?? base.thumbnailUrl ?? null,
     ingredientSubstitutes: data.ingredientSubstitutes ?? base.ingredientSubstitutes ?? [],
     optionalIngredients: normalizeIngredientList(data.optionalIngredients ?? base.optionalIngredients ?? []),
@@ -3050,6 +3236,13 @@ async function saveUserRecipe(data, editingId = null) {
   const existing = editingId ? RecipeRepository.getById(editingId) : null;
   if (existing && (existing.source === 'builtin' || !RecipeRepository.isOwned(existing))) {
     throw new Error('수정할 수 없는 레시피입니다.');
+  }
+
+  const sourceUrl = data.sourceUrl || existing?.sourceUrl || null;
+  if (sourceUrl && !editingId && findDuplicateVideoRecipe(sourceUrl)) {
+    const err = new Error(VIDEO_DUPLICATE_TOAST);
+    err.code = 'DUPLICATE_VIDEO_SOURCE';
+    throw err;
   }
 
   if (!isLoggedInAppUser()) {
@@ -3946,6 +4139,7 @@ const state = {
   videoExtractNeedsFallback: false,
   videoExtractSessionUrl: null,
   videoDishMismatchAcknowledged: false,
+  videoExtractInFlight: false,
   aiUsageRemaining: null,
   plannerWeekStart: toDateStr(getWeekStartDate(todayStr())),
   plannerWeekKey: getWeekKeyFromDateStr(todayStr()),
@@ -9025,10 +9219,17 @@ function showAiDailyLimitAlert(message) {
 }
 
 function setVideoExtractLoading(loading, message = '레시피를 분석하고 있어요…') {
+  state.videoExtractInFlight = loading;
   dom.recipeFormPanelVideo?.classList.toggle('video-extract-panel--loading', loading);
+  if (dom.videoExtractLoading) {
+    dom.videoExtractLoading.hidden = !loading;
+    dom.videoExtractLoading.setAttribute('aria-busy', loading ? 'true' : 'false');
+  }
+  if (dom.videoExtractLoadingText && message) {
+    dom.videoExtractLoadingText.textContent = message;
+  }
   if (dom.videoAnalyzeBtn) {
-    const limitReached = state.aiUsageRemaining === 0;
-    dom.videoAnalyzeBtn.disabled = loading || limitReached;
+    dom.videoAnalyzeBtn.disabled = false;
     dom.videoAnalyzeBtn.classList.toggle('btn--loading', loading);
     dom.videoAnalyzeBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
     if (loading) {
@@ -9042,7 +9243,7 @@ function setVideoExtractLoading(loading, message = '레시피를 분석하고 �
     }
   }
   if (dom.videoFallbackAnalyzeBtn) {
-    dom.videoFallbackAnalyzeBtn.disabled = loading;
+    dom.videoFallbackAnalyzeBtn.disabled = false;
     dom.videoFallbackAnalyzeBtn.classList.toggle('btn--loading', loading);
     dom.videoFallbackAnalyzeBtn.setAttribute('aria-busy', loading ? 'true' : 'false');
   }
@@ -9136,7 +9337,14 @@ async function updateVideoLinkPreview() {
 }
 
 function showVideoFormError(msg) {
-  if (msg) showToast(msg);
+  if (!msg) return;
+  showToast(msg);
+  const textEl = dom.videoFormErrorText || dom.videoFormError?.querySelector?.('.video-form-error-card__text');
+  if (textEl) textEl.textContent = msg;
+  if (dom.videoFormError) {
+    dom.videoFormError.hidden = false;
+    dom.videoFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function showVideoReviewError(msg) {
@@ -9188,22 +9396,64 @@ function fillVideoReviewForm(draft) {
   }
 }
 
+function handleVideoAuthError(mapped) {
+  if (!mapped?.requireLogin) return false;
+  showToast(mapped.message || '로그인이 필요해요.');
+  requireAppLogin({
+    preset: 'videoRecipe',
+    redirectAfterLogin: () => handleVideoExtract(),
+  });
+  return true;
+}
+
 async function handleVideoExtract() {
+  if (state.videoExtractInFlight) {
+    showToast('레시피 분석이 진행 중이에요…');
+    return;
+  }
+
+  setVideoExtractLoading(true, '로그인 상태 확인 중…');
+  try {
+    await ensureVideoAuthReady();
+  } catch (err) {
+    setVideoExtractLoading(false);
+    showVideoFormError('로그인 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+  setVideoExtractLoading(false);
+
   if (!isLoggedInAppUser()) {
+    showToast('로그인이 필요해요.');
     requireAppLogin({
       preset: 'videoRecipe',
       redirectAfterLogin: () => handleVideoExtract(),
     });
     return;
   }
+
   if (dom.videoFormError) dom.videoFormError.hidden = true;
   hideVideoFallback();
   hideVideoExtractWarning();
-  const sourceUrl = dom.videoSourceUrl.value.trim();
-  if (!sourceUrl) return showVideoFormError('영상 링크를 입력해 주세요.');
+
+  const sourceUrl = dom.videoSourceUrl?.value?.trim() || '';
+  if (!sourceUrl) {
+    showVideoFormError('영상 링크를 입력해 주세요.');
+    return;
+  }
 
   const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
-  if (!check.ok) return showVideoFormError(check.error);
+  if (!check.ok) {
+    showVideoFormError(check.error);
+    return;
+  }
+
+  const duplicateResult = checkVideoSourceDuplicate(sourceUrl);
+  if (duplicateResult.isDuplicate) {
+    showToast(VIDEO_DUPLICATE_TOAST);
+    return;
+  }
+
+  if (!assertVideoAnalysisQuotaAvailable()) return;
 
   clearVideoExtractStateBeforeExtract(sourceUrl);
   setVideoExtractLoading(true, '영상 정보를 확인하고 있어요…');
@@ -9226,16 +9476,26 @@ async function handleVideoExtract() {
     }
   } catch (err) {
     logVideoExtractError('handleVideoExtract', err, { sourceUrl });
+    if (err.code === 'DUPLICATE_VIDEO_SOURCE') {
+      showToast(VIDEO_DUPLICATE_TOAST);
+      return;
+    }
     if (err.code === 'DAILY_LIMIT_EXCEEDED' || err.code === 'ANALYSIS_LIMIT_EXCEEDED') {
-      showAiDailyLimitAlert(err.message);
+      showToast(err.message || '이번 주 무료 AI 분석 횟수를 모두 사용했어요.');
       AiUsageService.updateDisplay(err.aiUsage || { remaining: 0, limit: AiUsageService.getDailyLimit() });
       return;
     }
+    if (err.code === 'AUTH_REQUIRED' || err.code === 'AUTH_TOKEN_UNAVAILABLE' || err.code === 'INVALID_ID_TOKEN') {
+      const mappedAuth = mapVideoExtractUserError(err, err.apiResponse);
+      if (handleVideoAuthError(mappedAuth)) return;
+    }
     const mapped = mapVideoExtractUserError(err, err.apiResponse);
+    if (mapped.requireLogin && handleVideoAuthError(mapped)) return;
     if (mapped.showFallback || err.code === 'FALLBACK') {
       if (err.warning) showVideoExtractWarning(err.warning);
       else if (err.infoHint) showVideoExtractWarning(err.infoHint);
       showVideoFallback(mapped.message);
+      showToast(mapped.message);
     } else {
       showVideoFormError(mapped.message);
     }
@@ -9245,7 +9505,18 @@ async function handleVideoExtract() {
 }
 
 async function handleVideoFallbackAnalyze() {
+  setVideoExtractLoading(true, '로그인 상태 확인 중…');
+  try {
+    await ensureVideoAuthReady();
+  } catch {
+    setVideoExtractLoading(false);
+    showVideoFormError('로그인 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    return;
+  }
+  setVideoExtractLoading(false);
+
   if (!isLoggedInAppUser()) {
+    showToast('로그인이 필요해요.');
     requireAppLogin({
       preset: 'videoRecipe',
       redirectAfterLogin: () => handleVideoFallbackAnalyze(),
@@ -9261,11 +9532,19 @@ async function handleVideoFallbackAnalyze() {
     return showVideoFormError('영상 설명글이나 캡션을 20자 이상 붙여넣어 주세요.');
   }
 
+  const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
+  if (!check.ok) return showVideoFormError(check.error);
+
+  const duplicateResult = checkVideoSourceDuplicate(sourceUrl);
+  if (duplicateResult.isDuplicate) {
+    showToast(VIDEO_DUPLICATE_TOAST);
+    return;
+  }
+  if (!assertVideoAnalysisQuotaAvailable()) return;
+
   setVideoExtractLoading(true, '붙여넣은 텍스트를 분석하고 있어요…');
 
   try {
-    const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
-    if (!check.ok) return showVideoFormError(check.error);
     setVideoExtractLoading(true, 'AI가 레시피를 정리하고 있어요…');
     const result = await VideoRecipeAnalysisService.extractViaApi(sourceUrl, textPayload);
     if (!result) throw new Error('레시피 추출 결과가 비어 있습니다.');
@@ -9279,8 +9558,12 @@ async function handleVideoFallbackAnalyze() {
     dom.videoPasteText.value = '';
   } catch (err) {
     logVideoExtractError('handleVideoFallbackAnalyze', err, { sourceUrl });
+    if (err.code === 'DUPLICATE_VIDEO_SOURCE') {
+      showToast(VIDEO_DUPLICATE_TOAST);
+      return;
+    }
     if (err.code === 'DAILY_LIMIT_EXCEEDED' || err.code === 'ANALYSIS_LIMIT_EXCEEDED') {
-      showAiDailyLimitAlert(err.message);
+      showToast(err.message || '이번 주 무료 AI 분석 횟수를 모두 사용했어요.');
       AiUsageService.updateDisplay(err.aiUsage || { remaining: 0, limit: AiUsageService.getDailyLimit() });
       return;
     }
@@ -9353,6 +9636,8 @@ function handleVideoRecipeSave() {
     visibility,
     image: draft.thumbnailUrl || '',
     sourceUrl: draft.sourceUrl,
+    normalizedVideoId: draft.normalizedVideoId || null,
+    normalizedSourceUrl: draft.normalizedSourceUrl || null,
     sourcePlatform: draft.sourcePlatform || null,
     thumbnailUrl: draft.thumbnailUrl || null,
     ingredientSubstitutes: substitutes,
@@ -9366,6 +9651,10 @@ function handleVideoRecipeSave() {
       showToast(`"${name}"을(를) 내 레시피로 저장했어요`);
     })
     .catch((err) => {
+      if (err?.code === 'DUPLICATE_VIDEO_SOURCE') {
+        showToast(VIDEO_DUPLICATE_TOAST);
+        return;
+      }
       if (err?.code === 'permission-denied') {
         console.error('[handleVideoRecipeSave] PERMISSION_DENIED', {
           uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
@@ -9809,6 +10098,7 @@ async function handlePantryModalSubmit(e) {
 }
 
 function initVideoExtractUi() {
+  bindVideoExtractClick();
   dom.videoPasteBtn?.addEventListener('click', async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -9928,7 +10218,10 @@ function closeModal(type) {
   }[type];
   if (!m) return;
   m.hidden = true; m.setAttribute('aria-hidden', 'true');
-  if (type === 'form') state.plannerPendingMeal = null;
+  if (type === 'form') {
+    state.plannerPendingMeal = null;
+    setVideoExtractLoading(false);
+  }
   if (type === 'meal' && (state.calendarModalType === 'editRecord' || state.calendarModalType === 'addRecord')) {
     clearCalendarSubModalState();
   }
@@ -10193,8 +10486,6 @@ function init() {
   dom.recipeFormTabs?.querySelectorAll('[data-recipe-tab]').forEach((btn) => {
     btn.onclick = () => setRecipeFormTab(btn.dataset.recipeTab);
   });
-  dom.videoAnalyzeBtn?.addEventListener('click', handleVideoExtract);
-  dom.videoFallbackAnalyzeBtn?.addEventListener('click', handleVideoFallbackAnalyze);
   dom.videoReviewBackBtn?.addEventListener('click', () => setRecipeFormTab('video'));
   dom.videoRecipeSaveBtn?.addEventListener('click', handleVideoRecipeSave);
   let videoPreviewTimer = null;
@@ -10241,6 +10532,9 @@ function startApp() {
     AiUsageService.refreshDisplay();
     syncAuthGateUi();
     refreshAll();
+  });
+  window.addEventListener('analysis-quota-updated', (e) => {
+    if (e.detail) AiUsageService.updateDisplay(e.detail);
   });
   window.addEventListener('pantry-firestore-sync', (e) => {
     if (!isFirestorePantryEnabled()) return;

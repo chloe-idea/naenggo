@@ -9,11 +9,14 @@ import {
   isActiveAdminUid,
   recordAdminAnalysisUsage,
 } from './firestore-admin.js';
+import {
+  buildQuotaWritePayload,
+  buildUsageDisplay,
+  getWeeklyLimit,
+  normalizeWeeklyUsageRecord,
+} from './analysis-quota-core.js';
 
-export const FREE_ANALYSIS_LIMIT = Math.max(
-  1,
-  Number(process.env.FREE_ANALYSIS_LIMIT) || 5
-);
+export const FREE_ANALYSIS_LIMIT = getWeeklyLimit();
 
 const USERS_COLLECTION = 'users';
 
@@ -21,13 +24,28 @@ function usersRef(uid) {
   return getFirestoreAdmin().collection(USERS_COLLECTION).doc(uid);
 }
 
+async function maybeMigrateUserQuota(ref, data, normalized) {
+  if (!normalized.needsMigration) return;
+  try {
+    await ref.set(buildQuotaWritePayload(normalized), { merge: true });
+  } catch (err) {
+    console.warn('[firestore-analysis-quota] migrate failed:', err?.message || err);
+  }
+}
+
 export async function ensureFirestoreUser(uid, profile = {}) {
   const ref = usersRef(uid);
   const snap = await ref.get();
-  if (snap.exists) return snap.data();
+  if (snap.exists) {
+    const data = snap.data() || {};
+    const normalized = normalizeWeeklyUsageRecord(data, FREE_ANALYSIS_LIMIT);
+    await maybeMigrateUserQuota(ref, data, normalized);
+    return { ...data, ...buildQuotaWritePayload(normalized) };
+  }
 
+  const normalized = normalizeWeeklyUsageRecord({}, FREE_ANALYSIS_LIMIT);
   const payload = {
-    freeAnalysisRemaining: FREE_ANALYSIS_LIMIT,
+    ...buildQuotaWritePayload(normalized),
     createdAt: FieldValue.serverTimestamp(),
     displayName: String(profile.displayName || '').slice(0, 120),
     email: String(profile.email || '').slice(0, 200),
@@ -45,22 +63,14 @@ export async function getFirestoreAnalysisUsage(uid) {
   const snap = await ref.get();
   if (!snap.exists) {
     await ensureFirestoreUser(uid);
-    return {
-      remaining: FREE_ANALYSIS_LIMIT,
-      limit: FREE_ANALYSIS_LIMIT,
-      used: 0,
-      source: 'firestore',
-    };
+    const normalized = normalizeWeeklyUsageRecord({}, FREE_ANALYSIS_LIMIT);
+    return buildUsageDisplay(normalized, 'firestore');
   }
 
   const data = snap.data() || {};
-  const remaining = Math.max(0, Number(data.freeAnalysisRemaining) || 0);
-  return {
-    remaining,
-    limit: FREE_ANALYSIS_LIMIT,
-    used: Math.max(0, FREE_ANALYSIS_LIMIT - remaining),
-    source: 'firestore',
-  };
+  const normalized = normalizeWeeklyUsageRecord(data, FREE_ANALYSIS_LIMIT);
+  await maybeMigrateUserQuota(ref, data, normalized);
+  return buildUsageDisplay(normalized, 'firestore');
 }
 
 export async function assertCanUseFirestoreAnalysis(uid) {
@@ -84,30 +94,47 @@ export async function recordFirestoreAnalysisUsage(uid) {
   }
 
   const ref = usersRef(uid);
+  let nextUsage = null;
+
   await getFirestoreAdmin().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    const data = snap.exists ? (snap.data() || {}) : {};
+    const normalized = normalizeWeeklyUsageRecord(data, FREE_ANALYSIS_LIMIT);
+
+    if (normalized.used >= normalized.limit) {
+      const err = new Error('무료 AI 분석 횟수를 모두 사용했습니다.');
+      err.code = 'ANALYSIS_LIMIT_EXCEEDED';
+      err.aiUsage = buildUsageDisplay(normalized, 'firestore');
+      throw err;
+    }
+
+    const next = {
+      ...normalized,
+      weeklyUsageCount: normalized.weeklyUsageCount + 1,
+    };
+    next.used = next.weeklyUsageCount;
+    next.remaining = Math.max(0, next.limit - next.used);
+
+    const payload = {
+      ...buildQuotaWritePayload(next),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
     if (!snap.exists) {
       tx.set(ref, {
-        freeAnalysisRemaining: FREE_ANALYSIS_LIMIT - 1,
+        ...payload,
         createdAt: FieldValue.serverTimestamp(),
         displayName: '',
         email: '',
       });
-      return;
+    } else {
+      tx.update(ref, payload);
     }
-    const current = Math.max(0, Number(snap.data()?.freeAnalysisRemaining) || 0);
-    if (current <= 0) {
-      const err = new Error('무료 AI 분석 횟수를 모두 사용했습니다.');
-      err.code = 'ANALYSIS_LIMIT_EXCEEDED';
-      throw err;
-    }
-    tx.update(ref, {
-      freeAnalysisRemaining: current - 1,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+
+    nextUsage = buildUsageDisplay(next, 'firestore');
   });
 
-  return getFirestoreAnalysisUsage(uid);
+  return nextUsage || getFirestoreAnalysisUsage(uid);
 }
 
 export async function resolveAuthUidFromToken(idToken) {

@@ -4,8 +4,16 @@
 import { AuthService } from './auth-service.js';
 import { FirestoreUserService } from './firestore-user-service.js';
 import { FREE_ANALYSIS_LIMIT } from '../firebase.js';
+import {
+  buildUsageDisplay,
+  getWeeklyLimit,
+  normalizeWeeklyUsageRecord,
+} from '../lib/analysis-quota-core.js';
+import { getCurrentWeekKey } from '../lib/analysis-week-key.js';
 
-const GUEST_QUOTA_KEY = 'naengjanggo_guest_free_analysis_remaining';
+const GUEST_QUOTA_KEY = 'naengjanggo_guest_analysis_quota';
+const LEGACY_GUEST_QUOTA_KEY = 'naengjanggo_guest_free_analysis_remaining';
+
 const ADMIN_UNLIMITED_USAGE = {
   remaining: null,
   limit: null,
@@ -18,21 +26,39 @@ function isAdminUser() {
   return window.FirebaseServices?.AdminService?.isAdmin?.() === true;
 }
 
-function readGuestLocalRemaining() {
+function readGuestLocalRecord() {
   try {
     const raw = localStorage.getItem(GUEST_QUOTA_KEY);
-    if (raw === null) return FREE_ANALYSIS_LIMIT;
-    const parsed = JSON.parse(raw);
-    const remaining = Number(parsed?.remaining);
-    return Number.isFinite(remaining) ? Math.max(0, remaining) : FREE_ANALYSIS_LIMIT;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          analysisQuotaWeekKey: parsed.currentWeekKey || parsed.analysisQuotaWeekKey,
+          analysisQuotaUsed: parsed.weeklyUsageCount ?? parsed.analysisQuotaUsed,
+        };
+      }
+    }
   } catch {
-    return FREE_ANALYSIS_LIMIT;
+    /* fall through */
   }
+
+  try {
+    const legacyRaw = localStorage.getItem(LEGACY_GUEST_QUOTA_KEY);
+    if (legacyRaw) {
+      localStorage.removeItem(LEGACY_GUEST_QUOTA_KEY);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return {};
 }
 
-function writeGuestLocalRemaining(remaining) {
+function writeGuestLocalUsage(usage) {
   localStorage.setItem(GUEST_QUOTA_KEY, JSON.stringify({
-    remaining: Math.max(0, Number(remaining) || 0),
+    currentWeekKey: usage.currentWeekKey || getCurrentWeekKey(),
+    weeklyUsageCount: Math.max(0, Number(usage.weeklyUsageCount ?? usage.used) || 0),
+    remaining: Math.max(0, Number(usage.remaining) || 0),
     updatedAt: new Date().toISOString(),
   }));
 }
@@ -43,7 +69,11 @@ export const AnalysisQuotaService = {
   },
 
   getDailyLimit() {
-    return FREE_ANALYSIS_LIMIT;
+    return getWeeklyLimit();
+  },
+
+  getWeeklyLimit() {
+    return getWeeklyLimit();
   },
 
   getAdminUnlimitedUsage() {
@@ -54,15 +84,10 @@ export const AnalysisQuotaService = {
     return isAdminUser();
   },
 
-  /** 게스트: LocalStorage 기준 남은 횟수 */
+  /** 게스트: LocalStorage 기준 남은 횟수 (주간 리셋) */
   getGuestLocalUsage() {
-    const remaining = readGuestLocalRemaining();
-    return {
-      remaining,
-      limit: FREE_ANALYSIS_LIMIT,
-      used: Math.max(0, FREE_ANALYSIS_LIMIT - remaining),
-      source: 'guest-local',
-    };
+    const normalized = normalizeWeeklyUsageRecord(readGuestLocalRecord(), getWeeklyLimit());
+    return buildUsageDisplay(normalized, 'guest-local');
   },
 
   /** 로그인: Firestore에서 읽기 */
@@ -70,8 +95,7 @@ export const AnalysisQuotaService = {
     if (isAdminUser()) return this.getAdminUnlimitedUsage();
     const uid = AuthService.getUid();
     if (!uid) return null;
-    const remaining = await FirestoreUserService.getFreeAnalysisRemaining(uid);
-    return FirestoreUserService.toUsageDisplay(remaining);
+    return FirestoreUserService.fetchAnalysisUsage(uid);
   },
 
   /** 현재 사용자 기준 usage 조회 */
@@ -91,7 +115,7 @@ export const AnalysisQuotaService = {
       if (!res.ok) return this.getGuestLocalUsage();
       const data = await res.json();
       const usage = data.aiUsage || null;
-      if (usage) writeGuestLocalRemaining(usage.remaining);
+      if (usage) writeGuestLocalUsage(usage);
       return usage || this.getGuestLocalUsage();
     } catch (err) {
       console.warn('[AnalysisQuotaService] guest API failed:', err);
@@ -104,15 +128,19 @@ export const AnalysisQuotaService = {
     if (this.isLoggedIn()) return;
     if (aiUsage?.unlimited) return;
     if (aiUsage && typeof aiUsage.remaining === 'number') {
-      writeGuestLocalRemaining(aiUsage.remaining);
-    } else {
-      const current = readGuestLocalRemaining();
-      writeGuestLocalRemaining(Math.max(0, current - 1));
+      writeGuestLocalUsage(aiUsage);
+      return;
     }
+    const current = this.getGuestLocalUsage();
+    writeGuestLocalUsage({
+      ...current,
+      weeklyUsageCount: (current.weeklyUsageCount || current.used || 0) + 1,
+      remaining: Math.max(0, (current.remaining || 0) - 1),
+    });
   },
 
-  async getIdTokenForApi() {
+  async getIdTokenForApi(options = {}) {
     if (!this.isLoggedIn()) return null;
-    return AuthService.getIdToken();
+    return AuthService.acquireIdTokenForApi(options);
   },
 };

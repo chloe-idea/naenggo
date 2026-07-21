@@ -75,7 +75,13 @@ service cloud.firestore {
       allow update: if isOwner(uid)
         && (!('freeAnalysisRemaining' in request.resource.data)
           || !('freeAnalysisRemaining' in resource.data)
-          || request.resource.data.freeAnalysisRemaining == resource.data.freeAnalysisRemaining);
+          || request.resource.data.freeAnalysisRemaining == resource.data.freeAnalysisRemaining)
+        && (!('analysisQuotaWeekKey' in request.resource.data)
+          || !('analysisQuotaWeekKey' in resource.data)
+          || request.resource.data.analysisQuotaWeekKey == resource.data.analysisQuotaWeekKey)
+        && (!('analysisQuotaUsed' in request.resource.data)
+          || !('analysisQuotaUsed' in resource.data)
+          || request.resource.data.analysisQuotaUsed == resource.data.analysisQuotaUsed);
       allow delete: if false;
     }
 

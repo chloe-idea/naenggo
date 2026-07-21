@@ -944,6 +944,7 @@ async function bootstrap() {
     refreshHeaderQuota,
     isConfigured: isFirebaseConfigured(),
     getAuthGateState: () => ({ ...authState }),
+    waitForAuthReady: () => AuthService.waitForInitialAuth(),
   };
 
   if (isFirebaseConfigured()) {

@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
+import { optimizeRecipeImage } from './optimize-recipe-image.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -19,7 +20,6 @@ const TILES_PATH = path.join(__dirname, 'recipe-collage-tiles.json');
 
 const COLS = 6;
 const ROWS = 4;
-const WEBP_QUALITY = 82;
 /** 하단 음식명 텍스트 영역 제외 */
 const CONTENT_HEIGHT_RATIO = 0.82;
 const TOP_PADDING_RATIO = 0.06;
@@ -36,6 +36,7 @@ function getTileSlug(row, col) {
 async function createDefaultRecipeImage() {
   const size = 512;
   const outPath = path.join(OUTPUT_DIR, 'default-recipe.webp');
+  const tmp = path.join(OUTPUT_DIR, '.default-recipe.tmp.png');
   await sharp({
     create: {
       width: size,
@@ -44,8 +45,10 @@ async function createDefaultRecipeImage() {
       background: { r: 250, g: 244, b: 239 },
     },
   })
-    .webp({ quality: WEBP_QUALITY })
-    .toFile(outPath);
+    .png()
+    .toFile(tmp);
+  await optimizeRecipeImage(tmp, outPath);
+  fs.unlinkSync(tmp);
   console.log(`  default → default-recipe.webp`);
 }
 
@@ -76,12 +79,15 @@ async function splitCollage(inputPath) {
       const left = Math.round((col - 1) * cellW + (cellW - squareSize) / 2);
       const top = Math.round((row - 1) * cellH + cellH * TOP_PADDING_RATIO);
       const outPath = path.join(OUTPUT_DIR, `${slug}.webp`);
+      const tmp = path.join(OUTPUT_DIR, `.${slug}.tmp.png`);
 
       await image
         .clone()
         .extract({ left, top, width: squareSize, height: squareSize })
-        .webp({ quality: WEBP_QUALITY })
-        .toFile(outPath);
+        .png()
+        .toFile(tmp);
+      await optimizeRecipeImage(tmp, outPath);
+      fs.unlinkSync(tmp);
 
       const tile = tiles.find((entry) => entry.slug === slug);
       outputs.push({ row, col, name: tile?.name, slug, outPath });

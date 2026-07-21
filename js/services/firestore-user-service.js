@@ -8,6 +8,7 @@ import {
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { FREE_ANALYSIS_LIMIT, db } from '../firebase.js';
+import { buildUsageDisplay, normalizeWeeklyUsageRecord } from '../lib/analysis-quota-core.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { normalizeSocialLinks } from '../lib/social-url.js';
 import { FirestorePublicProfilesService } from './firestore-public-profiles-service.js';
@@ -72,8 +73,11 @@ export const FirestoreUserService = {
 
     const displayName = user.displayName || user.email?.split('@')[0] || '';
     const profileImage = user.photoURL || '';
+    const normalized = normalizeWeeklyUsageRecord({}, FREE_ANALYSIS_LIMIT);
     const payload = {
-      freeAnalysisRemaining: FREE_ANALYSIS_LIMIT,
+      analysisQuotaWeekKey: normalized.currentWeekKey,
+      analysisQuotaUsed: normalized.weeklyUsageCount,
+      freeAnalysisRemaining: normalized.remaining,
       createdAt: serverTimestamp(),
       displayName,
       email: user.email || '',
@@ -102,7 +106,9 @@ export const FirestoreUserService = {
 
     return {
       ...payload,
-      freeAnalysisRemaining: FREE_ANALYSIS_LIMIT,
+      freeAnalysisRemaining: normalized.remaining,
+      analysisQuotaWeekKey: normalized.currentWeekKey,
+      analysisQuotaUsed: normalized.weeklyUsageCount,
     };
   },
 
@@ -174,19 +180,21 @@ export const FirestoreUserService = {
   },
 
   async getFreeAnalysisRemaining(uid) {
-    const data = await this.getUserDocument(uid);
-    if (!data) return FREE_ANALYSIS_LIMIT;
-    const remaining = Number(data.freeAnalysisRemaining);
-    return Number.isFinite(remaining) ? Math.max(0, remaining) : FREE_ANALYSIS_LIMIT;
+    const usage = await this.fetchAnalysisUsage(uid);
+    return usage?.remaining ?? FREE_ANALYSIS_LIMIT;
   },
 
-  toUsageDisplay(remaining) {
-    const safe = Math.max(0, Number(remaining) || 0);
-    return {
-      remaining: safe,
-      limit: FREE_ANALYSIS_LIMIT,
-      used: Math.max(0, FREE_ANALYSIS_LIMIT - safe),
-      source: 'firestore',
-    };
+  async fetchAnalysisUsage(uid) {
+    const data = await this.getUserDocument(uid);
+    if (!data) {
+      const normalized = normalizeWeeklyUsageRecord({}, FREE_ANALYSIS_LIMIT);
+      return buildUsageDisplay(normalized, 'firestore');
+    }
+    return this.toUsageDisplay(data);
+  },
+
+  toUsageDisplay(data) {
+    const normalized = normalizeWeeklyUsageRecord(data || {}, FREE_ANALYSIS_LIMIT);
+    return buildUsageDisplay(normalized, 'firestore');
   },
 };

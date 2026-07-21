@@ -6,6 +6,7 @@
     "build": "node scripts/sync-public-static.mjs",
     "build:recipes": "node scripts/build-builtin-recipes.mjs",
     "migrate:recipes": "node scripts/migrate-builtin-to-json.mjs && npm run build:recipes",
+    "optimize:recipe-images": "node scripts/optimize-recipe-images.mjs",
     "split-recipe-collage": "node scripts/split-recipe-collage.mjs",
     "sync:public-static": "node scripts/sync-public-static.mjs"
   },

@@ -37,7 +37,16 @@
   function normalizeUrl(rawUrl) {
     const trimmed = String(rawUrl || '').trim();
     if (!trimmed) return null;
-    return trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+    const href = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+    try {
+      const url = new URL(href);
+      if (url.pathname.length > 1) {
+        url.pathname = url.pathname.replace(/\/+$/, '');
+      }
+      return url.href;
+    } catch {
+      return href;
+    }
   }
 
   function isYouTubeHost(hostname) {
@@ -58,7 +67,10 @@
       return isValidYouTubeVideoId(id) ? id : null;
     }
     const fromQuery = url.searchParams.get('v');
-    if (fromQuery && isValidYouTubeVideoId(fromQuery)) return fromQuery;
+    if (fromQuery) {
+      const id = String(fromQuery).split(/[/?#&]/)[0];
+      if (isValidYouTubeVideoId(id)) return id;
+    }
     const pathMatch = url.pathname.match(/\/(?:embed|shorts|live|v)\/([^/?#&]+)/);
     if (pathMatch && isValidYouTubeVideoId(pathMatch[1])) return pathMatch[1];
     return null;
@@ -189,6 +201,75 @@
     return VIDEO_EXTRACT_UI.PARTIAL_CAPTION_HINT;
   }
 
+  const TRACKING_PARAMS = new Set([
+    'fbclid', 'gclid', 'si', 'feature', 'igsh', 'igshid', 'ref', 'ref_src', 'ref_src_tws',
+  ]);
+
+  function shouldStripParam(key) {
+    const lower = String(key || '').toLowerCase();
+    if (TRACKING_PARAMS.has(lower)) return true;
+    return lower.startsWith('utm_');
+  }
+
+  function stripTrackingParamsFromUrl(rawUrl) {
+    try {
+      const url = new URL(rawUrl);
+      [...url.searchParams.keys()].forEach((key) => {
+        if (shouldStripParam(key)) url.searchParams.delete(key);
+      });
+      url.hash = '';
+      let out = url.href;
+      if (out.endsWith('/') && url.pathname !== '/') out = out.slice(0, -1);
+      return out;
+    } catch {
+      return String(rawUrl || '').trim();
+    }
+  }
+
+  function normalizeVideoSource(rawUrl) {
+    const validation = validateVideoUrl(rawUrl);
+    if (!validation.ok) return null;
+
+    const { platform, videoId, url } = validation;
+    let normalizedVideoId = null;
+    let normalizedSourceUrl = null;
+
+    if (
+      (platform === VideoPlatform.YOUTUBE || platform === VideoPlatform.YOUTUBE_SHORTS)
+      && videoId
+    ) {
+      normalizedVideoId = `youtube:${videoId}`;
+      normalizedSourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    } else if (platform === VideoPlatform.INSTAGRAM_REELS && videoId) {
+      normalizedVideoId = `instagram:${videoId}`;
+      normalizedSourceUrl = `https://www.instagram.com/reel/${videoId}/`;
+    } else if (platform === VideoPlatform.TIKTOK && videoId) {
+      normalizedVideoId = `tiktok:${videoId}`;
+      normalizedSourceUrl = stripTrackingParamsFromUrl(url);
+    }
+
+    if (!normalizedVideoId) return null;
+
+    return {
+      normalizedVideoId,
+      normalizedSourceUrl,
+      platform,
+      videoId,
+      sourceUrl: url,
+    };
+  }
+
+  function resolveRecipeNormalizedVideoId(recipe) {
+    if (!recipe || typeof recipe !== 'object') return null;
+    if (recipe.normalizedVideoId) return String(recipe.normalizedVideoId);
+    const candidates = [recipe.sourceUrl, recipe.videoUrl, recipe.sourcePostUrl].filter(Boolean);
+    for (const raw of candidates) {
+      const norm = normalizeVideoSource(raw);
+      if (norm?.normalizedVideoId) return norm.normalizedVideoId;
+    }
+    return null;
+  }
+
   global.VideoExtractPlatform = {
     VideoPlatform,
     PLATFORM_LABELS,
@@ -201,6 +282,9 @@
     getYouTubeThumbnail,
     supportsAutoExtract,
     getPlatformHint,
+    normalizeVideoSource,
+    resolveRecipeNormalizedVideoId,
+    stripTrackingParamsFromUrl,
     isYouTubeHost,
     isValidYouTubeVideoId,
   };

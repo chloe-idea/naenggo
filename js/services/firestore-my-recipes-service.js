@@ -5,9 +5,13 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   deleteDoc,
   onSnapshot,
+  query,
+  where,
+  limit,
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { auth, db } from '../firebase.js';
@@ -56,6 +60,10 @@ export function mapMyRecipeDoc(docSnap, uid) {
     calories: data.calories ?? null,
     memo: data.memo || '',
     sourceUrl: data.sourceUrl || null,
+    videoUrl: data.videoUrl || null,
+    sourcePostUrl: data.sourcePostUrl || null,
+    normalizedVideoId: data.normalizedVideoId || null,
+    normalizedSourceUrl: data.normalizedSourceUrl || null,
     sourcePlatform: data.sourcePlatform || null,
     parentRecipeId: data.parentRecipeId || null,
     createdFrom: data.createdFrom || null,
@@ -71,6 +79,45 @@ export function mapMyRecipeDoc(docSnap, uid) {
     createdAt: timestampToIso(data.createdAt) || nowIso(),
     updatedAt: timestampToIso(data.updatedAt) || nowIso(),
   };
+}
+
+function resolveRecipeNormalizedVideoId(recipe) {
+  if (!recipe || typeof recipe !== 'object') return null;
+  if (recipe.normalizedVideoId) return String(recipe.normalizedVideoId);
+  const normalize = window.VideoExtractPlatform?.normalizeVideoSource;
+  const resolve = window.VideoExtractPlatform?.resolveRecipeNormalizedVideoId;
+  if (typeof resolve === 'function') return resolve(recipe);
+  const candidates = [recipe.sourceUrl, recipe.videoUrl, recipe.sourcePostUrl].filter(Boolean);
+  for (const raw of candidates) {
+    const norm = typeof normalize === 'function' ? normalize(raw) : null;
+    if (norm?.normalizedVideoId) return norm.normalizedVideoId;
+  }
+  return null;
+}
+
+async function findDuplicateVideoRecipe(uid, normalizedVideoId, excludeRecipeId = null) {
+  if (!uid || !normalizedVideoId) return null;
+  const col = recipesCol(uid);
+  if (!col) return null;
+
+  try {
+    const q = query(col, where('normalizedVideoId', '==', normalizedVideoId), limit(5));
+    const snap = await getDocs(q);
+    for (const docSnap of snap.docs) {
+      if (excludeRecipeId && docSnap.id === excludeRecipeId) continue;
+      return mapMyRecipeDoc(docSnap, uid);
+    }
+  } catch (err) {
+    console.warn('[FirestoreMyRecipesService] normalizedVideoId query failed:', err?.message || err);
+  }
+
+  const allSnap = await getDocs(col);
+  for (const docSnap of allSnap.docs) {
+    if (excludeRecipeId && docSnap.id === excludeRecipeId) continue;
+    const mapped = mapMyRecipeDoc(docSnap, uid);
+    if (resolveRecipeNormalizedVideoId(mapped) === normalizedVideoId) return mapped;
+  }
+  return null;
 }
 
 function buildPayload(recipe, uid, authUser) {
@@ -92,6 +139,10 @@ function buildPayload(recipe, uid, authUser) {
     calories: recipe.calories ?? null,
     memo: recipe.memo || '',
     sourceUrl: recipe.sourceUrl || null,
+    videoUrl: recipe.videoUrl || null,
+    sourcePostUrl: recipe.sourcePostUrl || null,
+    normalizedVideoId: recipe.normalizedVideoId || null,
+    normalizedSourceUrl: recipe.normalizedSourceUrl || null,
     sourcePlatform: recipe.sourcePlatform || null,
     parentRecipeId: recipe.parentRecipeId || null,
     createdFrom: recipe.createdFrom || null,
@@ -184,6 +235,23 @@ export const FirestoreMyRecipesService = {
     const ref = recipeDoc(user.uid, targetId);
     const savePath = userSubcollectionPath(user.uid, SUBCOLLECTION, targetId);
     const payload = buildPayload(recipe, user.uid, user);
+
+    const normalizedVideoId = recipe.normalizedVideoId
+      || resolveRecipeNormalizedVideoId(recipe);
+    if (isNew && normalizedVideoId) {
+      const duplicate = await findDuplicateVideoRecipe(user.uid, normalizedVideoId, targetId);
+      if (duplicate) {
+        const err = new Error('이미 등록된 영상입니다.');
+        err.code = 'DUPLICATE_VIDEO_SOURCE';
+        err.duplicateRecipeId = duplicate.id;
+        throw err;
+      }
+      payload.normalizedVideoId = normalizedVideoId;
+      if (!payload.normalizedSourceUrl && recipe.sourceUrl) {
+        const norm = window.VideoExtractPlatform?.normalizeVideoSource?.(recipe.sourceUrl);
+        payload.normalizedSourceUrl = norm?.normalizedSourceUrl || recipe.normalizedSourceUrl || null;
+      }
+    }
 
     if (isNew) {
       payload.createdAt = serverTimestamp();

@@ -13,6 +13,8 @@ import {
   logExtractFailure,
   resolveExtractFailure,
 } from '../video-extract-debug.js';
+import { assertNoDuplicateFirestoreVideo } from '../firestore-video-duplicate.js';
+import { resolveAuthUidFromToken } from '../firestore-analysis-quota.js';
 
 /**
  * YouTube / Instagram 등 플랫폼 공통 레시피 추출 핸들러
@@ -62,6 +64,24 @@ export async function handleExtractVideoRecipe({
   }
 
   try {
+    if (token) {
+      const uid = await resolveAuthUidFromToken(token);
+      if (uid) {
+        const dupCheck = await assertNoDuplicateFirestoreVideo(uid, trimmedUrl);
+        if (dupCheck.duplicate) {
+          return {
+            status: 409,
+            body: {
+              success: false,
+              error: 'DUPLICATE_VIDEO_SOURCE',
+              message: '이미 등록된 영상입니다.',
+              duplicateRecipeId: dupCheck.recipeId || null,
+            },
+          };
+        }
+      }
+    }
+
     let platformContent;
     try {
       platformContent = await fetchContent(trimmedUrl, urlValidation);
@@ -104,8 +124,13 @@ export async function handleExtractVideoRecipe({
       }
       if (limitErr.code === 'INVALID_ID_TOKEN') {
         return {
-          status: 401,
-          body: { success: false, error: limitErr.code, message: limitErr.message },
+          status: limitErr.httpStatus || 401,
+          body: {
+            success: false,
+            error: limitErr.code,
+            message: limitErr.message,
+            firebaseCode: limitErr.firebaseCode || null,
+          },
         };
       }
       throw limitErr;
@@ -200,8 +225,13 @@ export async function handleExtractVideoRecipe({
 
     if (err.code === 'INVALID_ID_TOKEN') {
       return {
-        status: 401,
-        body: { success: false, error: err.code, message: err.message },
+        status: err.httpStatus || 401,
+        body: {
+          success: false,
+          error: err.code,
+          message: err.message,
+          firebaseCode: err.firebaseCode || null,
+        },
       };
     }
 

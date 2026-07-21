@@ -58,6 +58,7 @@
       aiUsageApiUrl: buildApiUrl('/api/ai-usage'),
       coupangSearchApiUrl: buildApiUrl('/api/coupang-search'),
       dailyLimit: 5,
+      weeklyLimit: 5,
       enableMock: false,
     },
     runtime: {

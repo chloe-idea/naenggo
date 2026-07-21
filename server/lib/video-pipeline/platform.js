@@ -11,7 +11,16 @@ const TIKTOK_HOSTS = new Set(['tiktok.com', 'vm.tiktok.com', 'www.tiktok.com', '
 function normalizeUrl(rawUrl) {
   const trimmed = String(rawUrl || '').trim();
   if (!trimmed) return null;
-  return trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+  const href = trimmed.startsWith('http') ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(href);
+    if (url.pathname.length > 1) {
+      url.pathname = url.pathname.replace(/\/+$/, '');
+    }
+    return url.href;
+  } catch {
+    return href;
+  }
 }
 
 export function isYouTubeHost(hostname) {
@@ -34,7 +43,10 @@ function extractYouTubeVideoIdFromParsedUrl(url) {
   }
 
   const fromQuery = url.searchParams.get('v');
-  if (fromQuery && isValidYouTubeVideoId(fromQuery)) return fromQuery;
+  if (fromQuery) {
+    const id = String(fromQuery).split(/[/?#&]/)[0];
+    if (isValidYouTubeVideoId(id)) return id;
+  }
 
   const pathMatch = url.pathname.match(/\/(?:embed|shorts|live|v)\/([^/?#&]+)/);
   if (pathMatch && isValidYouTubeVideoId(pathMatch[1])) return pathMatch[1];

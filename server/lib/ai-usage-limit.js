@@ -1,20 +1,25 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  buildUsageDisplay,
+  getWeeklyLimit,
+  normalizeWeeklyUsageRecord,
+} from './analysis-quota-core.js';
+import { getCurrentWeekKey } from './analysis-week-key.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.VERCEL
   ? path.join('/tmp', 'naengjanggo-ai-usage')
   : path.join(__dirname, '../data');
 const DATA_FILE = path.join(DATA_DIR, 'ai-usage.json');
-const TIMEZONE = process.env.AI_USAGE_TIMEZONE || 'Asia/Seoul';
 
 export function getDailyLimit() {
-  return Math.max(1, Number(process.env.AI_DAILY_LIMIT) || 5);
+  return getWeeklyLimit();
 }
 
-export function getTodayDateKey(date = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TIMEZONE }).format(date);
+export function getTodayDateKey() {
+  return getCurrentWeekKey();
 }
 
 function loadStore() {
@@ -33,29 +38,38 @@ function saveStore(store) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf8');
 }
 
-export function getAiUsage(userId) {
-  const limit = getDailyLimit();
-  const today = getTodayDateKey();
-  const store = loadStore();
-  const record = store[userId];
+function normalizeGuestRecord(record) {
+  if (!record || typeof record !== 'object') return {};
 
-  if (!record || record.date !== today) {
-    return { used: 0, remaining: limit, limit, date: today };
+  if (record.weekKey || record.analysisQuotaWeekKey || record.weeklyUsageCount != null) {
+    return {
+      analysisQuotaWeekKey: record.analysisQuotaWeekKey || record.weekKey,
+      analysisQuotaUsed: record.analysisQuotaUsed ?? record.weeklyUsageCount ?? record.count,
+      freeAnalysisRemaining: record.freeAnalysisRemaining,
+    };
   }
 
-  const used = Math.max(0, Number(record.count) || 0);
+  if (record.date) {
+    // 레거시 일간 카운트 → 새 주간 한도로 초기화
+    return {};
+  }
+
   return {
-    used,
-    remaining: Math.max(0, limit - used),
-    limit,
-    date: today,
+    freeAnalysisRemaining: record.remaining,
   };
+}
+
+export function getAiUsage(userId) {
+  const store = loadStore();
+  const record = normalizeGuestRecord(store[userId]);
+  const normalized = normalizeWeeklyUsageRecord(record, getWeeklyLimit());
+  return buildUsageDisplay(normalized, 'guest-server');
 }
 
 export function assertCanUseAi(userId) {
   const usage = getAiUsage(userId);
   if (usage.used >= usage.limit) {
-    const err = new Error('오늘 무료 AI 분석 5회를 모두 사용했습니다.');
+    const err = new Error('이번 주 무료 AI 분석 5회를 모두 사용했습니다.');
     err.code = 'DAILY_LIMIT_EXCEEDED';
     err.aiUsage = usage;
     throw err;
@@ -64,23 +78,33 @@ export function assertCanUseAi(userId) {
 }
 
 export function recordAiUsage(userId) {
-  const limit = getDailyLimit();
-  const today = getTodayDateKey();
   const store = loadStore();
-  const prev = store[userId];
+  const record = normalizeGuestRecord(store[userId]);
+  const normalized = normalizeWeeklyUsageRecord(record, getWeeklyLimit());
 
-  const record = !prev || prev.date !== today
-    ? { date: today, count: 1 }
-    : { date: today, count: (Number(prev.count) || 0) + 1 };
+  if (normalized.used >= normalized.limit) {
+    const err = new Error('이번 주 무료 AI 분석 5회를 모두 사용했습니다.');
+    err.code = 'DAILY_LIMIT_EXCEEDED';
+    err.aiUsage = buildUsageDisplay(normalized, 'guest-server');
+    throw err;
+  }
 
-  store[userId] = record;
+  const next = {
+    ...normalized,
+    weeklyUsageCount: normalized.weeklyUsageCount + 1,
+  };
+  next.used = next.weeklyUsageCount;
+  next.remaining = Math.max(0, next.limit - next.used);
+
+  store[userId] = {
+    weekKey: next.currentWeekKey,
+    analysisQuotaWeekKey: next.currentWeekKey,
+    weeklyUsageCount: next.weeklyUsageCount,
+    analysisQuotaUsed: next.weeklyUsageCount,
+    count: next.weeklyUsageCount,
+    remaining: next.remaining,
+  };
   saveStore(store);
 
-  const used = record.count;
-  return {
-    used,
-    remaining: Math.max(0, limit - used),
-    limit,
-    date: today,
-  };
+  return buildUsageDisplay(next, 'guest-server');
 }
