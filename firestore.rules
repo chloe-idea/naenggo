@@ -21,6 +21,13 @@ service cloud.firestore {
         || data.authorId == request.auth.uid;
     }
 
+    // users/{uid} — Admin 전용 quota 필드 (클라이언트 update 시 변경 금지)
+    function serverQuotaFieldsUnchanged() {
+      return !('freeAnalysisRemaining' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('analysisQuotaUsed' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('analysisQuotaWeekKey' in request.resource.data.diff(resource.data).affectedKeys());
+    }
+
     // 운영자 등록 — 본인 문서 읽기만 허용 (쓰기는 콘솔에서 수동 등록)
     match /admins/{uid} {
       allow read: if isOwner(uid);
@@ -44,11 +51,13 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.authorId == request.auth.uid
         && request.resource.data.isPublic == true;
-      allow update: if isSignedIn() && (
-        (resource.data.authorId == request.auth.uid
-          && request.resource.data.authorId == request.auth.uid)
-        || isActiveAdmin()
-      );
+      allow update: if isSignedIn()
+        && request.resource.data.isPublic == true
+        && (
+          (resource.data.authorId == request.auth.uid
+            && request.resource.data.authorId == request.auth.uid)
+          || isActiveAdmin()
+        );
       allow delete: if isSignedIn() && (
         resource.data.authorId == request.auth.uid
         || isActiveAdmin()
@@ -58,13 +67,21 @@ service cloud.firestore {
     // 공개 작성자 프로필 — 누구나 읽기, 본인만 쓰기 (이메일/uid 비포함)
     match /publicProfiles/{uid} {
       allow read: if true;
-      allow create, update: if isOwner(uid)
+      allow create: if isOwner(uid)
         && request.resource.data.keys().hasOnly([
           'displayName', 'profileImageUrl', 'bio', 'socialLinks',
           'publicRecipeCount', 'createdAt', 'updatedAt'
         ])
         && (!('email' in request.resource.data))
         && (!('uid' in request.resource.data));
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'displayName', 'profileImageUrl', 'bio', 'socialLinks',
+          'publicRecipeCount', 'createdAt', 'updatedAt'
+        ])
+        && (!('email' in request.resource.data))
+        && (!('uid' in request.resource.data))
+        && !('createdAt' in request.resource.data.diff(resource.data).affectedKeys());
       allow delete: if false;
     }
 
@@ -72,16 +89,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid)
-        && (!('freeAnalysisRemaining' in request.resource.data)
-          || !('freeAnalysisRemaining' in resource.data)
-          || request.resource.data.freeAnalysisRemaining == resource.data.freeAnalysisRemaining)
-        && (!('analysisQuotaWeekKey' in request.resource.data)
-          || !('analysisQuotaWeekKey' in resource.data)
-          || request.resource.data.analysisQuotaWeekKey == resource.data.analysisQuotaWeekKey)
-        && (!('analysisQuotaUsed' in request.resource.data)
-          || !('analysisQuotaUsed' in resource.data)
-          || request.resource.data.analysisQuotaUsed == resource.data.analysisQuotaUsed);
+      allow update: if isOwner(uid) && serverQuotaFieldsUnchanged();
       allow delete: if false;
     }
 
