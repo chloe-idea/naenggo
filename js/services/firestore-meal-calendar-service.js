@@ -13,6 +13,7 @@ import {
 import { auth, db } from '../firebase.js';
 import { timestampToIso, nowIso } from './firestore-timestamp.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
+import { FamilySharingService } from './family-sharing-service.js';
 
 const SUBCOLLECTION = 'mealCalendar';
 
@@ -20,11 +21,15 @@ let snapshotUnsubscribe = null;
 
 function col(uid) {
   if (!db || !uid) return null;
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (householdId) return collection(db, 'households', householdId, SUBCOLLECTION);
   return collection(db, 'users', uid, SUBCOLLECTION);
 }
 
 function logDoc(uid, logId) {
   if (!db || !uid || !logId) return null;
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (householdId) return doc(db, 'households', householdId, SUBCOLLECTION, logId);
   return doc(db, 'users', uid, SUBCOLLECTION, logId);
 }
 

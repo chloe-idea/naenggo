@@ -8,13 +8,16 @@
     "migrate:recipes": "node scripts/migrate-builtin-to-json.mjs && npm run build:recipes",
     "optimize:recipe-images": "node scripts/optimize-recipe-images.mjs",
     "split-recipe-collage": "node scripts/split-recipe-collage.mjs",
-    "sync:public-static": "node scripts/sync-public-static.mjs"
+    "sync:public-static": "node scripts/sync-public-static.mjs",
+    "test:firestore-rules": "firebase emulators:exec --only firestore \"node --test tests/firestore-household-rules.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.15.0",
     "firebase-admin": "^13.10.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "firebase-tools": "^15.24.0",
     "sharp": "^0.34.5"
   }
 }

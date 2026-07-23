@@ -74,7 +74,8 @@ export function mapMyRecipeDoc(docSnap, uid) {
     authorId: data.authorId || uid,
     authorName: data.authorName || '',
     visibility: data.visibility === 'public' ? 'public' : 'private',
-    source: 'user',
+    source: data.createdBy ? 'family' : 'user',
+    isFamilyShared: Boolean(data.createdBy),
     publicRecipeId: data.publicRecipeId || null,
     createdAt: timestampToIso(data.createdAt) || nowIso(),
     updatedAt: timestampToIso(data.updatedAt) || nowIso(),
@@ -211,17 +212,22 @@ export const FirestoreMyRecipesService = {
       onItems?.([]);
       return null;
     }
-    const col = recipesCol(uid);
-    snapshotUnsubscribe = onSnapshot(
-      col,
+    const personalCol = recipesCol(uid);
+    let personalItems = [];
+    const emit = () => {
+      onItems?.([...personalItems].sort(
+        (a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''),
+      ));
+    };
+    const stopPersonal = onSnapshot(
+      personalCol,
       (snap) => {
-        const items = snap.docs.map((d) => mapMyRecipeDoc(d, uid)).sort(
-          (a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''),
-        );
-        onItems?.(items);
+        personalItems = snap.docs.map((d) => mapMyRecipeDoc(d, uid));
+        emit();
       },
       (err) => onError?.(err),
     );
+    snapshotUnsubscribe = stopPersonal;
     return snapshotUnsubscribe;
   },
 
@@ -299,7 +305,12 @@ export const FirestoreMyRecipesService = {
   async deleteRecipe(recipeId) {
     const user = auth?.currentUser;
     if (!user?.uid || !recipeId) throw new Error('로그인 후 삭제할 수 있습니다.');
-    await FirestorePublicRecipesService.unpublish(recipeId);
-    await deleteDoc(recipeDoc(user.uid, recipeId));
+    const personalRef = recipeDoc(user.uid, recipeId);
+    const personalSnap = await getDoc(personalRef);
+    if (personalSnap.exists()) {
+      await FirestorePublicRecipesService.unpublish(recipeId);
+      await deleteDoc(personalRef);
+      return;
+    }
   },
 };

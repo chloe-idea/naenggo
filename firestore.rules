@@ -25,7 +25,31 @@ service cloud.firestore {
     function serverQuotaFieldsUnchanged() {
       return !('freeAnalysisRemaining' in request.resource.data.diff(resource.data).affectedKeys())
         && !('analysisQuotaUsed' in request.resource.data.diff(resource.data).affectedKeys())
-        && !('analysisQuotaWeekKey' in request.resource.data.diff(resource.data).affectedKeys());
+        && !('analysisQuotaWeekKey' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('activeHouseholdId' in request.resource.data.diff(resource.data).affectedKeys())
+        && !('pendingHouseholdId' in request.resource.data.diff(resource.data).affectedKeys());
+    }
+
+    function householdMemberRef(householdId) {
+      return /databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid);
+    }
+
+    function isHouseholdMember(householdId) {
+      return isSignedIn() && exists(householdMemberRef(householdId));
+    }
+
+    function isHouseholdOwner(householdId) {
+      return isHouseholdMember(householdId)
+        && get(householdMemberRef(householdId)).data.role == 'owner';
+    }
+
+    function householdItemTimestampsValid() {
+      return request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function householdCreatedAtUnchanged() {
+      return !('createdAt' in request.resource.data.diff(resource.data).affectedKeys());
     }
 
     // 운영자 등록 — 본인 문서 읽기만 허용 (쓰기는 콘솔에서 수동 등록)
@@ -122,6 +146,175 @@ service cloud.firestore {
 
     match /users/{uid}/settings/{settingId} {
       allow read, write: if isOwner(uid);
+    }
+
+    // 가족 공유 데이터 — membership 문서가 권한의 유일한 원본이다.
+    // household / membership / invite 생명주기는 Admin SDK API만 변경한다.
+    match /households/{householdId} {
+      allow read: if isHouseholdMember(householdId);
+      allow create, update, delete: if false;
+
+      match /members/{memberUid} {
+        allow read: if isHouseholdMember(householdId);
+        allow write: if false;
+      }
+
+      match /ingredients/{ingredientId} {
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasAll(['name', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.quantity is string
+          && request.resource.data.expiryDate is string
+          && householdItemTimestampsValid();
+        allow update: if isHouseholdMember(householdId)
+          && householdCreatedAtUnchanged()
+          && request.resource.data.keys().hasOnly(['name', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 120
+          && request.resource.data.quantity is string
+          && request.resource.data.expiryDate is string
+          && householdItemTimestampsValid();
+        allow delete: if isHouseholdMember(householdId);
+      }
+
+      match /shopping/{recordId} {
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasAll(['type', 'date', 'amount', 'currency', 'items', 'ingredients', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['type', 'date', 'amount', 'store', 'currency', 'items', 'ingredients', 'recipeId', 'recipeName', 'ingredientsAdded', 'pantryAdded', 'groceryItemKey', 'source', 'createdAt', 'updatedAt'])
+          && request.resource.data.type is string
+          && request.resource.data.date is string
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 0
+          && request.resource.data.currency is string
+          && request.resource.data.items is list
+          && request.resource.data.ingredients is list
+          && householdItemTimestampsValid();
+        allow update: if isHouseholdMember(householdId)
+          && householdCreatedAtUnchanged()
+          && request.resource.data.keys().hasOnly(['type', 'date', 'amount', 'store', 'currency', 'items', 'ingredients', 'recipeId', 'recipeName', 'ingredientsAdded', 'pantryAdded', 'groceryItemKey', 'source', 'createdAt', 'updatedAt'])
+          && request.resource.data.type is string
+          && request.resource.data.date is string
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 0
+          && request.resource.data.currency is string
+          && request.resource.data.items is list
+          && request.resource.data.ingredients is list
+          && householdItemTimestampsValid();
+        allow delete: if isHouseholdMember(householdId);
+      }
+
+      match /grocery/preferences {
+        allow read: if isHouseholdMember(householdId);
+        allow create, update: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasOnly(['activeWeekKey', 'byWeek', 'currency', 'monthlyFoodBudget', 'updatedAt'])
+          && request.resource.data.activeWeekKey is string
+          && request.resource.data.byWeek is map
+          && (!('currency' in request.resource.data) || request.resource.data.currency is string)
+          && (!('monthlyFoodBudget' in request.resource.data) || (request.resource.data.monthlyFoodBudget is number && request.resource.data.monthlyFoodBudget >= 0))
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if isHouseholdOwner(householdId);
+      }
+
+      match /mealPlans/default {
+        allow read: if isHouseholdMember(householdId);
+        allow create, update: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasOnly(['plans', 'updatedAt'])
+          && request.resource.data.plans is map
+          && request.resource.data.updatedAt is timestamp;
+        allow delete: if isHouseholdOwner(householdId);
+      }
+
+      match /mealCalendar/{logId} {
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasAll(['date', 'name', 'mealType', 'cost', 'currency', 'ingredients', 'memo', 'photo', 'usedExpiringIngredients', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['date', 'name', 'mealType', 'recipeId', 'cost', 'currency', 'ingredients', 'memo', 'photo', 'usedExpiringIngredients', 'createdAt', 'updatedAt'])
+          && request.resource.data.date is string
+          && request.resource.data.name is string
+          && request.resource.data.mealType is string
+          && request.resource.data.cost is number
+          && request.resource.data.cost >= 0
+          && request.resource.data.currency is string
+          && request.resource.data.ingredients is list
+          && request.resource.data.memo is string
+          && request.resource.data.photo is string
+          && request.resource.data.usedExpiringIngredients is bool
+          && householdItemTimestampsValid();
+        allow update: if isHouseholdMember(householdId)
+          && householdCreatedAtUnchanged()
+          && request.resource.data.keys().hasOnly(['date', 'name', 'mealType', 'recipeId', 'cost', 'currency', 'ingredients', 'memo', 'photo', 'usedExpiringIngredients', 'createdAt', 'updatedAt'])
+          && request.resource.data.date is string
+          && request.resource.data.name is string
+          && request.resource.data.mealType is string
+          && request.resource.data.cost is number
+          && request.resource.data.cost >= 0
+          && request.resource.data.currency is string
+          && request.resource.data.ingredients is list
+          && request.resource.data.memo is string
+          && request.resource.data.photo is string
+          && request.resource.data.usedExpiringIngredients is bool
+          && householdItemTimestampsValid();
+        allow delete: if isHouseholdMember(householdId);
+      }
+
+      match /savedRecipes/{recipeId} {
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasOnly(['recipeId', 'savedByMembers'])
+          && request.resource.data.recipeId == recipeId
+          && request.resource.data.recipeId is string
+          && request.resource.data.savedByMembers is list
+          && request.resource.data.savedByMembers.size() == 1
+          && request.resource.data.savedByMembers[0].uid == request.auth.uid
+          && request.resource.data.savedByMembers[0].name is string
+          && request.resource.data.savedByMembers[0].savedAt is timestamp;
+        allow delete: if isHouseholdMember(householdId);
+        allow update: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasOnly(['recipeId', 'savedByMembers'])
+          && request.resource.data.recipeId == recipeId
+          && request.resource.data.savedByMembers is list;
+      }
+
+      match /extractedRecipes/{recipeId} {
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId)
+          && request.resource.data.keys().hasAll(['name', 'ingredients', 'steps', 'createdBy', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'ingredients', 'optionalIngredients', 'ingredientSubstitutes', 'steps', 'cookTime', 'difficulty', 'category', 'dishType', 'cuisine', 'tags', 'dietTags', 'image', 'thumbnailUrl', 'calories', 'memo', 'sourceUrl', 'videoUrl', 'sourcePostUrl', 'normalizedVideoId', 'normalizedSourceUrl', 'sourcePlatform', 'parentRecipeId', 'createdFrom', 'sourceRecipeId', 'sourceType', 'isCustomVersion', 'ownerId', 'authorId', 'authorName', 'visibility', 'publicRecipeId', 'createdBy', 'createdAt', 'updatedAt'])
+          && request.resource.data.name is string
+          && request.resource.data.ingredients is list
+          && request.resource.data.steps is list
+          && request.resource.data.createdBy == request.auth.uid
+          && householdItemTimestampsValid();
+        allow update: if isHouseholdMember(householdId)
+          && householdCreatedAtUnchanged()
+          && !('createdBy' in request.resource.data.diff(resource.data).affectedKeys())
+          && request.resource.data.keys().hasOnly(['name', 'ingredients', 'optionalIngredients', 'ingredientSubstitutes', 'steps', 'cookTime', 'difficulty', 'category', 'dishType', 'cuisine', 'tags', 'dietTags', 'image', 'thumbnailUrl', 'calories', 'memo', 'sourceUrl', 'videoUrl', 'sourcePostUrl', 'normalizedVideoId', 'normalizedSourceUrl', 'sourcePlatform', 'parentRecipeId', 'createdFrom', 'sourceRecipeId', 'sourceType', 'isCustomVersion', 'ownerId', 'authorId', 'authorName', 'visibility', 'publicRecipeId', 'createdBy', 'createdAt', 'updatedAt'])
+          && request.resource.data.name is string
+          && request.resource.data.ingredients is list
+          && request.resource.data.steps is list
+          && householdItemTimestampsValid();
+        allow delete: if isHouseholdMember(householdId);
+      }
+
+      match /statistics/{periodId} {
+        allow read: if isHouseholdMember(householdId);
+        allow write: if false;
+      }
+    }
+
+    // 초대와 rate-limit 상태는 Admin SDK API 이외의 경로에서 노출하지 않는다.
+    match /householdInvites/{inviteId} {
+      allow read, write: if false;
+    }
+
+    match /householdRateLimits/{rateLimitId} {
+      allow read, write: if false;
     }
   }
 }

@@ -13,6 +13,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
+import { FamilySharingService } from './family-sharing-service.js';
 
 const SUBCOLLECTION = 'mealPlans';
 const DOC_ID = 'default';
@@ -21,6 +22,8 @@ let snapshotUnsubscribe = null;
 
 function planDoc(uid) {
   if (!db || !uid) return null;
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (householdId) return doc(db, 'households', householdId, SUBCOLLECTION, DOC_ID);
   return doc(db, 'users', uid, SUBCOLLECTION, DOC_ID);
 }
 

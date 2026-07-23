@@ -86,14 +86,25 @@ export async function verifyFirebaseIdToken(idToken) {
     return decoded;
   } catch (err) {
     const firebaseCode = err?.code || err?.errorInfo?.code || null;
+    const causeMessage = err?.message || String(err);
     console.warn('[firebase-admin] verifyIdToken failed:', {
       code: firebaseCode,
-      message: err?.message || String(err),
+      message: causeMessage,
     });
-    const error = new Error('로그인 정보가 유효하지 않습니다. 다시 로그인해 주세요.');
-    error.code = 'INVALID_ID_TOKEN';
+    console.error('[firebase-admin] verifyIdToken stack:', err?.stack || causeMessage);
+    const networkUnavailable = /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|network/i.test(causeMessage);
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    const error = new Error(
+      isDevelopment
+        ? `Firebase ID 토큰 검증 실패: ${causeMessage}`
+        : (networkUnavailable
+          ? 'Firebase 인증 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+          : '로그인 정보가 유효하지 않습니다. 다시 로그인해 주세요.'),
+    );
+    error.code = networkUnavailable ? 'FIREBASE_AUTH_UNAVAILABLE' : 'INVALID_ID_TOKEN';
     error.firebaseCode = firebaseCode;
-    error.httpStatus = firebaseCode === 'auth/argument-error' ? 400 : 401;
+    error.causeMessage = causeMessage;
+    error.httpStatus = networkUnavailable ? 503 : (firebaseCode === 'auth/argument-error' ? 400 : 401);
     throw error;
   }
 }

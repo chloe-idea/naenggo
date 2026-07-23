@@ -8,15 +8,18 @@
  */
 import {
   doc,
+  collection,
   getDoc,
   getDocFromServer,
   onSnapshot,
   setDoc,
   updateDoc,
+  runTransaction,
   serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
+import { FamilySharingService } from './family-sharing-service.js';
 
 const SUBCOLLECTION = 'settings';
 const DOC_ID = 'preferences';
@@ -25,7 +28,44 @@ let snapshotUnsubscribe = null;
 
 function settingsDoc(uid) {
   if (!db || !uid) return null;
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (householdId) return doc(db, 'households', householdId, 'grocery', DOC_ID);
   return doc(db, 'users', uid, SUBCOLLECTION, DOC_ID);
+}
+
+function savedRecipesCollection() {
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (!db || !householdId) return null;
+  return collection(db, 'households', householdId, 'savedRecipes');
+}
+
+function isFamilyScope() {
+  return Boolean(FamilySharingService.getActiveHouseholdId());
+}
+
+function normalizeSavedByMembers(data = {}) {
+  const members = Array.isArray(data.savedByMembers) ? data.savedByMembers : [];
+  const legacy = data.savedBy ? [{
+    uid: data.savedBy,
+    name: data.savedByName || '냉장GO 사용자',
+    savedAt: data.savedAt || null,
+  }] : [];
+  return [...members, ...legacy].reduce((result, member) => {
+    const uid = String(member?.uid || '').trim();
+    if (uid && !result.some((item) => item.uid === uid)) {
+      result.push({ uid, name: String(member.name || '냉장GO 사용자'), savedAt: member.savedAt || null });
+    }
+    return result;
+  }, []);
+}
+
+function readSettingsData(data = {}) {
+  if (!isFamilyScope()) return data;
+  return {
+    currency: data.currency,
+    monthlyFoodBudget: data.monthlyFoodBudget,
+    grocery: { activeWeekKey: data.activeWeekKey, byWeek: data.byWeek },
+  };
 }
 
 const DEFAULT_SETTINGS = {
@@ -253,19 +293,48 @@ export const FirestoreSettingsService = {
       });
       return null;
     }
-    snapshotUnsubscribe = onSnapshot(
+    const emit = (preferenceData, savedRecipes = []) => {
+      const data = readSettingsData(preferenceData);
+      onSettings?.({
+        currency: data.currency || DEFAULT_SETTINGS.currency,
+        monthlyFoodBudget: Number(data.monthlyFoodBudget) || 0,
+        grocery: normalizeGroceryFromFirestore(data.grocery),
+        savedRecipeIds: savedRecipes.map((item) => item.recipeId),
+        savedRecipes,
+      });
+    };
+    let preferenceData = {};
+    let savedRecipes = [];
+    const stopPreferences = onSnapshot(
       settingsDoc(uid),
       (snap) => {
-        const data = snap.exists() ? snap.data() : {};
-        onSettings?.({
-          currency: data.currency || DEFAULT_SETTINGS.currency,
-          monthlyFoodBudget: Number(data.monthlyFoodBudget) || 0,
-          grocery: normalizeGroceryFromFirestore(data.grocery),
-          savedRecipeIds: Array.isArray(data.savedRecipeIds) ? data.savedRecipeIds : [],
-        });
+        preferenceData = snap.exists() ? snap.data() : {};
+        savedRecipes = isFamilyScope()
+          ? savedRecipes
+          : (Array.isArray(preferenceData.savedRecipeIds) ? preferenceData.savedRecipeIds : []);
+        emit(preferenceData, Array.isArray(savedRecipes)
+          ? savedRecipes.map((item) => typeof item === 'string' ? { recipeId: item, savedByMembers: [] } : item)
+          : []);
       },
       (err) => onError?.(err),
     );
+    if (isFamilyScope()) {
+      const stopSavedRecipes = onSnapshot(
+        savedRecipesCollection(),
+        (snap) => {
+          savedRecipes = snap.docs.map((item) => ({
+            recipeId: item.id,
+            ...item.data(),
+            savedByMembers: normalizeSavedByMembers(item.data()),
+          }));
+          emit(preferenceData, savedRecipes);
+        },
+        (err) => onError?.(err),
+      );
+      snapshotUnsubscribe = () => { stopPreferences(); stopSavedRecipes(); };
+    } else {
+      snapshotUnsubscribe = stopPreferences;
+    }
     return snapshotUnsubscribe;
   },
 
@@ -273,6 +342,12 @@ export const FirestoreSettingsService = {
     const user = auth?.currentUser;
     if (!user?.uid || !db) throw new Error('로그인 후 설정을 저장할 수 있습니다.');
 
+    if (isFamilyScope() && Object.prototype.hasOwnProperty.call(partial || {}, 'savedRecipeIds')) {
+      const { savedRecipeIds, ...rest } = partial;
+      await this.saveSavedRecipeIds(savedRecipeIds);
+      if (!Object.keys(rest).length) return;
+      partial = rest;
+    }
     // grocery가 포함되면 전용 저장으로 주차 병합 처리
     if (partial && Object.prototype.hasOwnProperty.call(partial, 'grocery')) {
       const { grocery, ...rest } = partial;
@@ -290,12 +365,12 @@ export const FirestoreSettingsService = {
       return;
     }
 
+    // 가족 scope의 grocery 문서는 flat 구조다. 통화·예산만 저장할 때
+    // 빈 byWeek를 병합하면 기존 가족 장보기 주차가 통째로 사라진다.
+    const payload = { ...partial, updatedAt: serverTimestamp() };
     await setDoc(
       settingsDoc(user.uid),
-      sanitizeFirestorePayload({
-        ...partial,
-        updatedAt: serverTimestamp(),
-      }, 'FirestoreSettingsService.saveSettings'),
+      sanitizeFirestorePayload(payload, 'FirestoreSettingsService.saveSettings'),
       { merge: true },
     );
   },
@@ -327,12 +402,13 @@ export const FirestoreSettingsService = {
       } catch {
         snap = await getDoc(ref);
       }
+      const sourceGrocery = isFamilyScope() ? snap.data() : snap.data()?.grocery;
       let existingByWeek = snap.exists()
-        ? collapseByWeek(snap.data()?.grocery?.byWeek || {})
+        ? collapseByWeek(sourceGrocery?.byWeek || {})
         : {};
       // 레거시 flat grocery도 한 주로 승격해 보호
       if (!Object.keys(existingByWeek).length && snap.exists()) {
-        const g = snap.data()?.grocery;
+        const g = sourceGrocery;
         if (g && typeof g === 'object' && !isGroceryWeekEmpty(g)) {
           const key = normalizeGroceryWeekKey(g.activeWeekKey || incoming.activeWeekKey || new Date());
           existingByWeek = {
@@ -355,10 +431,10 @@ export const FirestoreSettingsService = {
         activeWeekKey: incoming.activeWeekKey || Object.keys(mergedByWeek)[0] || '',
         byWeek: mergedByWeek,
       };
-      const payload = sanitizeFirestorePayload({
-        grocery: nextGrocery,
-        updatedAt: serverTimestamp(),
-      }, 'FirestoreSettingsService.saveGroceryState');
+      const payload = sanitizeFirestorePayload(isFamilyScope()
+        ? { ...nextGrocery, updatedAt: serverTimestamp() }
+        : { grocery: nextGrocery, updatedAt: serverTimestamp() },
+      'FirestoreSettingsService.saveGroceryState');
 
       if (snap.exists()) {
         await updateDoc(ref, payload);
@@ -388,6 +464,37 @@ export const FirestoreSettingsService = {
   },
 
   async saveSavedRecipeIds(savedRecipeIds) {
-    return this.saveSettings({ savedRecipeIds });
+    if (!isFamilyScope()) return this.saveSettings({ savedRecipeIds });
+    const user = auth?.currentUser;
+    const col = savedRecipesCollection();
+    if (!user?.uid || !col) throw new Error('로그인 후 저장한 레시피를 관리할 수 있습니다.');
+    const wanted = new Set((Array.isArray(savedRecipeIds) ? savedRecipeIds : []).map(String));
+    const existing = await getDoc(settingsDoc(user.uid)); // membership/rules check before collection write
+    if (!existing.exists() && !FamilySharingService.isActive()) return;
+    const displayName = String(user.displayName || user.email?.split('@')[0] || '냉장GO 사용자').slice(0, 40);
+    const currentSnapshot = await new Promise((resolve, reject) => {
+      const stop = onSnapshot(col, (snap) => { stop(); resolve(snap); }, reject);
+    });
+    const operations = [...new Set([...currentSnapshot.docs.map((item) => item.id), ...wanted])];
+    await Promise.all(operations.map((id) => runTransaction(db, async (tx) => {
+      const ref = doc(col, id);
+      const snap = await tx.get(ref);
+      const data = snap.exists() ? snap.data() : {};
+      const members = normalizeSavedByMembers(data);
+      const hasCurrentUser = members.some((member) => member.uid === user.uid);
+      if (wanted.has(id) && !hasCurrentUser) {
+        tx.set(ref, {
+          recipeId: id,
+          savedByMembers: [...members, { uid: user.uid, name: displayName, savedAt: new Date() }],
+        }, { merge: true });
+      } else if (!wanted.has(id) && hasCurrentUser) {
+        const remaining = members.filter((member) => member.uid !== user.uid);
+        if (remaining.length) tx.set(ref, { recipeId: id, savedByMembers: remaining }, { merge: true });
+        else tx.delete(ref);
+      } else if (snap.exists() && data.savedBy && !data.savedByMembers) {
+        // 기존 single-saver 문서는 다음 저장 동작에서 새 구조로 승격한다.
+        tx.set(ref, { recipeId: id, savedByMembers: members }, { merge: true });
+      }
+    })));
   },
 };

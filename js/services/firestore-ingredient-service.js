@@ -12,6 +12,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
+import { FamilySharingService } from './family-sharing-service.js';
 
 const INGREDIENTS_COLLECTION = 'ingredients';
 
@@ -19,12 +20,24 @@ let snapshotUnsubscribe = null;
 
 function ingredientsCollection(uid) {
   if (!db || !uid) return null;
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (householdId) return collection(db, 'households', householdId, INGREDIENTS_COLLECTION);
   return collection(db, 'users', uid, INGREDIENTS_COLLECTION);
 }
 
 function ingredientDoc(uid, docId) {
   if (!db || !uid || !docId) return null;
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  if (householdId) return doc(db, 'households', householdId, INGREDIENTS_COLLECTION, docId);
   return doc(db, 'users', uid, INGREDIENTS_COLLECTION, docId);
+}
+
+function ingredientPath(uid, docId = null) {
+  const householdId = FamilySharingService.getActiveHouseholdId();
+  const base = householdId
+    ? `households/${householdId}/${INGREDIENTS_COLLECTION}`
+    : `users/${uid}/${INGREDIENTS_COLLECTION}`;
+  return docId ? `${base}/${docId}` : base;
 }
 
 function mapFirestoreDoc(docSnap, uid) {
@@ -93,7 +106,11 @@ export const FirestoreIngredientService = {
     }
 
     const col = ingredientsCollection(user.uid);
-    console.log('[FirestoreIngredientService] onSnapshot 구독 시작:', user.uid);
+    console.info('[FirestoreIngredientService] onSnapshot subscription', {
+      uid: user.uid,
+      path: ingredientPath(user.uid),
+      householdId: FamilySharingService.getActiveHouseholdId(),
+    });
 
     snapshotUnsubscribe = onSnapshot(
       col,
@@ -105,7 +122,14 @@ export const FirestoreIngredientService = {
         onItems?.(items);
       },
       (error) => {
-        console.error('[FirestoreIngredientService] onSnapshot 실패:', error?.code, error?.message, error);
+        console.error('[FirestoreIngredientService] onSnapshot failed', {
+          uid: user.uid,
+          path: ingredientPath(user.uid),
+          householdId: FamilySharingService.getActiveHouseholdId(),
+          code: error?.code || null,
+          message: error?.message || String(error),
+          error,
+        });
         onError?.(error);
       },
     );
@@ -148,7 +172,13 @@ export const FirestoreIngredientService = {
       throw new Error('Firestore collection을 만들 수 없습니다.');
     }
 
-    console.log('SAVE_TARGET: Firestore users/' + user.uid + '/ingredients');
+    const path = ingredientPath(user.uid);
+    console.info('[FirestoreIngredientService] add ingredient target', {
+      uid: user.uid,
+      path,
+      householdId: FamilySharingService.getActiveHouseholdId(),
+      payloadKeys: Object.keys(payload),
+    });
 
     try {
       const docRef = await addDoc(
@@ -158,7 +188,14 @@ export const FirestoreIngredientService = {
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', docRef.id);
       return { id: docRef.id, firestoreId: docRef.id, ...payload };
     } catch (error) {
-      console.error('INGREDIENT_FIRESTORE_SAVE_FAILED', error);
+      console.error('[FirestoreIngredientService] add ingredient failed', {
+        uid: user.uid,
+        path,
+        householdId: FamilySharingService.getActiveHouseholdId(),
+        code: error?.code || null,
+        message: error?.message || String(error),
+        error,
+      });
       throw error;
     }
   },
@@ -181,6 +218,7 @@ export const FirestoreIngredientService = {
       updatedAt: serverTimestamp(),
     };
     if (!payload.name) throw new Error('재료명이 비어 있습니다.');
+    const path = ingredientPath(user.uid, docId);
 
     try {
       await updateDoc(
@@ -189,7 +227,14 @@ export const FirestoreIngredientService = {
       );
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', docId);
     } catch (error) {
-      console.error('INGREDIENT_FIRESTORE_SAVE_FAILED', error);
+      console.error('[FirestoreIngredientService] update ingredient failed', {
+        uid: user.uid,
+        path,
+        householdId: FamilySharingService.getActiveHouseholdId(),
+        code: error?.code || null,
+        message: error?.message || String(error),
+        error,
+      });
       throw error;
     }
   },
@@ -206,12 +251,20 @@ export const FirestoreIngredientService = {
       console.error('NO_FIRESTORE_DB');
       throw new Error('Firestore가 초기화되지 않았습니다.');
     }
+    const path = ingredientPath(user.uid, docId);
 
     try {
       await deleteDoc(ref);
       console.log('[FirestoreIngredientService] Firestore 재료 삭제 성공:', docId);
     } catch (error) {
-      console.error('INGREDIENT_FIRESTORE_SAVE_FAILED', error);
+      console.error('[FirestoreIngredientService] delete ingredient failed', {
+        uid: user.uid,
+        path,
+        householdId: FamilySharingService.getActiveHouseholdId(),
+        code: error?.code || null,
+        message: error?.message || String(error),
+        error,
+      });
       throw error;
     }
   },

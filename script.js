@@ -2049,6 +2049,7 @@ function builtinSaveSeed(index) {
 
 const SavedRecipeRepository = {
   _ids: [],
+  _entries: new Map(),
   load() {
     this.clearSession();
     return this._ids;
@@ -2058,15 +2059,37 @@ const SavedRecipeRepository = {
   },
   clearSession() {
     this._ids = [];
+    this._entries = new Map();
   },
   replaceIds(ids) {
     this._ids = Array.isArray(ids) ? [...ids] : [];
+    this._entries = new Map(this._ids.map((id) => [id, { recipeId: id, savedByMembers: [] }]));
   },
-  isSaved(id) { return this._ids.includes(id); },
+  replaceSavedRecipes(entries) {
+    const normalized = Array.isArray(entries) ? entries : [];
+    this._ids = normalized.map((entry) => String(entry.recipeId || entry.id || '')).filter(Boolean);
+    this._entries = new Map(normalized.map((entry) => [String(entry.recipeId || entry.id), entry]));
+  },
+  isSaved(id) {
+    if (!window.FirebaseServices?.FamilySharingService?.isActive?.()) return this._ids.includes(id);
+    const uid = window.FirebaseServices?.auth?.currentUser?.uid;
+    return Boolean(uid && this.getSavedByMembers(id).some((member) => member.uid === uid));
+  },
   toggle(id) {
     const wasSaved = this.isSaved(id);
-    if (wasSaved) { this._ids = this._ids.filter((x) => x !== id); }
-    else { this._ids.push(id); }
+    const familyMode = window.FirebaseServices?.FamilySharingService?.isActive?.();
+    if (familyMode) {
+      const uid = window.FirebaseServices?.auth?.currentUser?.uid;
+      const entry = this._entries.get(id) || { recipeId: id, savedByMembers: [] };
+      const members = this.getSavedByMembers(id);
+      entry.savedByMembers = wasSaved
+        ? members.filter((member) => member.uid !== uid)
+        : [...members, { uid, name: window.FirebaseServices?.auth?.currentUser?.displayName || '냉장GO 사용자' }];
+      this._entries.set(id, entry);
+      if (!this._ids.includes(id)) this._ids.push(id);
+      if (!entry.savedByMembers.length) this._ids = this._ids.filter((value) => value !== id);
+    } else if (wasSaved) this._ids = this._ids.filter((x) => x !== id);
+    else this._ids.push(id);
     this.save();
     const nowSaved = this.isSaved(id);
     RecipeSaveCountRepository.onSaveToggle(id, wasSaved, nowSaved);
@@ -2074,6 +2097,14 @@ const SavedRecipeRepository = {
   },
   getRecipes() {
     return this._ids.map((id) => RecipeRepository.getById(id)).filter(Boolean);
+  },
+  getSavedByMembers(id) {
+    return this._entries.get(String(id))?.savedByMembers || [];
+  },
+  getMySavedIds() {
+    if (!window.FirebaseServices?.FamilySharingService?.isActive?.()) return [...this._ids];
+    const uid = window.FirebaseServices?.auth?.currentUser?.uid;
+    return this._ids.filter((id) => this.getSavedByMembers(id).some((member) => member.uid === uid));
   },
 };
 
@@ -3257,7 +3288,14 @@ async function saveUserRecipe(data, editingId = null) {
   const uid = window.FirebaseServices?.auth?.currentUser?.uid;
   const authUser = window.FirebaseServices?.auth?.currentUser;
   const recipeId = merged.firestoreId || merged.id;
-  const savePath = `users/${uid}/myRecipes/${recipeId}`;
+  const householdId = window.FirebaseServices?.FamilySharingService?.getActiveHouseholdId?.();
+  const isExtractedRecipe = Boolean(
+    merged.sourcePlatform || merged.videoUrl || merged.normalizedVideoId
+    || String(merged.createdFrom || '').includes('영상'),
+  );
+  const savePath = householdId && isExtractedRecipe
+    ? `households/${householdId}/extractedRecipes/${recipeId}`
+    : `users/${uid}/myRecipes/${recipeId}`;
   const isNewRecipe = !editingId && !existing?.firestoreId;
   console.log('[saveUserRecipe] Firestore 저장 시도', {
     uid,
@@ -3514,7 +3552,7 @@ async function persistSavedRecipeIds() {
     notifyGuestPersonalDataNotPersisted('저장한 레시피');
     return;
   }
-  await getFirestoreUserDataSync().settings.saveSavedRecipeIds([...SavedRecipeRepository._ids]);
+  await getFirestoreUserDataSync().settings.saveSavedRecipeIds(SavedRecipeRepository.getMySavedIds());
 }
 
 function isFirestorePantryEnabled() {
@@ -3536,10 +3574,14 @@ async function createPantryItem(data, options = {}) {
     const authRef = window.FirebaseServices?.auth || null;
     const dbRef = window.FirebaseServices?.db || null;
     const uid = authRef?.currentUser?.uid || null;
+    const householdId = window.FirebaseServices?.FamilySharingService?.getActiveHouseholdId?.() || null;
+    const savePath = householdId
+      ? `households/${householdId}/ingredients`
+      : (uid ? `users/${uid}/ingredients` : null);
 
     console.log('ADD_INGREDIENT_CLICKED');
     console.log('currentUser:', authRef?.currentUser ?? null);
-    if (uid) console.log('SAVE_TARGET: Firestore users/' + uid + '/ingredients');
+    console.info('[createPantryItem] Firestore save target', { uid, householdId, path: savePath });
     console.log('ingredientName:', ingredientName);
 
     if (!uid || !dbRef) {
@@ -3593,10 +3635,15 @@ async function removePantryItem(id) {
 }
 
 function handlePantryFirestoreError(error) {
-  console.error('INGREDIENT_FIRESTORE_SAVE_FAILED', error);
+  console.error('[handlePantryFirestoreError] Firebase write failed', {
+    code: error?.code || null,
+    message: error?.message || String(error),
+    activeHouseholdId: window.FirebaseServices?.FamilySharingService?.getActiveHouseholdId?.() || null,
+    error,
+  });
   const msg = error?.code === 'auth/not-logged-in'
     ? '로그인 후 재료를 추가할 수 있습니다.'
-    : '재료 저장에 실패했습니다. 콘솔을 확인해 주세요.';
+    : `재료 저장에 실패했습니다.${error?.code ? ` (${error.code})` : ''}\n${error?.message || '콘솔에서 상세 오류를 확인해 주세요.'}`;
   alert(msg);
 }
 
@@ -5443,6 +5490,7 @@ function homeRecipeCardHTML(result, options = {}) {
     showAuthor = true,
     readyHtml = '바로 가능',
     showRecommendTags = true,
+    showSavedBy = false,
     variant = 'home', // 'home' | 'my'
   } = options;
   const isMy = variant === 'my';
@@ -5500,6 +5548,10 @@ function homeRecipeCardHTML(result, options = {}) {
   }
 
   const authorRow = showAuthor && !isMy ? recipeAuthorRowHTML(recipe) : '';
+  const savedByMembers = SavedRecipeRepository.getSavedByMembers(recipe.id);
+  const savedByRow = showSavedBy && savedByMembers.length
+    ? `<p class="recipe-card-home__row recipe-card-home__saved-by">${esc(formatSavedByMembers(savedByMembers))}</p>`
+    : '';
 
   const cardClass = isMy
     ? 'recipe-card recipe-card--home recipe-card--my'
@@ -5521,11 +5573,19 @@ function homeRecipeCardHTML(result, options = {}) {
             ${visibilityMeta}
           </div>
           ${authorRow}
+          ${savedByRow}
           ${statusRow}
           ${row4}
         </div>
       </div>
     </div>`;
+}
+
+function formatSavedByMembers(members) {
+  const names = [...new Set((members || []).map((member) => String(member?.name || '').trim()).filter(Boolean))];
+  if (names.length === 1) return `${names[0]}가 저장`;
+  if (names.length === 2) return `${names.join(', ')}가 저장`;
+  return `${names[0]} 외 ${names.length - 1}명이 저장`;
 }
 
 function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryNames, exact, substituted, recommendationReason, showAuthor, showVisibility, showCardSave, showCardMealLog, showCardFork, showSaveCount, hideMatchBadge, hideOrigin, hideReason, hideExpiryHint, showMissingLine, showCommunityBadge }) {
@@ -6522,6 +6582,7 @@ function renderMyRecipes() {
       showVisibility: false,
       readyHtml: '바로 가능',
       showRecommendTags: true,
+      showSavedBy: Boolean(window.FirebaseServices?.FamilySharingService?.isActive?.()),
     })).join('');
     bindRecipeCards(dom.savedList, savedResults);
   }
@@ -9617,9 +9678,12 @@ function handleVideoRecipeSave() {
   }
 
   const uid = window.FirebaseServices?.auth?.currentUser?.uid || null;
+  const householdId = window.FirebaseServices?.FamilySharingService?.getActiveHouseholdId?.();
   console.log('[handleVideoRecipeSave] 영상 레시피 Firestore 저장', {
     uid,
-    path: uid ? `users/${uid}/myRecipes/{recipeId}` : null,
+    path: householdId
+      ? `households/${householdId}/extractedRecipes/{recipeId}`
+      : (uid ? `users/${uid}/myRecipes/{recipeId}` : null),
     visibility,
     loggedIn: isLoggedInAppUser(),
   });
@@ -9658,7 +9722,9 @@ function handleVideoRecipeSave() {
       if (err?.code === 'permission-denied') {
         console.error('[handleVideoRecipeSave] PERMISSION_DENIED', {
           uid: window.FirebaseServices?.auth?.currentUser?.uid || null,
-          path: uid ? `users/${uid}/myRecipes/{recipeId}` : null,
+          path: householdId
+            ? `households/${householdId}/extractedRecipes/{recipeId}`
+            : (uid ? `users/${uid}/myRecipes/{recipeId}` : null),
           message: err.message,
         });
       }
@@ -10595,7 +10661,8 @@ function startApp() {
       }
       markGroceryFirestoreReady();
     }
-    if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
+    if (Array.isArray(settings.savedRecipes)) SavedRecipeRepository.replaceSavedRecipes(settings.savedRecipes);
+    else if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
     refreshAll();
   });
   window.addEventListener('public-recipes-firestore-sync', (e) => {

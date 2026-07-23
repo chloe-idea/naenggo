@@ -11,6 +11,7 @@ import { FirestoreBuiltinRecipesService } from './services/firestore-builtin-rec
 import { FirestoreUserDataSync } from './services/firestore-user-data-sync.js';
 import { FirestorePublicProfilesService } from './services/firestore-public-profiles-service.js';
 import { FirestorePublicRecipesService } from './services/firestore-public-recipes-service.js';
+import { FamilySharingService } from './services/family-sharing-service.js';
 import { normalizeSocialLinks } from './lib/social-url.js';
 import { formatAuthError } from './services/auth-errors.js';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
@@ -28,6 +29,18 @@ let logoutInProgress = false;
 let dataLoadingFallbackTimer = null;
 let cachedUserProfile = null;
 let authBootstrapSafetyTimer = null;
+let pendingFamilyLinkInvite = new URLSearchParams(location.search).get('familyInvite')
+  || sessionStorage.getItem('pending-family-link-invite');
+let familyLinkJoinInFlight = false;
+
+function clearPendingFamilyInviteCache() {
+  pendingFamilyLinkInvite = null;
+  try {
+    sessionStorage.removeItem('pending-family-link-invite');
+  } catch {
+    // Storage access can be unavailable in private browser contexts.
+  }
+}
 
 const authState = {
   authLoading: true,
@@ -565,13 +578,13 @@ async function saveProfileAvatarType(avatarType) {
   }
 }
 
-async function syncUserData(user) {
+async function syncUserData(user, { force = false } = {}) {
   const uid = user.uid;
   if (!AuthService.isLoggedIn()) {
     clearDataLoading('not logged in');
     return;
   }
-  if (syncedUid === uid && !authState.dataLoading) return;
+  if (!force && syncedUid === uid && !authState.dataLoading) return;
 
   FirestoreUserDataSync.stopAll();
   syncedUid = uid;
@@ -582,6 +595,44 @@ async function syncUserData(user) {
   }
 
   try {
+    await FamilySharingService.refresh();
+    if (pendingFamilyLinkInvite && !FamilySharingService.isActive() && !familyLinkJoinInFlight) {
+      familyLinkJoinInFlight = true;
+      try {
+        await FamilySharingService.join({ kind: 'link', secret: pendingFamilyLinkInvite });
+        pendingFamilyMigration = true;
+        sessionStorage.removeItem('pending-family-link-invite');
+        pendingFamilyLinkInvite = null;
+      } finally {
+        familyLinkJoinInFlight = false;
+      }
+    }
+    const householdId = FamilySharingService.getActiveHouseholdId();
+    // 로컬 냉장고 이관은 개인 scope에서 끝낸 뒤에만 가족 복사를 허용한다.
+    // 가족 활성 상태에서 실행하면 개인 로컬 데이터를 공유 household에 섞을 수 있다.
+    if (!householdId) {
+      const legacyResult = await migrateLegacyPantryToFirestore(FirestoreIngredientService, uid);
+      if (legacyResult.migrated) {
+        console.info('[FamilySharing] personal pantry migration completed before household setup', legacyResult);
+      }
+    }
+    const scopeRoot = householdId ? `households/${householdId}` : `users/${uid}`;
+    console.info('[FamilySharing] Firestore data scope', {
+      mode: householdId ? 'family' : 'personal',
+      ingredients: `${scopeRoot}/ingredients`,
+      shopping: `${scopeRoot}/shopping`,
+      groceryAndBudget: householdId
+        ? `${scopeRoot}/grocery/preferences`
+        : `${scopeRoot}/settings/preferences`,
+      mealPlans: `${scopeRoot}/mealPlans/default`,
+      mealCalendar: `${scopeRoot}/mealCalendar`,
+      savedRecipes: householdId
+        ? `${scopeRoot}/savedRecipes`
+        : `${scopeRoot}/settings/preferences.savedRecipeIds`,
+      extractedRecipes: householdId ? `${scopeRoot}/extractedRecipes` : '(not shared)',
+      myRecipes: `users/${uid}/myRecipes`,
+      statistics: householdId ? 'derived from shared mealCalendar + shopping + grocery' : 'derived from personal mealCalendar + shopping + settings',
+    });
     let firstSnapshotDone = false;
     const finishFirstSnapshot = (reason) => {
       if (firstSnapshotDone) return;
@@ -596,6 +647,7 @@ async function syncUserData(user) {
     };
 
     FirestoreUserDataSync.startUserSync({
+      householdId,
       onIngredients: (items) => {
         window.dispatchEvent(new CustomEvent('pantry-firestore-sync', { detail: { items } }));
         markSnapshot();
@@ -626,19 +678,11 @@ async function syncUserData(user) {
       },
     });
 
-    Promise.allSettled([
-      FirestoreUserService.ensureUserDocument(user).then((doc) => {
-        if (doc) cachedUserProfile = doc;
-      }),
-      migrateLegacyPantryToFirestore(FirestoreIngredientService, uid),
-    ]).then((results) => {
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          const label = index === 0 ? 'ensureUserDocument' : 'pantry migration';
-          console.error(`[firebase-bootstrap] ${label} failed:`, result.reason);
-        }
-      });
-    }).catch(() => undefined);
+    FirestoreUserService.ensureUserDocument(user).then((doc) => {
+      if (doc) cachedUserProfile = doc;
+    }).catch((error) => {
+      console.error('[firebase-bootstrap] ensureUserDocument failed:', error);
+    });
   } catch (err) {
     console.error('[firebase-bootstrap] syncUserData failed:', err);
     clearDataLoading('sync error');
@@ -839,6 +883,317 @@ async function signOutFlow(event) {
   }
 }
 
+let pendingFamilyMigration = false;
+let familyInviteRequestInFlight = false;
+let familyMigrationInFlight = false;
+let familyWizardStep = 'start';
+let familyWizardNotice = '';
+
+function setFamilyError(message = '') {
+  const el = $('family-sharing-error');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function toggleFamilyPanel(id, visible) {
+  const el = $(id);
+  if (el) el.hidden = !visible;
+}
+
+function setFamilyWizardStep(step) {
+  familyWizardStep = step;
+  setFamilyError('');
+  renderFamilySharing();
+}
+
+function setFamilyWizardNotice(message = '') {
+  familyWizardNotice = message;
+  const notice = $('family-sharing-notice');
+  if (!notice) return;
+  notice.textContent = message;
+  notice.hidden = !message;
+}
+
+function renderFamilySharing() {
+  const family = FamilySharingService.getActiveFamily();
+  const hasFamily = Boolean(family);
+  const setupPending = Boolean(family?.pendingSetup);
+  if (setupPending || family?.needsMigrationChoice) pendingFamilyMigration = true;
+  const isCreateChoice = !hasFamily && familyWizardStep === 'create-choice';
+  const setupStep = isCreateChoice || (hasFamily && pendingFamilyMigration);
+  if (hasFamily && !setupStep && familyWizardStep !== 'invite') familyWizardStep = 'manage';
+  if (!hasFamily && !['join', 'create-choice'].includes(familyWizardStep)) familyWizardStep = 'start';
+
+  toggleFamilyPanel('family-sharing-empty', !hasFamily && familyWizardStep === 'start');
+  toggleFamilyPanel('family-join-panel', !hasFamily && familyWizardStep === 'join');
+  toggleFamilyPanel('family-migration-panel', setupStep);
+  toggleFamilyPanel('family-sharing-active', hasFamily && !setupStep);
+  toggleFamilyPanel('family-invite-panel', hasFamily && !setupStep && familyWizardStep === 'invite');
+  setFamilyWizardNotice(hasFamily && !setupStep ? familyWizardNotice : '');
+  const isJoining = hasFamily && family?.role === 'member' && setupPending;
+  if (setupStep) {
+    $('family-migration-title').textContent = isJoining
+      ? '가족에 참여했습니다. 현재 사용 중인 개인 냉장고 데이터를 가족 냉장고에 추가하시겠습니까?'
+      : '현재 냉장고 데이터를 새로운 가족 냉장고로 가져올까요?';
+    $('family-migration-description').textContent = isJoining
+      ? '기존 가족 데이터는 변경하지 않으며, 개인 원본 데이터도 그대로 유지됩니다.'
+      : '기존 개인 데이터는 삭제하지 않으며, 복사가 끝난 뒤에 가족 공유 모드로 전환됩니다.';
+    $('family-copy-data-btn').textContent = familyMigrationInFlight
+      ? (isJoining ? '내 데이터를 병합하는 중…' : '기존 데이터를 가져오는 중…')
+      : (isJoining ? '내 데이터 가져오기' : '✓ 현재 데이터를 가져오기 (권장)');
+    $('family-empty-data-btn').textContent = familyMigrationInFlight
+      ? '가족 공유를 시작하는 중…'
+      : (isJoining ? '건너뛰기' : '빈 가족 냉장고로 시작');
+    $('family-migration-back-btn').hidden = hasFamily;
+  }
+  if (!hasFamily) {
+    $('family-sharing-status').textContent = familyWizardStep === 'join'
+      ? '초대 코드로 가족에 참여하기'
+      : (isCreateChoice ? '2단계 · 가족 냉장고 준비' : '1단계 · 가족 공유 시작하기');
+    return;
+  }
+  if (setupStep) {
+    $('family-sharing-status').textContent = familyMigrationInFlight
+      ? '가족 냉장고를 준비하고 있어요.'
+      : '2단계 · 가족 냉장고 준비';
+    return;
+  }
+  $('family-sharing-status').textContent = `3단계 · ${family.role === 'owner' ? '가족 관리자' : '가족 구성원'}`;
+  $('family-name-input').value = family.name || '';
+  const members = Array.isArray(family.members) ? family.members : [];
+  $('family-member-list').innerHTML = members.map((member) => {
+    const role = member.role === 'owner' ? '관리자' : '구성원';
+    const controls = family.role === 'owner' && member.uid !== resolveAuthUser()?.uid
+      ? `<button type="button" class="btn btn--ghost" data-family-transfer="${member.uid}">관리자 이전</button>
+         <button type="button" class="btn btn--ghost" data-family-remove="${member.uid}">제거</button>`
+      : '';
+    return `<div class="profile-menu__name-row"><span class="profile-menu__email">${member.uid === resolveAuthUser()?.uid ? '나' : esc(member.uid.slice(0, 8))} · ${role}</span>${controls}</div>`;
+  }).join('') || '<p class="profile-menu__sync">구성원을 불러오는 중이에요.</p>';
+  $('family-create-new-invite-btn').hidden = setupPending || family.role !== 'owner';
+  $('family-name-input').disabled = setupPending || family.role !== 'owner';
+  $('family-name-save-btn').hidden = setupPending || family.role !== 'owner';
+  $('family-leave-btn').hidden = setupPending;
+  $('family-delete-btn').hidden = setupPending || family.role !== 'owner' || members.length !== 1;
+}
+
+function openFamilySharing() {
+  const modal = $('family-sharing-modal');
+  if (!modal || !resolveAuthUser()) return;
+  closeProfileMenu();
+  setFamilyError('');
+  familyWizardStep = FamilySharingService.getActiveFamily()?.pendingSetup ? 'setup' : 'start';
+  familyWizardNotice = '';
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
+  renderFamilySharing();
+}
+
+function closeFamilySharing() {
+  const modal = $('family-sharing-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+  if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
+}
+
+async function startFamilySetup() {
+  // Household는 복사 방식 선택 뒤에만 생성한다.
+  setFamilyWizardStep('create-choice');
+}
+
+async function showFamilyInvites() {
+  if (familyInviteRequestInFlight) return;
+  familyInviteRequestInFlight = true;
+  const reissueButton = $('family-create-new-invite-btn');
+  if (reissueButton) reissueButton.disabled = true;
+  setFamilyError('');
+  try {
+    const family = FamilySharingService.getActiveFamily();
+    if (!family) return;
+    if (family.pendingSetup) {
+      return;
+    }
+    const expiresAt = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString();
+    const { link: linkInvite, code: codeInvite } = await FamilySharingService.reissueInvites({
+      householdId: family.householdId,
+      maxUses: 10,
+      expiresAt,
+    });
+    $('family-invite-link').value = `${location.origin}${location.pathname}?familyInvite=${encodeURIComponent(linkInvite.secret)}`;
+    $('family-invite-code').value = codeInvite.secret;
+    familyWizardStep = 'invite';
+    renderFamilySharing();
+    setFamilyWizardNotice('새 초대 코드가 발급되었습니다. 기존 코드는 사용할 수 없습니다.');
+  } catch (err) {
+    setFamilyError(err.code === 'RATE_LIMITED'
+      ? `초대 코드를 너무 자주 재발급했습니다. ${err.retryAfterSeconds >= 60
+        ? `${Math.ceil(err.retryAfterSeconds / 60)}분`
+        : `${Math.max(1, err.retryAfterSeconds || 1)}초`} 후 다시 시도해 주세요.`
+      : err.message);
+  } finally {
+    familyInviteRequestInFlight = false;
+    if (reissueButton) reissueButton.disabled = false;
+  }
+}
+
+async function copyFamilyText(id) {
+  const value = $(id)?.value || '';
+  try {
+    await navigator.clipboard.writeText(value);
+    setFamilyError('복사했습니다.');
+  } catch {
+    $(id)?.select();
+    document.execCommand('copy');
+    setFamilyError('복사했습니다.');
+  }
+}
+
+async function completeFamilyJoin(kind, secret) {
+  const normalized = String(secret || '').trim();
+  if (!normalized) return setFamilyError('초대 코드를 입력해 주세요.');
+  setFamilyError('');
+  try {
+    await FamilySharingService.join({ kind, secret: normalized });
+    pendingFamilyMigration = true;
+    familyWizardStep = 'setup';
+    renderFamilySharing();
+  } catch (err) {
+    setFamilyError(err.message);
+  }
+}
+
+function bindFamilySharingUi() {
+  $('profile-family-sharing-btn')?.addEventListener('click', openFamilySharing);
+  $('family-create-invite-btn')?.addEventListener('click', startFamilySetup);
+  $('family-create-new-invite-btn')?.addEventListener('click', showFamilyInvites);
+  $('family-open-join-btn')?.addEventListener('click', () => setFamilyWizardStep('join'));
+  $('family-join-submit-btn')?.addEventListener('click', () => completeFamilyJoin('code', $('family-join-code')?.value));
+  $('family-join-back-btn')?.addEventListener('click', () => setFamilyWizardStep('start'));
+  $('family-migration-back-btn')?.addEventListener('click', () => setFamilyWizardStep('start'));
+  $('family-copy-link-btn')?.addEventListener('click', () => copyFamilyText('family-invite-link'));
+  $('family-copy-code-btn')?.addEventListener('click', () => copyFamilyText('family-invite-code'));
+  $('family-name-save-btn')?.addEventListener('click', async () => {
+    try { await FamilySharingService.rename($('family-name-input')?.value); renderFamilySharing(); } catch (err) { setFamilyError(err.message); }
+  });
+  $('family-member-list')?.addEventListener('click', async (event) => {
+    const transfer = event.target.closest('[data-family-transfer]')?.dataset.familyTransfer;
+    const remove = event.target.closest('[data-family-remove]')?.dataset.familyRemove;
+    try {
+      if (transfer && window.confirm('이 구성원에게 관리자 권한을 이전할까요?')) await FamilySharingService.transferOwner(transfer);
+      if (remove && window.confirm('이 구성원을 가족 공유에서 제거할까요?')) await FamilySharingService.removeMember(remove);
+      await FamilySharingService.refresh();
+      renderFamilySharing();
+    } catch (err) { setFamilyError(err.message); }
+  });
+  $('family-leave-btn')?.addEventListener('click', async () => {
+    try {
+      await FamilySharingService.leave();
+      clearPendingFamilyInviteCache();
+      pendingFamilyMigration = false;
+      renderFamilySharing();
+    } catch (err) { setFamilyError(err.message); }
+  });
+  $('family-delete-btn')?.addEventListener('click', async () => {
+    if (!window.confirm('가족 공유 데이터를 삭제할까요? 개인 원본 데이터는 유지됩니다.')) return;
+    try {
+      await FamilySharingService.deleteFamily();
+      clearPendingFamilyInviteCache();
+      pendingFamilyMigration = false;
+      renderFamilySharing();
+    } catch (err) { setFamilyError(err.message); }
+  });
+  $('family-copy-data-btn')?.addEventListener('click', async () => {
+    if (familyMigrationInFlight) return;
+    familyMigrationInFlight = true;
+    const copyButton = $('family-copy-data-btn');
+    const emptyButton = $('family-empty-data-btn');
+    const originalText = copyButton?.textContent;
+    if (copyButton) {
+      copyButton.disabled = true;
+      copyButton.textContent = '기존 데이터를 가져오는 중…';
+    }
+    if (emptyButton) emptyButton.disabled = true;
+    renderFamilySharing();
+    try {
+      if (!FamilySharingService.getActiveFamily()) {
+        await FamilySharingService.createFamily();
+        pendingFamilyMigration = true;
+      }
+      const migration = await FamilySharingService.copyCurrentData();
+      console.info('[FamilySharing] migration copy completed', {
+        householdId: FamilySharingService.getActiveFamily()?.householdId,
+        copiedCount: migration?.migration?.copiedCount ?? 0,
+        skippedCount: migration?.migration?.skippedCount ?? 0,
+        copiedPaths: migration?.migration?.copied || [],
+      });
+      const isJoin = FamilySharingService.getActiveFamily()?.role === 'member';
+      if (!isJoin && (migration?.migration?.copiedCount || 0) + (migration?.migration?.skippedCount || 0) === 0) {
+        throw new Error('가져올 공유 데이터가 없습니다. 빈 가족 냉장고로 시작하거나 개인 데이터를 먼저 저장해 주세요.');
+      }
+      await FamilySharingService.activate({ migrationMode: 'copy' });
+      pendingFamilyMigration = false;
+      familyWizardStep = 'manage';
+      setFamilyWizardNotice('가족 냉장고 준비가 완료되었습니다.');
+      renderFamilySharing();
+    } catch (err) {
+      if (FamilySharingService.getActiveFamily()?.role === 'owner') {
+        try { await FamilySharingService.cancelPendingSetup(); } catch (cancelError) { console.error('[FamilySharing] pending setup rollback failed', cancelError); }
+        pendingFamilyMigration = false;
+        familyWizardStep = 'create-choice';
+      }
+      setFamilyError(`데이터를 가져오지 못했습니다. 개인 데이터는 그대로 유지됩니다. ${err.message}`);
+    } finally {
+      familyMigrationInFlight = false;
+      if (copyButton) {
+        copyButton.disabled = false;
+        copyButton.textContent = originalText || '✓ 현재 데이터를 가져오기 (권장)';
+      }
+      if (emptyButton) emptyButton.disabled = false;
+      renderFamilySharing();
+    }
+  });
+  $('family-empty-data-btn')?.addEventListener('click', async () => {
+    if (familyMigrationInFlight) return;
+    familyMigrationInFlight = true;
+    const copyButton = $('family-copy-data-btn');
+    const emptyButton = $('family-empty-data-btn');
+    const originalText = emptyButton?.textContent;
+    if (copyButton) copyButton.disabled = true;
+    if (emptyButton) {
+      emptyButton.disabled = true;
+      emptyButton.textContent = '가족 공유를 시작하는 중…';
+    }
+    renderFamilySharing();
+    try {
+      if (!FamilySharingService.getActiveFamily()) {
+        await FamilySharingService.createFamily();
+        pendingFamilyMigration = true;
+      }
+      await FamilySharingService.activate({ migrationMode: 'empty' });
+      pendingFamilyMigration = false;
+      familyWizardStep = 'manage';
+      setFamilyWizardNotice('가족 냉장고 준비가 완료되었습니다.');
+      renderFamilySharing();
+    } catch (err) {
+      setFamilyError(`가족 공유를 시작하지 못했습니다. 개인 데이터는 그대로 유지됩니다. ${err.message}`);
+    } finally {
+      familyMigrationInFlight = false;
+      if (copyButton) copyButton.disabled = false;
+      if (emptyButton) {
+        emptyButton.disabled = false;
+        emptyButton.textContent = originalText || '빈 가족 냉장고로 시작';
+      }
+      renderFamilySharing();
+    }
+  });
+  $('family-sharing-modal')?.querySelectorAll('[data-close-modal="family-sharing"]').forEach((el) => el.addEventListener('click', closeFamilySharing));
+  const invite = new URLSearchParams(location.search).get('familyInvite');
+  if (invite) sessionStorage.setItem('pending-family-link-invite', invite);
+  FamilySharingService.subscribe(renderFamilySharing);
+}
+
 function bindAuthUi() {
   if (authUiBound) return;
   authUiBound = true;
@@ -879,6 +1234,7 @@ function bindAuthUi() {
     if (!btn || btn.disabled) return;
     saveProfileAvatarType(btn.dataset.avatarType);
   });
+  bindFamilySharingUi();
 
   profileModal?.querySelectorAll('[data-close-modal="profile"]').forEach((el) => {
     el.addEventListener('click', closeProfileMenu);
@@ -940,6 +1296,7 @@ async function bootstrap() {
     FirestoreIngredientService,
     FirestoreBuiltinRecipesService,
     FirestoreUserDataSync,
+    FamilySharingService,
     AnalysisQuotaService,
     refreshHeaderQuota,
     isConfigured: isFirebaseConfigured(),
@@ -961,6 +1318,14 @@ window.addEventListener('auth-error', (e) => {
     patchAuthState({ isLoggingIn: false, authLoading: false });
     showAuthError(e.detail);
   }
+});
+
+window.addEventListener('family-sharing-changed', () => {
+  const user = resolveAuthUser();
+  if (!user?.uid || authState.isLoggingOut) return;
+  syncUserData(user, { force: true }).catch((err) => {
+    console.error('[firebase-bootstrap] family sharing resync failed:', err);
+  });
 });
 
 window.addEventListener('ui-modal-change', () => {

@@ -23,6 +23,13 @@ export const Collection = {
   SHOPPING_LISTS: 'shoppingLists',
   SHOPPING_ITEMS: 'items',
   FAVORITES: 'favorites',
+  HOUSEHOLDS: 'households',
+  HOUSEHOLD_INVITES: 'householdInvites',
+  HOUSEHOLD_MEMBERS: 'members',
+  GROCERY: 'grocery',
+  SAVED_RECIPES: 'savedRecipes',
+  EXTRACTED_RECIPES: 'extractedRecipes',
+  STATISTICS: 'statistics',
 };
 
 /** users/{uid} 프로필 필드 */
@@ -41,6 +48,7 @@ export const UserFields = {
   ANALYSIS_QUOTA_USED: 'analysisQuotaUsed',
   DEFAULT_CURRENCY: 'defaultCurrency',
   DEFAULT_FRIDGE_ID: 'defaultFridgeId',
+  ACTIVE_HOUSEHOLD_ID: 'activeHouseholdId',
   CREATED_AT: 'createdAt',
   UPDATED_AT: 'updatedAt',
   LAST_LOGIN_AT: 'lastLoginAt',
@@ -202,6 +210,46 @@ export function userShoppingPath(uid) {
 
 export function userSettingsPath(uid) {
   return `${userPath(uid)}/${Collection.SETTINGS}`;
+}
+
+export function householdPath(householdId) {
+  return `${Collection.HOUSEHOLDS}/${householdId}`;
+}
+
+export function householdMembersPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.HOUSEHOLD_MEMBERS}`;
+}
+
+export function householdIngredientsPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.INGREDIENTS}`;
+}
+
+export function householdShoppingPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.SHOPPING}`;
+}
+
+export function householdGroceryPreferencesPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.GROCERY}/preferences`;
+}
+
+export function householdMealPlansPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.MEAL_PLANS}`;
+}
+
+export function householdMealCalendarPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.MEAL_CALENDAR}`;
+}
+
+export function householdSavedRecipesPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.SAVED_RECIPES}`;
+}
+
+export function householdExtractedRecipesPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.EXTRACTED_RECIPES}`;
+}
+
+export function householdStatisticsPath(householdId) {
+  return `${householdPath(householdId)}/${Collection.STATISTICS}`;
 }
 
 export function publicRecipePath(recipeId) {
