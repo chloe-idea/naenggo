@@ -188,6 +188,15 @@ export const FamilySharingService = {
     });
   },
 
+  async deduplicateIngredients() {
+    const family = this.getActiveFamily();
+    if (!family?.householdId || family.pendingSetup) return null;
+    return request('/deduplicate-ingredients', {
+      method: 'POST',
+      body: { householdId: family.householdId },
+    });
+  },
+
   async cancelPendingSetup() {
     const family = this.getActiveFamily();
     await request('/cancel-pending', {

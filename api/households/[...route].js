@@ -4,6 +4,7 @@ import {
   cancelPendingHousehold,
   copyPersonalDataToHousehold,
   createHousehold,
+  deduplicateHouseholdIngredients,
   deleteLastOwnerHousehold,
   getCurrentHousehold,
   issueInvite,
@@ -93,6 +94,13 @@ export default async function handler(req, res) {
         scopes: req.body?.scopes,
       });
       return res.json({ success: true, migration });
+    }
+    if (req.method === 'POST' && first === 'deduplicate-ingredients') {
+      const result = await deduplicateHouseholdIngredients({
+        ...context(req),
+        householdId: req.body?.householdId,
+      });
+      return res.json({ success: true, result });
     }
     if (req.method === 'POST' && first === 'activate') {
       const household = await activateHousehold({

@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   addDoc,
+  runTransaction,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -64,6 +65,55 @@ function buildFirestorePayload(data) {
     quantity: String(data?.quantity ?? ''),
     expiryDate: String(data?.expiryDate ?? ''),
   };
+}
+
+function normalizedIngredientName(value) {
+  return String(value || '').trim().toLocaleLowerCase();
+}
+
+function ingredientQuantity(value) {
+  const quantity = Number.parseFloat(String(value ?? '').trim());
+  return Number.isFinite(quantity) && quantity >= 0 ? quantity : 1;
+}
+
+function earlierExpiryDate(...values) {
+  return values
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .sort()[0] || '';
+}
+
+async function addOrMergeHouseholdIngredient(col, payload) {
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(col);
+    const sameName = snapshot.docs.filter((snap) => (
+      normalizedIngredientName(snap.data()?.name) === normalizedIngredientName(payload.name)
+    ));
+    if (!sameName.length) {
+      const ref = doc(col);
+      transaction.set(ref, sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'));
+      return { id: ref.id, firestoreId: ref.id, ...payload };
+    }
+
+    const canonical = sameName[0];
+    const totalQuantity = sameName.reduce(
+      (total, snap) => total + ingredientQuantity(snap.data()?.quantity),
+      ingredientQuantity(payload.quantity),
+    );
+    const expiryDate = earlierExpiryDate(
+      payload.expiryDate,
+      ...sameName.map((snap) => snap.data()?.expiryDate),
+    );
+    transaction.set(canonical.ref, sanitizeFirestorePayload({
+      ...canonical.data(),
+      name: String(canonical.data()?.name || payload.name).trim(),
+      quantity: String(totalQuantity),
+      expiryDate,
+      updatedAt: serverTimestamp(),
+    }, 'FirestoreIngredientService.mergeHouseholdIngredient'), { merge: true });
+    sameName.slice(1).forEach((duplicate) => transaction.delete(duplicate.ref));
+    return { id: canonical.id, firestoreId: canonical.id, ...canonical.data(), quantity: String(totalQuantity), expiryDate };
+  });
 }
 
 export const FirestoreIngredientService = {
@@ -181,12 +231,14 @@ export const FirestoreIngredientService = {
     });
 
     try {
-      const docRef = await addDoc(
-        col,
-        sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'),
-      );
-      console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', docRef.id);
-      return { id: docRef.id, firestoreId: docRef.id, ...payload };
+      const result = FamilySharingService.isActive()
+        ? await addOrMergeHouseholdIngredient(col, payload)
+        : await addDoc(
+          col,
+          sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'),
+        ).then((docRef) => ({ id: docRef.id, firestoreId: docRef.id, ...payload }));
+      console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', result.id);
+      return result;
     } catch (error) {
       console.error('[FirestoreIngredientService] add ingredient failed', {
         uid: user.uid,

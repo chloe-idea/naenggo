@@ -168,7 +168,10 @@ function formatIngredientDisplay(ing) {
   const amountPart = ing.amount
     ? (ing.unit ? `${ing.amount}${ing.unit}` : String(ing.amount))
     : (ing.unit || '');
-  const text = [ing.name, amountPart].filter(Boolean).join(' ').trim();
+  const alternativeText = Array.isArray(ing.alternatives) && ing.alternatives.length
+    ? ` (${ing.alternatives.join(', ')})`
+    : (ing.note ? ` (${ing.note})` : '');
+  const text = `${[ing.name, amountPart].filter(Boolean).join(' ').trim()}${alternativeText}`;
   if (!text) return '';
   return ing.optional ? `${text} (선택)` : text;
 }
@@ -209,6 +212,30 @@ function parseRecipeIngredientText(text) {
   return { name: originalText, amount: '', unit: '', originalText };
 }
 
+function parseIngredientAlternatives(annotation) {
+  const raw = String(annotation || '').trim();
+  if (!raw) return [];
+  return raw
+    .replace(/^(또는|혹은|대체\s*[:：]?|대체재\s*[:：]?)\s*/i, '')
+    .replace(/\s*(가능|사용\s*가능)$/i, '')
+    .split(/\s*(?:,|\/|또는|혹은)\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitIngredientAnnotation(text) {
+  const value = String(text || '').trim();
+  const match = value.match(/\s*\(([^()]*)\)\s*$/);
+  if (!match) return { ingredientText: value, alternatives: [], note: '' };
+  const note = String(match[1] || '').trim();
+  const alternativeLike = /^(?:또는|혹은|대체)/.test(note) || /가능$/.test(note);
+  return {
+    ingredientText: value.slice(0, match.index).trim(),
+    alternatives: alternativeLike ? parseIngredientAlternatives(note) : [],
+    note: alternativeLike ? '' : note,
+  };
+}
+
 function parseRecipeIngredient(raw) {
   if (raw && typeof raw === 'object' && raw.name != null) {
     const item = {
@@ -217,6 +244,8 @@ function parseRecipeIngredient(raw) {
       unit: raw.unit != null ? String(raw.unit) : '',
       originalText: raw.originalText || formatIngredientDisplay(raw),
       optional: Boolean(raw.optional),
+      alternatives: Array.isArray(raw.alternatives) ? raw.alternatives.map(String).map((item) => item.trim()).filter(Boolean) : [],
+      note: String(raw.note || '').trim(),
     };
     return { ...item, raw: item.originalText };
   }
@@ -224,10 +253,13 @@ function parseRecipeIngredient(raw) {
   let text = String(raw || '').trim();
   const optional = /\s*\(선택\)\s*$/.test(text);
   text = text.replace(/\s*\(선택\)\s*$/, '').trim();
-  const parsed = parseRecipeIngredientText(text);
+  const annotation = splitIngredientAnnotation(text);
+  const parsed = parseRecipeIngredientText(annotation.ingredientText);
   return {
     ...parsed,
     optional,
+    alternatives: annotation.alternatives,
+    note: annotation.note,
     raw: String(raw || '').trim(),
   };
 }
@@ -246,6 +278,8 @@ function normalizeIngredientItem(raw) {
         unit: String(raw.unit || ''),
         originalText: raw.originalText,
         optional,
+        alternatives: Array.isArray(raw.alternatives) ? raw.alternatives.map(String).map((item) => item.trim()).filter(Boolean) : [],
+        note: String(raw.note || '').trim(),
       };
     }
   } else {
@@ -254,13 +288,16 @@ function normalizeIngredientItem(raw) {
     sourceText = sourceText.replace(/\s*\(선택\)\s*$/, '').trim();
   }
 
-  const parsed = parseRecipeIngredientText(sourceText);
+  const parsedItem = parseRecipeIngredient(raw);
   return {
-    name: parsed.name,
-    amount: parsed.amount,
-    unit: parsed.unit,
-    originalText: parsed.originalText || sourceText,
+    name: parsedItem.name,
+    amount: parsedItem.amount,
+    unit: parsedItem.unit,
+    // 기존 문자열의 대체재 안내를 레시피 화면에서 그대로 보여 준다.
+    originalText: typeof raw === 'string' ? sourceText : (parsedItem.originalText || sourceText),
     optional,
+    alternatives: parsedItem.alternatives || [],
+    note: parsedItem.note || '',
   };
 }
 
@@ -421,6 +458,56 @@ const AffiliateService = {
     window.open(url, '_blank', 'noopener,noreferrer');
   },
 };
+
+const groceryAffiliateUrlCache = new Map();
+const groceryAffiliateRequestCache = new Map();
+
+async function resolveGroceryAffiliateUrl(itemName) {
+  const keyword = AffiliateService.keywordFromIngredient(itemName);
+  if (!keyword) throw new Error('구매할 품목명이 없습니다.');
+  const cacheKey = keyword.toLocaleLowerCase();
+  if (groceryAffiliateUrlCache.has(cacheKey)) return groceryAffiliateUrlCache.get(cacheKey);
+  if (!groceryAffiliateRequestCache.has(cacheKey)) {
+    groceryAffiliateRequestCache.set(cacheKey, AffiliateService.resolveAffiliateUrl(keyword)
+      .then((url) => {
+        groceryAffiliateUrlCache.set(cacheKey, url);
+        return url;
+      })
+      .finally(() => groceryAffiliateRequestCache.delete(cacheKey)));
+  }
+  return groceryAffiliateRequestCache.get(cacheKey);
+}
+
+async function openGroceryPurchaseLink(button) {
+  const itemName = String(button?.dataset.groceryBuyName || '').trim();
+  if (!itemName || button.disabled) return;
+
+  // 비동기 링크 생성 전에 탭을 열어 모바일 브라우저의 popup 차단을 피한다.
+  const purchaseTab = window.open('', '_blank');
+  if (purchaseTab) {
+    try { purchaseTab.opener = null; } catch { /* cross-origin navigation 전에만 설정 시도 */ }
+  }
+  button.disabled = true;
+  button.classList.add('grocery-item__buy--loading');
+  button.setAttribute('aria-busy', 'true');
+  const icon = button.querySelector('.material-symbols-outlined');
+  if (icon) icon.textContent = 'progress_activity';
+
+  try {
+    const url = await resolveGroceryAffiliateUrl(itemName);
+    if (purchaseTab) purchaseTab.location.href = url;
+    else window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (error) {
+    console.error('[GroceryAffiliate] purchase link failed', { itemName, error });
+    purchaseTab?.close?.();
+    showToast('구매 링크를 불러오지 못했습니다.');
+  } finally {
+    button.disabled = false;
+    button.classList.remove('grocery-item__buy--loading');
+    button.removeAttribute('aria-busy');
+    if (icon) icon.textContent = 'shopping_cart';
+  }
+}
 
 /** 쿠팡파트너스 구매하기 고지 (레시피 모달 부족 재료 목록 하단) */
 function affiliateDisclosureHTML() {
@@ -2488,6 +2575,12 @@ function parseGroceryAmount(value) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function formatGroceryAmountInput(value) {
+  const digits = String(value ?? '').replace(/[^\d]/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('ko-KR');
+}
+
 const GroceryRepository = {
   _state: { budget: '', items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] },
   _byWeek: {},
@@ -2736,7 +2829,7 @@ const GroceryRepository = {
     this._state.items[key] = {
       ...meta,
       price: price ?? meta.price,
-      actualAmount: nextActual === '' || nextActual == null ? '' : String(nextActual),
+      actualAmount: nextActual === '' || nextActual == null ? '' : parseGroceryAmount(nextActual),
     };
     this.save();
   },
@@ -2745,7 +2838,7 @@ const GroceryRepository = {
     this._state.items[key] = {
       ...meta,
       checked: Boolean(checked),
-      actualAmount: meta.actualAmount === '' || meta.actualAmount == null ? '' : String(meta.actualAmount),
+      actualAmount: meta.actualAmount === '' || meta.actualAmount == null ? '' : parseGroceryAmount(meta.actualAmount),
     };
     this.save();
   },
@@ -3487,7 +3580,8 @@ function syncGroceryAmountRow(row, { schedulePersist = true } = {}) {
   if (!key) return;
   const priceInput = row.querySelector('.grocery-item__price');
   const price = priceInput ? priceInput.value : GroceryRepository.getMeta(key).price;
-  const actualAmount = row.querySelector('.grocery-item__actual')?.value ?? '';
+  const actualAmountInput = row.querySelector('.grocery-item__actual');
+  const actualAmount = actualAmountInput?.value === '' ? '' : parseGroceryAmount(actualAmountInput?.value);
   markGroceryLocalMutation();
   GroceryRepository.setItemAmounts(key, { price, actualAmount });
   const latestGrouped = GroceryListService.computeMissing(
@@ -3752,6 +3846,23 @@ const MatchService = {
         exact.push({ required: displayText, owned, score: 1 });
         matched.push(displayText);
         matchedPantryNames.push(owned);
+        if (!item.optional) scoreSum += 1;
+        continue;
+      }
+
+      const explicitAlternative = (item.alternatives || []).map((alternative) => ({
+        alternative,
+        owned: IngredientAliasService.findOwned(alternative, pantryNames),
+      })).find((candidate) => candidate.owned);
+      if (explicitAlternative) {
+        substituted.push({
+          required: displayText,
+          owned: explicitAlternative.owned,
+          alternative: explicitAlternative.alternative,
+          substituteScore: 1,
+        });
+        matched.push(displayText);
+        matchedPantryNames.push(explicitAlternative.owned);
         if (!item.optional) scoreSum += 1;
         continue;
       }
@@ -4448,10 +4559,8 @@ function getCurrencyAmountExample(currencyCode = null, scale = 'item') {
 }
 
 function currencyAmountPlaceholder(scale = 'item', currencyCode = null) {
+  if (scale === 'item') return '금액';
   const example = getCurrencyAmountExample(currencyCode, scale);
-  if (scale === 'item' && (currencyCode || state.currency || DEFAULT_CURRENCY) === 'KRW') {
-    return '예: 5,000 또는 10,000';
-  }
   return `예: ${example}`;
 }
 
@@ -6582,7 +6691,9 @@ function renderMyRecipes() {
       showVisibility: false,
       readyHtml: '바로 가능',
       showRecommendTags: true,
-      showSavedBy: Boolean(window.FirebaseServices?.FamilySharingService?.isActive?.()),
+      // 개인 저장 레시피에는 저장자 배열이 없으므로 행이 렌더링되지 않는다.
+      // 가족 상태 갱신보다 저장 레시피 동기화가 먼저 도착해도 저장자 표시는 유지한다.
+      showSavedBy: true,
     })).join('');
     bindRecipeCards(dom.savedList, savedResults);
   }
@@ -6904,8 +7015,8 @@ function buildCalendarDayEntriesHTML(meals, shoppingRecords) {
 }
 
 function buildBudgetProgressHTML(primaryTotal, budget, currencyCode) {
-  if (budget <= 0) return '';
-  const ratio = primaryTotal / budget;
+  const budgetValue = Number(budget) || 0;
+  const ratio = budgetValue > 0 ? primaryTotal / budgetValue : 0;
   const displayPct = Math.round(ratio * 100);
   const barPct = Math.min(100, displayPct);
   const isOver = primaryTotal > budget;
@@ -8762,15 +8873,18 @@ function renderGroceryList({ force = false } = {}) {
       const manualBadge = item.manual ? '<span class="grocery-item__badge">직접</span>' : '';
       const actualField = `
         <input type="text" class="grocery-item__actual" data-actual-key="${esc(item.key)}"
-          inputmode="${CURRENCY_OPTIONS[state.currency]?.fractionDigits > 0 ? 'decimal' : 'numeric'}"
+          inputmode="numeric" pattern="[0-9]*"
           placeholder="${esc(currencyAmountPlaceholder('item'))}"
-          value="${meta.actualAmount !== '' && meta.actualAmount != null ? esc(String(meta.actualAmount)) : ''}"
+          value="${meta.actualAmount !== '' && meta.actualAmount != null ? esc(formatGroceryAmountInput(meta.actualAmount)) : ''}"
           aria-label="${esc(item.name)} 실금액">`;
       return `
         <div class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
           <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''} aria-label="${esc(item.name)} 구매 완료 표시">
           <span class="grocery-item__name">${manualBadge}${esc(item.name)}${qty}</span>
           ${actualField}
+          <button type="button" class="grocery-item__buy" data-grocery-buy-name="${esc(item.name)}" aria-label="${esc(item.name)} 쿠팡에서 구매">
+            <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
+          </button>
           <button type="button" class="grocery-item__remove" data-remove-key="${esc(item.key)}" aria-label="${esc(item.name)} 삭제">×</button>
         </div>`;
     }).join('');
@@ -8804,6 +8918,13 @@ function renderGroceryList({ force = false } = {}) {
       removeGroceryListItem(btn.dataset.removeKey, grouped).catch(() => showToast('삭제에 실패했습니다.'));
     };
   });
+  dom.groceryList.querySelectorAll('.grocery-item__buy').forEach((btn) => {
+    btn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openGroceryPurchaseLink(btn);
+    };
+  });
 }
 
 function initGroceryListAmountHandlers() {
@@ -8812,6 +8933,9 @@ function initGroceryListAmountHandlers() {
 
   dom.groceryList.addEventListener('input', (e) => {
     if (!isGroceryAmountInput(e.target)) return;
+    if (e.target.classList.contains('grocery-item__actual')) {
+      e.target.value = formatGroceryAmountInput(e.target.value);
+    }
     syncGroceryAmountRow(e.target.closest('.grocery-item'), { schedulePersist: true });
   });
 

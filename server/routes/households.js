@@ -5,6 +5,7 @@ import {
   cancelPendingHousehold,
   copyPersonalDataToHousehold,
   createHousehold,
+  deduplicateHouseholdIngredients,
   deleteLastOwnerHousehold,
   getCurrentHousehold,
   issueInvite,
@@ -122,6 +123,18 @@ router.post('/households/migrate-copy', async (req, res) => {
       scopes: req.body?.scopes,
     });
     return res.json({ success: true, migration: result });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+router.post('/households/deduplicate-ingredients', async (req, res) => {
+  try {
+    const result = await deduplicateHouseholdIngredients({
+      ...requestContext(req),
+      householdId: req.body?.householdId,
+    });
+    return res.json({ success: true, result });
   } catch (err) {
     return sendError(res, err);
   }

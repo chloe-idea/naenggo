@@ -9,6 +9,7 @@
 import {
   doc,
   collection,
+  deleteField,
   getDoc,
   getDocFromServer,
   onSnapshot,
@@ -25,6 +26,7 @@ const SUBCOLLECTION = 'settings';
 const DOC_ID = 'preferences';
 
 let snapshotUnsubscribe = null;
+let familyBudgetHydrationAttempted = false;
 
 function settingsDoc(uid) {
   if (!db || !uid) return null;
@@ -41,6 +43,34 @@ function savedRecipesCollection() {
 
 function isFamilyScope() {
   return Boolean(FamilySharingService.getActiveHouseholdId());
+}
+
+async function hydrateMissingFamilyBudget(uid, familyPreferenceData = {}) {
+  if (familyBudgetHydrationAttempted || !isFamilyScope()) return;
+  if (Object.prototype.hasOwnProperty.call(familyPreferenceData, 'monthlyFoodBudget')) return;
+  familyBudgetHydrationAttempted = true;
+
+  try {
+    const personalRef = doc(db, 'users', uid, SUBCOLLECTION, DOC_ID);
+    const personalSnap = await getDocFromServer(personalRef).catch(() => getDoc(personalRef));
+    const personalData = personalSnap.exists() ? personalSnap.data() || {} : {};
+    const personalBudget = Number(personalData.monthlyFoodBudget) || 0;
+    if (personalBudget <= 0 || !isFamilyScope()) return;
+
+    await setDoc(settingsDoc(uid), sanitizeFirestorePayload({
+      activeWeekKey: familyPreferenceData.activeWeekKey || '',
+      byWeek: familyPreferenceData.byWeek || {},
+      currency: familyPreferenceData.currency || personalData.currency || 'KRW',
+      monthlyFoodBudget: personalBudget,
+      updatedAt: serverTimestamp(),
+    }, 'FirestoreSettingsService.hydrateMissingFamilyBudget'), { merge: true });
+  } catch (error) {
+    console.warn('[FirestoreSettingsService] family budget hydration skipped', {
+      uid,
+      code: error?.code || '',
+      message: error?.message || String(error),
+    });
+  }
 }
 
 function normalizeSavedByMembers(data = {}) {
@@ -284,6 +314,7 @@ export const FirestoreSettingsService = {
 
   startSync(onSettings, onError) {
     this.stopSync();
+    familyBudgetHydrationAttempted = false;
     const uid = auth?.currentUser?.uid;
     if (!uid || !db) {
       onSettings?.({
@@ -309,6 +340,7 @@ export const FirestoreSettingsService = {
       settingsDoc(uid),
       (snap) => {
         preferenceData = snap.exists() ? snap.data() : {};
+        if (isFamilyScope()) hydrateMissingFamilyBudget(uid, preferenceData);
         savedRecipes = isFamilyScope()
           ? savedRecipes
           : (Array.isArray(preferenceData.savedRecipeIds) ? preferenceData.savedRecipeIds : []);
@@ -486,14 +518,31 @@ export const FirestoreSettingsService = {
         tx.set(ref, {
           recipeId: id,
           savedByMembers: [...members, { uid: user.uid, name: displayName, savedAt: new Date() }],
+          savedBy: deleteField(),
+          savedByName: deleteField(),
+          savedAt: deleteField(),
         }, { merge: true });
       } else if (!wanted.has(id) && hasCurrentUser) {
         const remaining = members.filter((member) => member.uid !== user.uid);
-        if (remaining.length) tx.set(ref, { recipeId: id, savedByMembers: remaining }, { merge: true });
+        if (remaining.length) {
+          tx.set(ref, {
+            recipeId: id,
+            savedByMembers: remaining,
+            savedBy: deleteField(),
+            savedByName: deleteField(),
+            savedAt: deleteField(),
+          }, { merge: true });
+        }
         else tx.delete(ref);
       } else if (snap.exists() && data.savedBy && !data.savedByMembers) {
         // 기존 single-saver 문서는 다음 저장 동작에서 새 구조로 승격한다.
-        tx.set(ref, { recipeId: id, savedByMembers: members }, { merge: true });
+        tx.set(ref, {
+          recipeId: id,
+          savedByMembers: members,
+          savedBy: deleteField(),
+          savedByName: deleteField(),
+          savedAt: deleteField(),
+        }, { merge: true });
       }
     })));
   },

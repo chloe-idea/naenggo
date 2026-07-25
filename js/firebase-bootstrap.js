@@ -32,6 +32,7 @@ let authBootstrapSafetyTimer = null;
 let pendingFamilyLinkInvite = new URLSearchParams(location.search).get('familyInvite')
   || sessionStorage.getItem('pending-family-link-invite');
 let familyLinkJoinInFlight = false;
+const deduplicatedHouseholdsThisSession = new Set();
 
 function clearPendingFamilyInviteCache() {
   pendingFamilyLinkInvite = null;
@@ -608,6 +609,19 @@ async function syncUserData(user, { force = false } = {}) {
       }
     }
     const householdId = FamilySharingService.getActiveHouseholdId();
+    if (householdId && !deduplicatedHouseholdsThisSession.has(householdId)) {
+      try {
+        await FamilySharingService.deduplicateIngredients();
+        deduplicatedHouseholdsThisSession.add(householdId);
+        console.info('[FamilySharing] household ingredient deduplication completed', { householdId });
+      } catch (error) {
+        console.error('[FamilySharing] household ingredient deduplication failed', {
+          householdId,
+          code: error?.code || null,
+          message: error?.message || String(error),
+        });
+      }
+    }
     // 로컬 냉장고 이관은 개인 scope에서 끝낸 뒤에만 가족 복사를 허용한다.
     // 가족 활성 상태에서 실행하면 개인 로컬 데이터를 공유 household에 섞을 수 있다.
     if (!householdId) {

@@ -750,43 +750,112 @@ function normalizeSavedByMembers(data = {}) {
 }
 
 function normalizedIngredientKey(data = {}) {
-  return [
-    String(data.name || data.ingredientName || '').trim().toLowerCase(),
-    String(data.storage || data.storageLocation || data.location || '').trim().toLowerCase(),
-    String(data.unit || '').trim().toLowerCase(),
-  ].join('|');
+  return String(data.name || data.ingredientName || '').trim().toLocaleLowerCase();
+}
+
+function ingredientQuantity(data = {}) {
+  const parsed = Number.parseFloat(String(data.quantity ?? '').trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
+}
+
+function earliestExpiryDate(...items) {
+  const dates = items
+    .map((data) => String(data?.expiryDate || data?.expirationDate || '').trim())
+    .filter(Boolean)
+    .sort();
+  return dates[0] || '';
 }
 
 function mergeIngredientData(existing = {}, incoming = {}) {
-  const quantityKey = ['quantity', 'amount', 'count'].find((key) => Number.isFinite(Number(existing[key])) || Number.isFinite(Number(incoming[key])));
-  const merged = { ...existing };
-  if (quantityKey) merged[quantityKey] = (Number(existing[quantityKey]) || 0) + (Number(incoming[quantityKey]) || 0);
-  const dates = [existing.expiryDate, existing.expirationDate, incoming.expiryDate, incoming.expirationDate]
-    .filter(Boolean)
-    .map((value) => String(value))
-    .sort();
-  if (dates[0]) {
-    if ('expirationDate' in existing || 'expirationDate' in incoming) merged.expirationDate = dates[0];
-    else merged.expiryDate = dates[0];
-  }
+  // 기존 household 필드를 우선해 메모·보관 위치 같은 정보가 사라지지 않게 한다.
+  const merged = { ...incoming, ...existing };
+  const quantity = ingredientQuantity(existing) + ingredientQuantity(incoming);
+  merged.quantity = Number.isInteger(quantity) ? String(quantity) : String(quantity);
+  const expiryDate = earliestExpiryDate(existing, incoming);
+  if (expiryDate) merged.expiryDate = expiryDate;
+  else delete merged.expiryDate;
+  // 표기명은 기존 household 명칭을 유지하되, 새 문서일 때는 source를 사용한다.
+  merged.name = String(existing.name || incoming.name || incoming.ingredientName || '').trim();
   return merged;
 }
 
-async function copyCollectionDocs({ source, target, copied, skipped, mergeIngredients = false }) {
+function mergeManyIngredientDocs(items = []) {
+  return items.reduce((merged, item) => (merged ? mergeIngredientData(merged, item) : { ...item }), null);
+}
+
+async function mergeIngredientCollectionDocs({ source, target, copied, skipped }) {
+  await target.firestore.runTransaction(async (tx) => {
+    const [sourceSnapshots, targetSnapshots] = await Promise.all([
+      source ? tx.get(source) : Promise.resolve({ docs: [] }),
+      tx.get(target),
+    ]);
+    const sourceByName = new Map();
+    const targetByName = new Map();
+    const targetIds = new Set(targetSnapshots.docs.map((snap) => snap.id));
+    sourceSnapshots.docs.forEach((snap) => {
+      const key = normalizedIngredientKey(snap.data());
+      if (key) sourceByName.set(key, [...(sourceByName.get(key) || []), snap]);
+    });
+    targetSnapshots.docs.forEach((snap) => {
+      const key = normalizedIngredientKey(snap.data());
+      if (key) targetByName.set(key, [...(targetByName.get(key) || []), snap]);
+    });
+
+    // source에 없는 기존 가족 중복도 같이 정리한다.
+    const keys = new Set([...sourceByName.keys(), ...targetByName.keys()]);
+    const writeCount = [...keys].reduce((count, key) => {
+      const householdItems = targetByName.get(key) || [];
+      return count + 1 + Math.max(0, householdItems.length - 1);
+    }, 0);
+    if (writeCount > 450) {
+      throw new HouseholdError('TOO_MANY_INGREDIENTS_TO_MERGE', '재료가 너무 많아 한 번에 안전하게 병합할 수 없습니다.', 409);
+    }
+
+    for (const key of keys) {
+      const sourceItems = sourceByName.get(key) || [];
+      const householdItems = targetByName.get(key) || [];
+      const canonical = householdItems[0] || null;
+      const sourceData = mergeManyIngredientDocs(sourceItems.map((snap) => snap.data()));
+      const householdData = mergeManyIngredientDocs(householdItems.map((snap) => snap.data()));
+      const mergedData = householdData
+        ? (sourceData ? mergeIngredientData(householdData, sourceData) : householdData)
+        : sourceData;
+      const targetRef = canonical?.ref
+        || (targetIds.has(sourceItems[0].id) ? target.doc() : target.doc(sourceItems[0].id));
+      tx.set(targetRef, mergedData, { merge: true });
+      if (sourceItems[0]) copied.push(`${sourceItems[0].ref.path}:merged`);
+      householdItems.slice(1).forEach((duplicate) => {
+        tx.delete(duplicate.ref);
+        skipped.push(`${duplicate.ref.path}:deduplicated`);
+      });
+    }
+  });
+}
+
+export async function deduplicateHouseholdIngredients({ idToken, householdId }) {
+  const user = await requireHouseholdUser(idToken);
+  const db = getFirestoreAdmin();
+  const id = validateHouseholdId(householdId);
+  await db.runTransaction(async (tx) => {
+    await assertMember(tx, db, id, user.uid);
+  });
+  const copied = [];
+  const skipped = [];
+  await mergeIngredientCollectionDocs({
+    source: null,
+    target: householdRef(db, id).collection('ingredients'),
+    copied,
+    skipped,
+  });
+  return { mergedCount: copied.length, removedDuplicates: skipped.length };
+}
+
+async function copyCollectionDocs({ source, target, copied, skipped }) {
   const snapshots = await source.get();
-  const targetSnapshots = mergeIngredients ? await target.get() : null;
-  const existingByIngredient = new Map((targetSnapshots?.docs || []).map((snap) => [normalizedIngredientKey(snap.data()), snap]));
   const existing = await Promise.all(snapshots.docs.map((snap) => target.doc(snap.id).get()));
   let batch = source.firestore.batch();
   let writes = 0;
   for (const [index, snap] of snapshots.docs.entries()) {
-    const matchingIngredient = mergeIngredients ? existingByIngredient.get(normalizedIngredientKey(snap.data())) : null;
-    if (matchingIngredient) {
-      batch.set(matchingIngredient.ref, mergeIngredientData(matchingIngredient.data(), snap.data()), { merge: true });
-      copied.push(`${snap.ref.path}:merged`);
-      writes += 1;
-      continue;
-    }
     if (existing[index].exists) {
       skipped.push(snap.ref.path);
       continue;
@@ -831,12 +900,11 @@ export async function copyPersonalDataToHousehold({ idToken, householdId, scopes
     name: userProfileSnap.data()?.displayName || user.name || user.email,
   };
   if (selected.has('ingredients')) {
-    await copyCollectionDocs({
+    await mergeIngredientCollectionDocs({
       source: userRoot.collection('ingredients'),
       target: householdRoot.collection('ingredients'),
       copied,
       skipped,
-      mergeIngredients: true,
     });
   }
   if (selected.has('shopping')) {
@@ -921,8 +989,21 @@ export async function copyPersonalDataToHousehold({ idToken, householdId, scopes
         const data = existing.data() || {};
         const members = normalizeSavedByMembers(data);
         if (!members.some((member) => member.uid === user.uid)) {
-          batch.set(ref, { savedByMembers: [...members, savedMember(migrationUser)] }, { merge: true });
+          batch.set(ref, {
+            savedByMembers: [...members, savedMember(migrationUser)],
+            savedBy: FieldValue.delete(),
+            savedByName: FieldValue.delete(),
+            savedAt: FieldValue.delete(),
+          }, { merge: true });
           copied.push(`${preferencesSnap.ref.path}:saved:${recipeId}:merged`);
+        } else if (data.savedBy && !data.savedByMembers) {
+          batch.set(ref, {
+            savedByMembers: members,
+            savedBy: FieldValue.delete(),
+            savedByName: FieldValue.delete(),
+            savedAt: FieldValue.delete(),
+          }, { merge: true });
+          copied.push(`${preferencesSnap.ref.path}:saved:${recipeId}:upgraded`);
         } else skipped.push(`${preferencesSnap.ref.path}:saved:${recipeId}`);
       } else {
         batch.create(ref, {
