@@ -316,6 +316,76 @@ function normalizeIngredientList(list) {
   return list.map(normalizeIngredientItem).filter((item) => item.name || item.originalText);
 }
 
+const LEGACY_INGREDIENT_DISPLAY_UNITS = [
+  'tbsp', 'tsp', 'kg', 'mg', 'ml', 'cc', '큰술', '작은술', '스푼', '컵', '개', '알',
+  '장', '쪽', '줌', '꼬집', '덩이', '봉', '봉지', '팩', '캔', '병', '조각', '조각들',
+  '피스', 'piece', 'pieces', 'slice', 'slices', '줄기', '대', '마리', '토막', '공기',
+  '인분', 'g', 'l', 'T', 't',
+];
+
+function extractIngredientNameFromLegacyString(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const parsed = parseRecipeIngredient(raw);
+  const annotation = splitIngredientAnnotation(
+    raw.replace(/\s*\(선택\)\s*$/, '').trim(),
+  );
+  const source = annotation.ingredientText;
+  const parsedName = String(parsed.name || '').trim();
+  const units = LEGACY_INGREDIENT_DISPLAY_UNITS
+    .map((unit) => unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const quantity = '(?:\\d+(?:\\/\\d+)?(?:\\.\\d+)?|[一二三四五六七八九十]|한두|한|두|세|네|반)';
+  const qualitative = '(?:약간|조금|적당량|소량|한\\s*줌|취향껏)';
+  const parsedNameHasTrailingAmount = new RegExp(
+    `${quantity}\\s*(?:${units})\\s*,?\\s*$`,
+    'i',
+  ).test(parsedName);
+  if (parsedName && parsedName !== source && !parsedNameHasTrailingAmount) return parsedName;
+  const withoutTrailingNote = source.replace(
+    new RegExp(`\\s*,\\s*${quantity}\\s*(?:${units})\\s*$`, 'i'),
+    '',
+  ).trim();
+  const trailingAmount = new RegExp(
+    `^(.+?)\\s+(?:${quantity}\\s*(?:${units})|${qualitative})\\s*$`,
+    'i',
+  );
+  const match = withoutTrailingNote.match(trailingAmount);
+  return (match?.[1] || parsedName || withoutTrailingNote).trim();
+}
+
+/**
+ * 카드·장보기 표시용 이름. 원본 amount/unit은 유지하고, 비교용 표준화는 호출자가 별도로 한다.
+ */
+function getIngredientDisplayName(ingredient) {
+  if (!ingredient) return '';
+  if (typeof ingredient === 'object') {
+    return String(
+      ingredient.name
+      || ingredient.ingredientName
+      || ingredient.ingredient
+      || '',
+    ).trim();
+  }
+  if (typeof ingredient === 'string') return extractIngredientNameFromLegacyString(ingredient);
+  return '';
+}
+
+function getUniqueIngredientDisplayNames(ingredients) {
+  const names = [];
+  const seen = new Set();
+  for (const ingredient of ingredients || []) {
+    const displayName = getIngredientDisplayName(ingredient);
+    const comparisonName = normalizeIngredientName(displayName);
+    const key = comparisonName.replace(/\s/g, '');
+    if (!displayName || !key || seen.has(key)) continue;
+    seen.add(key);
+    names.push(displayName);
+  }
+  return names;
+}
+
 // ===== Ingredient Groups (추천 전용 — 보유 재료명은 원본 유지) =====
 // substituteScore: 0.9 = 같은 그룹, 0.75 = 대체 가능
 const INGREDIENT_GROUP_DEFINITIONS = [
@@ -3088,7 +3158,7 @@ const GroceryListService = {
     return GROCERY_CATEGORIES.find((c) => c.id === 'other' || c.test(n)) || GROCERY_CATEGORIES[GROCERY_CATEGORIES.length - 1];
   },
   itemKey(name) {
-    return MatchService.normalize(parseRecipeIngredient(name).name || name);
+    return MatchService.normalize(getIngredientDisplayName(name));
   },
   getPlannerDates(weekStart) {
     return getWeekDates(weekStart || todayStr());
@@ -3113,8 +3183,8 @@ const GroceryListService = {
         if (!recipe) continue;
         const { missing } = MatchService.analyze(pantryNames, recipe.ingredients);
         for (const raw of missing) {
-          const { name } = parseRecipeIngredient(raw);
-          const display = name || raw;
+          const display = getIngredientDisplayName(raw);
+          if (!display) continue;
           const key = this.itemKey(display);
           const prev = map.get(key) || { key, name: display, count: 0 };
           prev.count += 1;
@@ -3170,7 +3240,7 @@ const GroceryListService = {
     return total;
   },
   isIngredientInGroceryList(ingredientName, grouped) {
-    const normalized = MatchService.normalize(parseRecipeIngredient(ingredientName).name || ingredientName);
+    const normalized = MatchService.normalize(getIngredientDisplayName(ingredientName));
     for (const cat of GROCERY_CATEGORIES) {
       for (const item of grouped[cat.id] || []) {
         if (item.key === this.itemKey(ingredientName)) return true;
@@ -3190,11 +3260,11 @@ const GroceryListService = {
     const seen = new Set();
     for (const raw of missing) {
       const item = parseRecipeIngredient(raw);
-      const name = item.name || formatIngredientDisplay(item);
+      const name = getIngredientDisplayName(raw);
       const normalized = MatchService.normalize(name);
       if (!name || seen.has(normalized)) continue;
       seen.add(normalized);
-      if (this.isIngredientInGroceryList(raw, grouped)) continue;
+      if (this.isIngredientInGroceryList(name, grouped)) continue;
       const manual = GroceryRepository.addManualItem({
         name,
         quantity: item.quantity || '',
@@ -3940,10 +4010,11 @@ const MatchService = {
       const hints = substituted.slice(0, 2).map((s) => `${s.required} → ${s.owned}`);
       parts.push(`${hints.join(', ')}${substituted.length > 2 ? ` 외 ${substituted.length - 2}개` : ''}로 대체 가능`);
     }
-    if (missing.length) {
-      if (missing.length === 1) parts.push(`${missing[0]}만 있으면 가능`);
-      else if (missing.length === 2) parts.push(`${missing[0]}, ${missing[1]}만 있으면 가능`);
-      else parts.push(`${missing.slice(0, 2).join(', ')} 외 ${missing.length - 2}개만 있으면 가능`);
+    const missingNames = getUniqueIngredientDisplayNames(missing);
+    if (missingNames.length) {
+      if (missingNames.length === 1) parts.push(`${missingNames[0]}만 있으면 가능`);
+      else if (missingNames.length === 2) parts.push(`${missingNames[0]}, ${missingNames[1]}만 있으면 가능`);
+      else parts.push(`${missingNames.slice(0, 2).join(', ')} 외 ${missingNames.length - 2}개만 있으면 가능`);
     }
     return parts.join(' · ');
   },
@@ -3979,8 +4050,9 @@ const MatchService = {
   /** @deprecated use formatCardSummary */
   formatMissing(missing, name) {
     if (!missing.length) return '모든 재료 준비 완료!';
-    if (missing.length === 1) return `${missing[0]}만 있으면 ${name} 가능`;
-    return `${missing.slice(0, 2).join(', ')}${missing.length > 2 ? ` 외 ${missing.length - 2}개` : ''}만 있으면 ${name} 가능`;
+    const missingNames = getUniqueIngredientDisplayNames(missing);
+    if (missingNames.length === 1) return `${missingNames[0]}만 있으면 ${name} 가능`;
+    return `${missingNames.slice(0, 2).join(', ')}${missingNames.length > 2 ? ` 외 ${missingNames.length - 2}개` : ''}만 있으면 ${name} 가능`;
   },
 };
 
@@ -4011,14 +4083,15 @@ const RecommendationService = {
   },
   reasonFor(result) {
     if (result.missing.length === 0 && result.substituted.length === 0) return '🔥 바로 가능';
-    if (result.missing.length === 1) return `🛒 ${formatIngredientDisplay(result.missing[0])}만 있으면 가능`;
-    if (result.missing.length === 2) {
-      const names = result.missing.map((m) => formatIngredientDisplay(m));
+    const missingNames = getUniqueIngredientDisplayNames(result.missing);
+    if (missingNames.length === 1) return `🛒 ${missingNames[0]}만 있으면 가능`;
+    if (missingNames.length === 2) {
+      const names = missingNames;
       return `🛒 ${names.join(', ')}만 있으면 가능`;
     }
-    if (result.missing.length > 2) {
-      const names = result.missing.slice(0, 2).map((m) => formatIngredientDisplay(m));
-      return `🛒 ${names.join(', ')} 외 ${result.missing.length - 2}개만 있으면 가능`;
+    if (missingNames.length > 2) {
+      const names = missingNames.slice(0, 2);
+      return `🛒 ${names.join(', ')} 외 ${missingNames.length - 2}개만 있으면 가능`;
     }
     if (result.expiryBoost > 0) return '⚠️ 임박 재료 활용';
     if (this.isHighProtein(result.recipe)) return '💪 고단백';
@@ -5429,17 +5502,7 @@ function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost })
 
 /** 홈 카드 준비 상태 문구 — 목업: 🛒 + 주황 Bold 재료명 + 기본색 나머지 */
 function uniqueShortIngredientLabels(missing) {
-  const out = [];
-  const seen = new Set();
-  for (const item of missing || []) {
-    const label = shortIngredientLabel(item);
-    if (!label) continue;
-    const key = MatchService.normalize(label);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(label);
-  }
-  return out;
+  return getUniqueIngredientDisplayNames(missing);
 }
 
 function homeCardMissingStatusInnerHTML(namesText, restText) {
@@ -10824,4 +10887,4 @@ if (window.__firebaseBootstrapPromise) {
   startApp();
 }
 
-window.AppServices = { PantryRepository, RecipeRepository, PublicRecipeRepository, SavedRecipeRepository, RecipeSaveCountRepository, MealLogRepository, ShoppingRecordRepository, MealPlanRepository, GroceryRepository, GroceryListService, RecommendationService, MatchService, IngredientGroupService, FreshFoodService, AffiliateService, PantryIngredientService, RecipePickerService, VideoRecipeAnalysisService, ClientUserService, AiUsageService, mockExtractRecipeFromVideoUrl, normalizeIngredientName, normalizeIngredientItem, normalizeIngredientList, formatIngredientDisplay, parseRecipeIngredient };
+window.AppServices = { PantryRepository, RecipeRepository, PublicRecipeRepository, SavedRecipeRepository, RecipeSaveCountRepository, MealLogRepository, ShoppingRecordRepository, MealPlanRepository, GroceryRepository, GroceryListService, RecommendationService, MatchService, IngredientGroupService, FreshFoodService, AffiliateService, PantryIngredientService, RecipePickerService, VideoRecipeAnalysisService, ClientUserService, AiUsageService, mockExtractRecipeFromVideoUrl, normalizeIngredientName, normalizeIngredientItem, normalizeIngredientList, formatIngredientDisplay, parseRecipeIngredient, getIngredientDisplayName, getUniqueIngredientDisplayNames };
