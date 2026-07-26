@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { normalizeIngredientName } from './ingredient-normalizer.js';
 import {
   getFirestoreAdmin,
   isFirebaseAdminConfigured,
@@ -750,7 +751,10 @@ function normalizeSavedByMembers(data = {}) {
 }
 
 function normalizedIngredientKey(data = {}) {
-  return String(data.name || data.ingredientName || '').trim().toLocaleLowerCase();
+  return normalizeIngredientName(
+    data.normalizedName || data.name || data.ingredientName,
+  )
+    || String(data.name || data.ingredientName || '').trim().toLocaleLowerCase();
 }
 
 function ingredientQuantity(data = {}) {
@@ -776,6 +780,7 @@ function mergeIngredientData(existing = {}, incoming = {}) {
   else delete merged.expiryDate;
   // 표기명은 기존 household 명칭을 유지하되, 새 문서일 때는 source를 사용한다.
   merged.name = String(existing.name || incoming.name || incoming.ingredientName || '').trim();
+  merged.normalizedName = normalizedIngredientKey(merged);
   return merged;
 }
 
@@ -820,6 +825,7 @@ async function mergeIngredientCollectionDocs({ source, target, copied, skipped }
       const mergedData = householdData
         ? (sourceData ? mergeIngredientData(householdData, sourceData) : householdData)
         : sourceData;
+      mergedData.normalizedName = normalizedIngredientKey(mergedData);
       const targetRef = canonical?.ref
         || (targetIds.has(sourceItems[0].id) ? target.doc() : target.doc(sourceItems[0].id));
       tx.set(targetRef, mergedData, { merge: true });

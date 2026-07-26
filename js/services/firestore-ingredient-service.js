@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   addDoc,
+  getDocs,
   runTransaction,
   updateDoc,
   deleteDoc,
@@ -24,6 +25,11 @@ function ingredientsCollection(uid) {
   const householdId = FamilySharingService.getActiveHouseholdId();
   if (householdId) return collection(db, 'households', householdId, INGREDIENTS_COLLECTION);
   return collection(db, 'users', uid, INGREDIENTS_COLLECTION);
+}
+
+function householdIngredientsCollection(householdId) {
+  if (!db || !householdId) return null;
+  return collection(db, 'households', householdId, INGREDIENTS_COLLECTION);
 }
 
 function ingredientDoc(uid, docId) {
@@ -48,6 +54,7 @@ function mapFirestoreDoc(docSnap, uid) {
     id: docSnap.id,
     firestoreId: docSnap.id,
     name: data.name || '',
+    normalizedName: normalizeIngredientName(data.normalizedName || data.name),
     quantity: data.quantity || '',
     unit: '',
     expiryDate: data.expiryDate || '',
@@ -62,13 +69,17 @@ function mapFirestoreDoc(docSnap, uid) {
 function buildFirestorePayload(data) {
   return {
     name: String(data?.name || '').trim(),
+    normalizedName: normalizeIngredientName(String(data?.name || '').trim()),
     quantity: String(data?.quantity ?? ''),
     expiryDate: String(data?.expiryDate ?? ''),
   };
 }
 
 function normalizedIngredientName(value) {
-  return String(value || '').trim().toLocaleLowerCase();
+  const normalize = window.IngredientNormalizer?.normalizeIngredientName;
+  return typeof normalize === 'function'
+    ? normalize(value)
+    : (typeof value === 'string' ? value.trim().toLocaleLowerCase().replace(/\s+/g, ' ') : '');
 }
 
 function ingredientQuantity(value) {
@@ -83,36 +94,71 @@ function earlierExpiryDate(...values) {
     .sort()[0] || '';
 }
 
-async function addOrMergeHouseholdIngredient(col, payload) {
-  return runTransaction(db, async (transaction) => {
-    const snapshot = await transaction.get(col);
-    const sameName = snapshot.docs.filter((snap) => (
-      normalizedIngredientName(snap.data()?.name) === normalizedIngredientName(payload.name)
-    ));
-    if (!sameName.length) {
-      const ref = doc(col);
-      transaction.set(ref, sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'));
-      return { id: ref.id, firestoreId: ref.id, ...payload };
-    }
+function ingredientDocumentId(normalizedName) {
+  return encodeURIComponent(String(normalizedName || '').trim().toLocaleLowerCase());
+}
 
-    const canonical = sameName[0];
-    const totalQuantity = sameName.reduce(
-      (total, snap) => total + ingredientQuantity(snap.data()?.quantity),
-      ingredientQuantity(payload.quantity),
+function mergeHouseholdIngredientData(items, payload, normalizedName) {
+  const existingItems = items.filter(Boolean);
+  const totalQuantity = existingItems.reduce(
+    (total, item) => total + ingredientQuantity(item.quantity),
+    ingredientQuantity(payload.quantity),
+  );
+  const expiryDate = earlierExpiryDate(
+    payload.expiryDate,
+    ...existingItems.map((item) => item.expiryDate),
+  );
+  const primary = existingItems[0] || {};
+  return {
+    ...primary,
+    ...payload,
+    name: String(primary.name || payload.name).trim(),
+    normalizedName,
+    quantity: String(totalQuantity),
+    expiryDate,
+    createdAt: primary.createdAt || payload.createdAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+async function addOrMergeHouseholdIngredient(householdId, ingredient) {
+  if (typeof householdId !== 'string' || !householdId.trim()) {
+    throw new Error(`Invalid householdId: ${String(householdId)}`);
+  }
+  const payload = ingredient;
+  const col = householdIngredientsCollection(householdId);
+  if (!col) throw new Error('가족 재료 저장 경로를 만들 수 없습니다.');
+  const normalizedName = normalizedIngredientName(payload.name);
+  if (!normalizedName) throw new Error('표준화된 재료명이 비어 있습니다.');
+  const documentId = ingredientDocumentId(normalizedName);
+  const ingredientRef = doc(db, 'households', householdId, INGREDIENTS_COLLECTION, documentId);
+  console.log('[FirestoreIngredientService] family ingredient save target', {
+    householdId,
+    normalizedName,
+    ingredientDocumentId: documentId,
+    ingredientRefPath: ingredientRef?.path,
+  });
+
+  // 이전 버전이 만든 자동 ID 문서는 트랜잭션 밖에서 찾고, 트랜잭션 안에서는
+  // 반드시 DocumentReference만 읽어 고정 ID 문서로 안전하게 합친다.
+  const legacySnapshot = await getDocs(col);
+  const legacyRefs = legacySnapshot.docs
+    .filter((snap) => snap.id !== documentId
+      && normalizedIngredientName(snap.data()?.normalizedName || snap.data()?.name) === normalizedName)
+    .map((snap) => snap.ref);
+
+  return runTransaction(db, async (transaction) => {
+    const refs = [ingredientRef, ...legacyRefs];
+    const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
+    const existingItems = snapshots.filter((snap) => snap.exists()).map((snap) => snap.data());
+    const merged = mergeHouseholdIngredientData(existingItems, payload, normalizedName);
+    transaction.set(
+      ingredientRef,
+      sanitizeFirestorePayload(merged, 'FirestoreIngredientService.mergeHouseholdIngredient'),
+      { merge: true },
     );
-    const expiryDate = earlierExpiryDate(
-      payload.expiryDate,
-      ...sameName.map((snap) => snap.data()?.expiryDate),
-    );
-    transaction.set(canonical.ref, sanitizeFirestorePayload({
-      ...canonical.data(),
-      name: String(canonical.data()?.name || payload.name).trim(),
-      quantity: String(totalQuantity),
-      expiryDate,
-      updatedAt: serverTimestamp(),
-    }, 'FirestoreIngredientService.mergeHouseholdIngredient'), { merge: true });
-    sameName.slice(1).forEach((duplicate) => transaction.delete(duplicate.ref));
-    return { id: canonical.id, firestoreId: canonical.id, ...canonical.data(), quantity: String(totalQuantity), expiryDate };
+    legacyRefs.forEach((ref) => transaction.delete(ref));
+    return { id: ingredientRef.id, firestoreId: ingredientRef.id, ...merged };
   });
 }
 
@@ -187,7 +233,7 @@ export const FirestoreIngredientService = {
     return snapshotUnsubscribe;
   },
 
-  async addIngredient(data) {
+  async addIngredient(data, { householdId = null } = {}) {
     const user = auth?.currentUser;
 
     if (!user?.uid) {
@@ -216,23 +262,31 @@ export const FirestoreIngredientService = {
       throw err;
     }
 
-    const col = ingredientsCollection(user.uid);
+    const isHouseholdSave = householdId !== null && householdId !== undefined;
+    if (isHouseholdSave && (typeof householdId !== 'string' || !householdId.trim())) {
+      throw new Error(`Invalid householdId: ${String(householdId)}`);
+    }
+    const col = isHouseholdSave
+      ? householdIngredientsCollection(householdId)
+      : collection(db, 'users', user.uid, INGREDIENTS_COLLECTION);
     if (!col) {
       console.error('NO_FIRESTORE_DB');
       throw new Error('Firestore collection을 만들 수 없습니다.');
     }
 
-    const path = ingredientPath(user.uid);
+    const path = isHouseholdSave
+      ? `households/${householdId}/${INGREDIENTS_COLLECTION}`
+      : `users/${user.uid}/${INGREDIENTS_COLLECTION}`;
     console.info('[FirestoreIngredientService] add ingredient target', {
       uid: user.uid,
       path,
-      householdId: FamilySharingService.getActiveHouseholdId(),
+      householdId,
       payloadKeys: Object.keys(payload),
     });
 
     try {
-      const result = FamilySharingService.isActive()
-        ? await addOrMergeHouseholdIngredient(col, payload)
+      const result = isHouseholdSave
+        ? await addOrMergeHouseholdIngredient(householdId, payload)
         : await addDoc(
           col,
           sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'),
@@ -240,12 +294,14 @@ export const FirestoreIngredientService = {
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', result.id);
       return result;
     } catch (error) {
-      console.error('[FirestoreIngredientService] add ingredient failed', {
+      console.error('가족 재료 저장 실패', {
         uid: user.uid,
         path,
-        householdId: FamilySharingService.getActiveHouseholdId(),
+        householdId,
+        normalizedName: payload.normalizedName,
         code: error?.code || null,
         message: error?.message || String(error),
+        stack: error?.stack || null,
         error,
       });
       throw error;

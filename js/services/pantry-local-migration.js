@@ -68,7 +68,7 @@ export async function migrateLegacyPantryToFirestore(FirestoreIngredientService,
   console.log('[PantryMigration] migrating', legacyItems.length, 'items to users/' + uid + '/ingredients');
   for (const item of legacyItems) {
     try {
-      await FirestoreIngredientService.addIngredient(item);
+      await FirestoreIngredientService.addIngredient(item, { householdId: null });
       migrated += 1;
     } catch (err) {
       console.error('[PantryMigration] addIngredient failed:', item.name, err);

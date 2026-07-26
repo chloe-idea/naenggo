@@ -23,6 +23,7 @@ function ingredient(name = '감자') {
   const now = Timestamp.now();
   return {
     name,
+    normalizedName: name.trim().toLowerCase().replace(/\s/g, ''),
     quantity: '2',
     expiryDate: '2026-08-01',
     createdAt: now,

@@ -162,20 +162,24 @@ service cloud.firestore {
       match /ingredients/{ingredientId} {
         allow read: if isHouseholdMember(householdId);
         allow create: if isHouseholdMember(householdId)
-          && request.resource.data.keys().hasAll(['name', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
-          && request.resource.data.keys().hasOnly(['name', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['name', 'normalizedName', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'normalizedName', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
+          && request.resource.data.normalizedName is string
+          && request.resource.data.normalizedName.size() > 0
           && request.resource.data.quantity is string
           && request.resource.data.expiryDate is string
           && householdItemTimestampsValid();
         allow update: if isHouseholdMember(householdId)
           && householdCreatedAtUnchanged()
-          && request.resource.data.keys().hasOnly(['name', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'normalizedName', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
+          && request.resource.data.normalizedName is string
+          && request.resource.data.normalizedName.size() > 0
           && request.resource.data.quantity is string
           && request.resource.data.expiryDate is string
           && householdItemTimestampsValid();

@@ -109,7 +109,9 @@
   }));
 
   function normalizeIngredientName(name) {
-    return String(name || '').trim().replace(/\s+/g, '');
+    const canonical = globalThis.IngredientNormalizer?.normalizeIngredientName(name)
+      || (typeof name === 'string' ? name.trim().replace(/\s+/g, ' ') : '');
+    return canonical.replace(/\s+/g, '');
   }
 
   function getIngredientEmoji(name) {

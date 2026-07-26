@@ -131,12 +131,17 @@ const DEFAULT_IMAGE = 'data:image/svg+xml,' + encodeURIComponent(
 );
 
 function normalizeIngredientName(name) {
-  return String(name || '').trim().toLowerCase().replace(/\s/g, '');
+  return window.IngredientNormalizer?.normalizeIngredientName(name)
+    || (typeof name === 'string' ? name.trim().toLocaleLowerCase().replace(/\s+/g, ' ') : '');
+}
+
+function ingredientComparisonKey(name) {
+  return normalizeIngredientName(name).replace(/\s/g, '');
 }
 
 /** @deprecated use normalizeIngredientName */
 function normalizeIngredient(s) {
-  return normalizeIngredientName(s);
+  return ingredientComparisonKey(s);
 }
 
 const INGREDIENT_UNITS = [
@@ -182,7 +187,8 @@ function isOptionalIngredient(ing) {
 }
 
 function getIngredientMatchName(ing) {
-  return normalizeIngredientItem(ing).name || '';
+  const item = normalizeIngredientItem(ing);
+  return item.normalizedName || normalizeIngredientName(item.name) || '';
 }
 
 function parseRecipeIngredientText(text) {
@@ -246,6 +252,7 @@ function parseRecipeIngredient(raw) {
       optional: Boolean(raw.optional),
       alternatives: Array.isArray(raw.alternatives) ? raw.alternatives.map(String).map((item) => item.trim()).filter(Boolean) : [],
       note: String(raw.note || '').trim(),
+      normalizedName: raw.normalizedName || normalizeIngredientName(raw.name),
     };
     return { ...item, raw: item.originalText };
   }
@@ -260,6 +267,7 @@ function parseRecipeIngredient(raw) {
     optional,
     alternatives: annotation.alternatives,
     note: annotation.note,
+    normalizedName: normalizeIngredientName(parsed.name),
     raw: String(raw || '').trim(),
   };
 }
@@ -280,6 +288,7 @@ function normalizeIngredientItem(raw) {
         optional,
         alternatives: Array.isArray(raw.alternatives) ? raw.alternatives.map(String).map((item) => item.trim()).filter(Boolean) : [],
         note: String(raw.note || '').trim(),
+        normalizedName: raw.normalizedName || normalizeIngredientName(raw.name),
       };
     }
   } else {
@@ -298,6 +307,7 @@ function normalizeIngredientItem(raw) {
     optional,
     alternatives: parsedItem.alternatives || [],
     note: parsedItem.note || '',
+    normalizedName: parsedItem.normalizedName || normalizeIngredientName(parsedItem.name),
   };
 }
 
@@ -340,9 +350,9 @@ const IngredientGroupService = {
     this._buildIndex();
     const requiredInfo = this.getMemberInfo(recipeIngredient);
     if (!requiredInfo) return null;
-    const requiredNorm = normalizeIngredientName(recipeIngredient);
+    const requiredNorm = ingredientComparisonKey(recipeIngredient);
     for (const owned of pantryNames) {
-      if (normalizeIngredientName(owned) === requiredNorm) continue;
+      if (ingredientComparisonKey(owned) === requiredNorm) continue;
       const ownedInfo = this.getMemberInfo(owned);
       if (ownedInfo && ownedInfo.groupId === requiredInfo.groupId) {
         return {
@@ -3690,11 +3700,14 @@ async function createPantryItem(data, options = {}) {
       err.code = 'firebase/not-ready';
       throw err;
     }
-    await svc.addIngredient({
-      name: ingredientName,
-      quantity: String(data?.quantity ?? ''),
-      expiryDate: String(data?.expiryDate ?? ''),
-    });
+    await svc.addIngredient(
+      {
+        name: ingredientName,
+        quantity: String(data?.quantity ?? ''),
+        expiryDate: String(data?.expiryDate ?? ''),
+      },
+      { householdId },
+    );
     return null;
   }
 
@@ -3822,7 +3835,7 @@ const RecipePickerService = {
 
 // ===== Domain Services =====
 const MatchService = {
-  normalize: normalizeIngredientName,
+  normalize: ingredientComparisonKey,
   parseIngredient: parseRecipeIngredient,
   formatDisplay: formatIngredientDisplay,
   getMatchName: getIngredientMatchName,
@@ -9047,8 +9060,13 @@ async function handleGroceryPurchaseComplete() {
     if (added) parts.push(`${added}개 재료 보유 재료에 추가`);
     if (shoppingCount) parts.push(`장보기 지출 ${shoppingCount}건 기록`);
     showToast(parts.length ? `구매 완료 · ${parts.join(' · ')}` : '구매 완료했어요');
-  } catch {
-    showToast('구매 완료 처리에 실패했습니다.');
+  } catch (error) {
+    console.error('[Grocery] purchase completion failed', {
+      code: error?.code || null,
+      message: error?.message || String(error),
+      error,
+    });
+    showToast(`구매 완료 처리에 실패했습니다.${error?.message ? ` ${error.message}` : ''}`);
   }
 }
 
