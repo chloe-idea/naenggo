@@ -1265,9 +1265,10 @@ async function bootstrap() {
     hostname: location.hostname,
   });
 
-  // normalizeIngredientName()은 동기 API를 유지한다. Firestore 동기화가 시작되기 전에
-  // 동의어 사전을 한 번 준비해, 저장 시점에 JSON을 반복 요청하지 않도록 한다.
+  // 재료 동의어·기본 재료는 동기 API를 유지한다. Firestore 동기화가 시작되기 전에
+  // 한 번 준비해, 저장·일치 계산 시 JSON을 반복 요청하지 않도록 한다.
   await window.IngredientNormalizer?.loadIngredientAliases?.();
+  await window.IngredientNormalizer?.loadDefaultIngredients?.();
 
   document.body.classList.add('body-app');
   bindAuthUi();

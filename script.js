@@ -139,6 +139,10 @@ function ingredientComparisonKey(name) {
   return normalizeIngredientName(name).replace(/\s/g, '');
 }
 
+function isAlwaysAvailableIngredient(name) {
+  return Boolean(window.IngredientNormalizer?.isAlwaysAvailableIngredient?.(name));
+}
+
 /** @deprecated use normalizeIngredientName */
 function normalizeIngredient(s) {
   return ingredientComparisonKey(s);
@@ -3924,7 +3928,8 @@ const MatchService = {
       const displayText = formatIngredientDisplay(item);
       if (!item.optional) requiredCount += 1;
 
-      const owned = IngredientAliasService.findOwned(ing, pantryNames);
+      const alwaysAvailable = isAlwaysAvailableIngredient(ing);
+      const owned = alwaysAvailable ? '기본 재료' : IngredientAliasService.findOwned(ing, pantryNames);
       if (owned) {
         exact.push({ required: displayText, owned, score: 1 });
         matched.push(displayText);

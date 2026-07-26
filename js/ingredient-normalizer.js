@@ -1,9 +1,13 @@
 (function installIngredientNormalizer(global) {
   const INGREDIENT_ALIASES_URL = '/public/data/ingredient-aliases.json?v=1';
+  const DEFAULT_INGREDIENTS_URL = '/public/data/default-ingredients.json?v=1';
   let ingredientAliases = Object.freeze({});
   let ingredientAliasLookup = new Map();
   let ingredientAliasesReady = false;
   let aliasesLoadPromise = null;
+  let defaultIngredientKeys = new Set();
+  let defaultIngredientsReady = false;
+  let defaultIngredientsLoadPromise = null;
 
   function cleanName(value) {
     if (typeof value !== 'string') return '';
@@ -64,11 +68,50 @@
     return aliasesLoadPromise;
   }
 
+  function loadDefaultIngredients() {
+    if (defaultIngredientsLoadPromise) return defaultIngredientsLoadPromise;
+    if (typeof global.fetch !== 'function') return Promise.resolve(false);
+
+    defaultIngredientsLoadPromise = global.fetch(DEFAULT_INGREDIENTS_URL, { cache: 'no-cache' })
+      .then((response) => {
+        if (!response.ok) throw new Error(`기본 재료 JSON 로드 실패: HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        if (!Array.isArray(data?.alwaysAvailable)) {
+          throw new Error('기본 재료 JSON 형식이 올바르지 않습니다.');
+        }
+        defaultIngredientKeys = new Set(
+          data.alwaysAvailable
+            .map((ingredient) => comparisonKey(normalizeIngredientName(ingredient?.name)))
+            .filter(Boolean),
+        );
+        defaultIngredientsReady = true;
+        console.info('[IngredientNormalizer] default ingredients loaded', {
+          path: DEFAULT_INGREDIENTS_URL,
+          count: defaultIngredientKeys.size,
+        });
+        return true;
+      })
+      .catch((error) => {
+        console.warn('[IngredientNormalizer] default ingredients unavailable; no ingredients are assumed available', {
+          path: DEFAULT_INGREDIENTS_URL,
+          message: error?.message || String(error),
+        });
+        return false;
+      });
+    return defaultIngredientsLoadPromise;
+  }
+
   function normalizeIngredientName(value) {
     if (typeof value !== 'string') return '';
     const cleaned = cleanName(value);
     if (!cleaned) return '';
     return ingredientAliasLookup.get(comparisonKey(cleaned)) || cleaned;
+  }
+
+  function isAlwaysAvailableIngredient(value) {
+    return defaultIngredientKeys.has(comparisonKey(normalizeIngredientName(value)));
   }
 
   global.IngredientNormalizer = Object.freeze({
@@ -79,7 +122,11 @@
     comparisonKey,
     loadIngredientAliases,
     isReady: () => ingredientAliasesReady,
+    loadDefaultIngredients,
+    isDefaultIngredientsReady: () => defaultIngredientsReady,
+    isAlwaysAvailableIngredient,
   });
 
   loadIngredientAliases();
+  loadDefaultIngredients();
 })(globalThis);

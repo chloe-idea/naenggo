@@ -1,0 +1,16 @@
+{
+  "alwaysAvailable": [
+    {
+      "name": "물",
+      "category": "기본"
+    },
+    {
+      "name": "쌀",
+      "category": "기본"
+    },
+    {
+      "name": "밥",
+      "category": "기본"
+    }
+  ]
+}
