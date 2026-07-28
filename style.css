@@ -3117,6 +3117,22 @@ body.home-search-keyboard-active .home-search-dock {
   font-weight: 700;
 }
 
+/* 홈 화면의 준비 완료 문구에만 적용되는 TaskAlt 정렬 */
+.recipe-card-home__available {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  line-height: inherit;
+}
+
+.recipe-card-home__available-icon {
+  width: 1rem;
+  height: 1rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: #2f9e44;
+}
+
 .recipe-card-status--low,
 .recipe-card-status--medium,
 .recipe-card-status--high {

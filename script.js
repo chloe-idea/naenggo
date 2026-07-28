@@ -5480,6 +5480,7 @@ const HOME_CARD_BOOKMARK_ICON = `<svg class="recipe-card-home__bookmark-icon" vi
 const HOME_CARD_BOOKMARK_ICON_FILLED = `<svg class="recipe-card-home__bookmark-icon" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 3.75h8a1 1 0 011 1V16l-5-2.75L5 16V4.75a1 1 0 011-1z" fill="currentColor"/></svg>`;
 const HOME_CARD_CART_ICON = `<svg class="recipe-card-home__hint-icon recipe-card-home__hint-icon--cart" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 2.5h1.2l.35 1.4M4.05 3.9h9.2l-1.1 5.1H5.2L4.05 3.9z" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.1" cy="12.2" r="1.05" fill="currentColor"/><circle cx="11.1" cy="12.2" r="1.05" fill="currentColor"/></svg>`;
 const HOME_CARD_SWAP_ICON = `<svg class="recipe-card-home__hint-icon recipe-card-home__hint-icon--swap" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.2 5.2h7.2M8.6 3.2l2.2 2-2.2 2M12.8 10.8H5.6M7.4 8.8l-2.2 2 2.2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const HOME_CARD_AVAILABLE_ICON = '<span class="material-symbols-outlined recipe-card-home__available-icon" aria-hidden="true">task_alt</span>';
 
 /** 홈 카드 추천 태그 (최대 2개, 이모지 없음). 대체 문구가 없을 때만 사용 */
 function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost }) {
@@ -5531,11 +5532,14 @@ function buildHomeCardMissingStatusVariants(names) {
   ];
 }
 
-function formatHomeReadyMessage(missing, { readyHtml = '바로 가능' } = {}) {
+function formatHomeReadyMessage(missing, { readyHtml = '바로 가능', showReadyIcon = false } = {}) {
   const names = uniqueShortIngredientLabels(missing);
   const count = names.length;
   if (count <= 0) {
-    return { html: readyHtml, mod: 'available', names: [] };
+    const html = showReadyIcon && readyHtml === '바로 가능'
+      ? `<span class="recipe-card-home__available">${HOME_CARD_AVAILABLE_ICON}<span>바로 가능</span></span>`
+      : readyHtml;
+    return { html, mod: 'available', names: [] };
   }
   const preferred = buildHomeCardMissingStatusVariants(names)[0];
   return {
@@ -5682,6 +5686,7 @@ function homeRecipeCardHTML(result, options = {}) {
     showRecommendTags = true,
     showSavedBy = false,
     variant = 'home', // 'home' | 'my'
+    showReadyIcon = false,
   } = options;
   const isMy = variant === 'my';
 
@@ -5692,7 +5697,7 @@ function homeRecipeCardHTML(result, options = {}) {
   const missingCount = missing.length;
   const status = isMy
     ? formatMyRecipeReadyMessage(missing)
-    : formatHomeReadyMessage(missing, { readyHtml });
+    : formatHomeReadyMessage(missing, { readyHtml, showReadyIcon });
   const saved = SavedRecipeRepository.isSaved(recipe.id);
   const img = recipeCardImageHTML(recipe);
   const subLine = isMy
@@ -6495,7 +6500,7 @@ function renderHomeRecommendRail(homeRecipes) {
     return;
   }
   if (empty) empty.hidden = true;
-  list.innerHTML = railResults.map((r) => homeRecipeCardHTML(r)).join('');
+  list.innerHTML = railResults.map((r) => homeRecipeCardHTML(r, { showReadyIcon: true })).join('');
   bindRecipeCards(list, railResults);
 }
 
@@ -6524,7 +6529,7 @@ function renderHome() {
   dom.noResults.hidden = results.length > 0;
   dom.resultsCount.textContent = results.length ? `${results.length}개` : '';
 
-  dom.recipeList.innerHTML = results.map((r) => homeRecipeCardHTML(r)).join('');
+  dom.recipeList.innerHTML = results.map((r) => homeRecipeCardHTML(r, { showReadyIcon: true })).join('');
   bindRecipeCards(dom.recipeList, results);
   updateHomeRecipesSubtitle();
   syncAuthGateUi();
