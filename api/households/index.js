@@ -1,5 +1,5 @@
 /**
- * POST /api/households  (create)
+ * POST /api/households (create)
  */
 import { runVercelHouseholdDispatch } from '../../server/lib/vercel-household-entry.js';
 

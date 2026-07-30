@@ -1,6 +1,6 @@
 /**
- * GET|PATCH|DELETE /api/households/current
- * Explicit Vercel file (non-Next). Do not rely on [...route] catch-all.
+ * Explicit GET|PATCH|DELETE /api/households/current
+ * Kept as a dedicated file so production matching is unambiguous.
  */
 import { runVercelHouseholdDispatch } from '../../server/lib/vercel-household-entry.js';
 

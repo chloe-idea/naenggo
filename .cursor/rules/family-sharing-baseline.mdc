@@ -11,11 +11,13 @@ Do not treat family-sharing / household changes as complete until
 scheduled with the user). Contracts live in `docs/family-sharing-baseline.md`.
 
 When changing household APIs, verify **both** localhost Express
-(`server/routes/households.js`) and Vercel **explicit** entries under
-`api/households/` (`current.js`, `index.js`, etc.). Do **not** use
-`[...route]` catch-all on this non-Next Vercel project. Localhost success alone
-is not enough. Keep routing/responses in `server/lib/household-api-handler.js`
-and run `node scripts/test-household-api-contract.mjs`. After deploy, confirm
+(`server/routes/households.js`) and Vercel entries
+(`api/households/current.js`, `api/households/index.js`, `api/household-api.js`
++ `vercel.json` rewrites). Do **not** use `[...route]` catch-all or helper
+files under `api/` on this non-Next Vercel project (function-count / deploy
+failures). Localhost success alone is not enough. Keep routing/responses in
+`server/lib/household-api-handler.js` and run
+`node scripts/test-household-api-contract.mjs`. After deploy, confirm
 production via `X-Household-Handler` / `X-Deploy-Commit` headers.
 
 Hard rules:

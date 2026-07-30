@@ -4,7 +4,6 @@
   "outputDirectory": ".",
   "functions": {
     "api/**/*.js": {
-      "memory": 1024,
       "maxDuration": 60
     }
   },
@@ -16,6 +15,42 @@
     {
       "source": "/recipes/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/api/households/migrate-copy",
+      "destination": "/api/household-api?householdRoute=migrate-copy"
+    },
+    {
+      "source": "/api/households/activate",
+      "destination": "/api/household-api?householdRoute=activate"
+    },
+    {
+      "source": "/api/households/join",
+      "destination": "/api/household-api?householdRoute=join"
+    },
+    {
+      "source": "/api/households/leave",
+      "destination": "/api/household-api?householdRoute=leave"
+    },
+    {
+      "source": "/api/households/invites",
+      "destination": "/api/household-api?householdRoute=invites"
+    },
+    {
+      "source": "/api/households/transfer-owner",
+      "destination": "/api/household-api?householdRoute=transfer-owner"
+    },
+    {
+      "source": "/api/households/cancel-pending",
+      "destination": "/api/household-api?householdRoute=cancel-pending"
+    },
+    {
+      "source": "/api/households/deduplicate-ingredients",
+      "destination": "/api/household-api?householdRoute=deduplicate-ingredients"
+    },
+    {
+      "source": "/api/households/members/:uid",
+      "destination": "/api/household-api?householdRoute=members&uid=:uid"
     }
   ],
   "headers": [

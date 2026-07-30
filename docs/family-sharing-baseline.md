@@ -10,7 +10,7 @@
 | API 서비스 | `server/lib/household-service.js` |
 | **공통 API dispatcher** | `server/lib/household-api-handler.js` |
 | Express | `server/routes/households.js` |
-| Vercel (non-Next 명시적 파일) | `api/households/current.js`, `index.js`, `migrate-copy.js`, `activate.js`, `join.js`, `leave.js`, `invites.js`, … — **`[...route]` catch-all 사용 금지** |
+| Vercel (non-Next) | `api/households/current.js`, `api/households/index.js`, `api/household-api.js` + `vercel.json` rewrites — **`[...route]` catch-all 사용 금지**, `api/` 아래 `_helper` 파일 금지 |
 | 클라이언트 | `js/services/family-sharing-service.js`, `js/firebase-bootstrap.js` |
 | 계약 테스트 | `node scripts/test-household-api-contract.mjs` |
 
