@@ -1,6 +1,6 @@
 /**
  * Shared Vercel response helpers for household API entries.
- * Keep this outside api/ — Vercel treats every api/**/*.js as a serverless function.
+ * Keep this outside api/ — Vercel treats every file under api/ as a serverless function.
  * Routing truth: server/lib/household-api-handler.js
  */
 import { resolveIdTokenFromHeaders } from './analysis-quota.js';
