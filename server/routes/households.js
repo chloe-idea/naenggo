@@ -45,7 +45,12 @@ router.post('/households', async (req, res) => {
 router.get('/households/current', async (req, res) => {
   try {
     const household = await getCurrentHousehold(requestContext(req));
-    if (!household) return res.status(404).json({ success: false, error: 'HOUSEHOLD_NOT_FOUND', message: '참여 중인 가족 그룹이 없습니다.' });
+    // FamilySharingService.refresh()는 data.household 를 사용한다.
+    // household 없음은 라우트 404와 구분되도록 200 + null 로 응답한다.
+    // 새 household 자동 생성 / 임의 owner 후보는 선택하지 않는다.
+    if (!household) {
+      return res.status(200).json({ success: true, household: null });
+    }
     return res.json({ success: true, household });
   } catch (err) {
     return sendError(res, err);

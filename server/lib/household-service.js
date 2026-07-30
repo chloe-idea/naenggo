@@ -160,7 +160,7 @@ function writeRateLimits(tx, pendingWrites) {
 
 async function assertOwner(tx, db, householdId, uid) {
   const member = await tx.get(memberRef(db, householdId, uid));
-  if (!member.exists || member.data()?.role !== ROLE_OWNER) {
+  if (!member.exists || !isMemberActiveDoc(member.data()) || member.data()?.role !== ROLE_OWNER) {
     throw new HouseholdError('HOUSEHOLD_OWNER_REQUIRED', '가족 owner 권한이 필요합니다.', 403);
   }
   return member;
@@ -168,7 +168,7 @@ async function assertOwner(tx, db, householdId, uid) {
 
 async function assertMember(tx, db, householdId, uid) {
   const member = await tx.get(memberRef(db, householdId, uid));
-  if (!member.exists) {
+  if (!member.exists || !isMemberActiveDoc(member.data())) {
     throw new HouseholdError('HOUSEHOLD_MEMBER_REQUIRED', '가족 구성원 권한이 필요합니다.', 403);
   }
   return member;
@@ -206,6 +206,26 @@ function clearHouseholdSetupPayload() {
   return Object.fromEntries(USER_HOUSEHOLD_SETUP_FIELDS.map((field) => [field, FieldValue.delete()]));
 }
 
+/** 레거시 문서는 status가 없을 수 있다. deleted만 비활성으로 본다. */
+function isHouseholdActiveDoc(data) {
+  if (!data) return false;
+  const status = data.status;
+  if (status === 'deleted') return false;
+  return status === 'active' || status == null || status === '';
+}
+
+/** active 필드가 없으면 레거시 active. 명시적 false만 비활성. */
+function isMemberActiveDoc(data) {
+  if (!data) return false;
+  return data.active !== false;
+}
+
+function householdRecencyMs(data) {
+  return data?.updatedAt?.toMillis?.()
+    || data?.createdAt?.toMillis?.()
+    || 0;
+}
+
 /**
  * stored active/pending ID는 membership까지 존재할 때만 유효하다.
  * 트랜잭션 호출자는 모든 읽기를 끝낸 뒤 cleanupPayload를 써야 한다.
@@ -219,10 +239,28 @@ async function inspectUserHouseholdState(tx, db, userData, uid) {
       tx.get(householdRef(db, id)),
       tx.get(memberRef(db, id, uid)),
     ]);
+    const householdData = household.exists ? household.data() : null;
+    const memberData = member.exists ? member.data() : null;
+    const valid = household.exists
+      && isHouseholdActiveDoc(householdData)
+      && member.exists
+      && isMemberActiveDoc(memberData);
+    console.info('[CURRENT HOUSEHOLD DEBUG] inspect pointer', {
+      uid,
+      id,
+      householdExists: household.exists,
+      householdStatus: householdData?.status ?? null,
+      householdActiveDoc: household.exists ? isHouseholdActiveDoc(householdData) : false,
+      memberExists: member.exists,
+      memberActive: member.exists ? isMemberActiveDoc(memberData) : false,
+      memberPath: memberRef(db, id, uid).path,
+      valid,
+    });
     return {
       id,
-      valid: household.exists && household.data()?.status === 'active' && member.exists,
+      valid,
       member,
+      household,
     };
   }));
   const validIds = new Set(snapshots.filter((item) => item.valid).map((item) => item.id));
@@ -235,12 +273,21 @@ async function inspectUserHouseholdState(tx, db, userData, uid) {
   const hasLegacySetupResidue = USER_HOUSEHOLD_SETUP_FIELDS
     .filter((field) => field !== 'activeHouseholdId' && field !== 'pendingHouseholdId')
     .some((field) => userData?.[field] !== undefined);
-  const cleanupPayload = hasStaleReference || hasLegacySetupResidue ? {
+
+  // clearHouseholdSetupPayload() 는 activeHouseholdId/pendingHouseholdId 를
+  // FieldValue.delete() 로 넣고, 유효할 때만 아래에서 다시 채운다.
+  // hasLegacySetupResidue 만으로도 cleanup 이 돌면 membership 검증 실패 시
+  // 방금 저장한 activeHouseholdId 가 삭제될 수 있다.
+  let cleanupPayload = hasStaleReference || hasLegacySetupResidue ? {
     ...clearHouseholdSetupPayload(),
     ...(validActiveId ? { activeHouseholdId: validActiveId } : {}),
     ...(validPendingId ? { pendingHouseholdId: validPendingId } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   } : null;
+
+  if (cleanupPayload) {
+    console.log('[CLEANUP PAYLOAD]', cleanupPayload);
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     console.info('[household] setup state inspection', {
@@ -255,6 +302,456 @@ async function inspectUserHouseholdState(tx, db, userData, uid) {
     });
   }
   return { activeId: validActiveId, pendingId: validPendingId, cleanupPayload };
+}
+
+/**
+ * 기존 household 문서/멤버십/포인터만 보완한다.
+ * - ingredients / shopping / mealPlans 등 공유 데이터는 건드리지 않는다.
+ * - 이미 있는 members/{uid}·status는 덮어쓰지 않는다.
+ * - owner가 아닌데 members 문서가 없으면 임의로 만들지 않는다.
+ */
+async function ensureMembershipAndActivePointer(db, uid, householdId, {
+  allowCreateOwnerMember = false,
+  setActiveIfMissing = true,
+  forceActive = false,
+} = {}) {
+  const id = storedHouseholdId(householdId);
+  if (!id) return null;
+  const hRef = householdRef(db, id);
+  const householdSnap = await hRef.get();
+  if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data())) return null;
+  const household = householdSnap.data() || {};
+  const isOwner = household.ownerId === uid;
+  const mRef = memberRef(db, id, uid);
+  const memberSnap = await mRef.get();
+
+  if (!memberSnap.exists) {
+    if (!(allowCreateOwnerMember && isOwner)) return null;
+    await mRef.create({
+      uid,
+      role: ROLE_OWNER,
+      joinedAt: FieldValue.serverTimestamp(),
+      joinedBy: uid,
+      repairedAt: FieldValue.serverTimestamp(),
+    });
+  } else if (!isMemberActiveDoc(memberSnap.data())) {
+    // 제거/탈퇴로 비활성된 membership 은 자동 재연결하지 않는다.
+    return null;
+  }
+
+  const householdPatch = {};
+  if (household.status == null || household.status === '') {
+    householdPatch.status = 'active';
+  }
+  if (Object.keys(householdPatch).length) {
+    householdPatch.updatedAt = FieldValue.serverTimestamp();
+    await hRef.set(householdPatch, { merge: true });
+  }
+
+  const userRef = db.collection(USERS).doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.data() || {};
+  const currentActive = storedHouseholdId(userData.activeHouseholdId);
+  if (forceActive || (setActiveIfMissing && !currentActive)) {
+    await userRef.set({
+      activeHouseholdId: id,
+      pendingHouseholdId: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+
+  const refreshedMember = memberSnap.exists ? memberSnap : await mRef.get();
+  if (!refreshedMember.exists) return null;
+
+  // 레거시 복구로 active를 확정할 때 마이그레이션 위저드를 다시 띄우지 않는다.
+  // 기존 공유 데이터는 복사/삭제하지 않는다.
+  if (forceActive && !refreshedMember.data()?.migrationChoiceCompletedAt) {
+    await mRef.set({
+      migrationChoiceCompletedAt: FieldValue.serverTimestamp(),
+      migrationMode: refreshedMember.data()?.migrationMode || MIGRATION_EMPTY,
+      repairedLegacyAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+
+  return { householdId: id, role: refreshedMember.data()?.role || (isOwner ? ROLE_OWNER : ROLE_MEMBER) };
+}
+
+function serializeDebugValue(value) {
+  if (value == null) return value;
+  if (typeof value?.toDate === 'function') return value.toDate().toISOString();
+  if (value?._seconds != null) {
+    return new Date(value._seconds * 1000).toISOString();
+  }
+  return value;
+}
+
+/** users/{uid} 진단용 — 토큰·비밀값만 제외 */
+function sanitizeUserDataForDebug(data) {
+  if (!data || typeof data !== 'object') return null;
+  const blocked = new Set([
+    'idToken',
+    'refreshToken',
+    'accessToken',
+    'password',
+    'passwordHash',
+    'tokenHash',
+    'secret',
+    'privateKey',
+  ]);
+  const out = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (blocked.has(key)) continue;
+    out[key] = serializeDebugValue(value);
+  }
+  return out;
+}
+
+function logActiveHouseholdValidationDebug({
+  userRefPath,
+  userExists,
+  activeHouseholdId,
+  householdPath,
+  householdExists,
+  ownerId,
+  name,
+  memberPath,
+  memberExists,
+  memberData,
+  ownerIdMatches,
+  memberExistsFlag,
+  memberUidMatches,
+  memberRoleValid,
+  memberActiveValid,
+  householdActiveValid,
+  membershipValid,
+  enteredDiscovery,
+  inspectedActiveId,
+  inspectedPendingId,
+  returnReason,
+}) {
+  console.info([
+    '[ACTIVE HOUSEHOLD VALIDATION DEBUG]',
+    `1. userRef.path: ${userRefPath}`,
+    `2. userExists: ${userExists}`,
+    `3. userData.activeHouseholdId: ${activeHouseholdId == null ? 'null' : activeHouseholdId}`,
+    `4. active household document path: ${householdPath || ''}`,
+    `5. household document exists: ${householdExists}`,
+    `6. household.ownerId: ${ownerId == null ? 'null' : ownerId}`,
+    `6. household.name: ${name == null ? 'null' : name}`,
+    `7. member document path: ${memberPath || ''}`,
+    `8. member document exists: ${memberExists}`,
+    `9. member.uid: ${memberData?.uid == null ? 'null' : memberData.uid}`,
+    `9. member.role: ${memberData?.role == null ? 'null' : memberData.role}`,
+    `9. member.active: ${memberData?.active === undefined ? 'undefined' : memberData.active}`,
+    `9. member.status: ${memberData?.status === undefined ? 'undefined' : memberData.status}`,
+    `9. member.householdId: ${memberData?.householdId === undefined ? 'undefined' : memberData.householdId}`,
+    `9. memberDataFull: ${JSON.stringify(memberData == null ? null : sanitizeUserDataForDebug(memberData))}`,
+    `10. ownerIdMatches: ${ownerIdMatches}`,
+    `10. memberExists: ${memberExistsFlag}`,
+    `10. memberUidMatches: ${memberUidMatches}`,
+    `10. memberRoleValid: ${memberRoleValid}`,
+    `10. memberActiveValid: ${memberActiveValid}`,
+    `10. householdActiveValid: ${householdActiveValid}`,
+    `10. membershipValid: ${membershipValid}`,
+    `enteredDiscovery: ${enteredDiscovery}`,
+    `inspectedActiveId: ${inspectedActiveId == null ? 'null' : inspectedActiveId}`,
+    `inspectedPendingId: ${inspectedPendingId == null ? 'null' : inspectedPendingId}`,
+    `11. returnReason: ${returnReason}`,
+  ].join('\n'));
+}
+
+async function buildActiveHouseholdValidationDebug(db, uid, {
+  inspectedActiveId = null,
+  inspectedPendingId = null,
+  enteredDiscovery = false,
+  returnReason = '',
+} = {}) {
+  const userRef = db.collection(USERS).doc(uid);
+  const userSnap = await userRef.get();
+  const userData = userSnap.exists ? (userSnap.data() || {}) : {};
+  const activeHouseholdId = userData.activeHouseholdId ?? null;
+  const activeId = storedHouseholdId(activeHouseholdId);
+  const householdPath = activeId ? `${HOUSEHOLDS}/${activeId}` : '';
+  const memberPath = activeId ? `${HOUSEHOLDS}/${activeId}/members/${uid}` : '';
+
+  let householdExists = false;
+  let ownerId = null;
+  let name = null;
+  let householdActiveValid = false;
+  let memberExists = false;
+  let memberData = null;
+
+  if (activeId) {
+    const [householdSnap, memberSnap] = await Promise.all([
+      householdRef(db, activeId).get(),
+      memberRef(db, activeId, uid).get(),
+    ]);
+    householdExists = householdSnap.exists;
+    const householdData = householdExists ? (householdSnap.data() || {}) : {};
+    ownerId = householdData.ownerId ?? null;
+    name = householdData.name ?? null;
+    householdActiveValid = householdExists && isHouseholdActiveDoc(householdData);
+    memberExists = memberSnap.exists;
+    memberData = memberExists ? (memberSnap.data() || {}) : null;
+  }
+
+  const ownerIdMatches = Boolean(activeId && ownerId === uid);
+  const memberUidMatches = Boolean(memberExists && (memberData?.uid == null || memberData.uid === uid));
+  const memberRoleValid = Boolean(memberExists && (memberData?.role === ROLE_OWNER || memberData?.role === ROLE_MEMBER));
+  // member.active === false 이면 비활성. 필드 없음은 레거시 active.
+  const memberActiveValid = Boolean(memberExists && isMemberActiveDoc(memberData));
+  // 실제 membership 판정: household active + member.exists + member.active !== false
+  const membershipValid = Boolean(householdActiveValid && memberExists && memberActiveValid);
+
+  let reason = returnReason;
+  if (!reason) {
+    if (!userSnap.exists) reason = 'USER_DOC_MISSING';
+    else if (!activeHouseholdId) reason = 'ACTIVE_HOUSEHOLD_ID_MISSING_ON_USER';
+    else if (!activeId) reason = 'ACTIVE_HOUSEHOLD_ID_INVALID_FORMAT';
+    else if (!householdExists) reason = 'HOUSEHOLD_DOC_MISSING';
+    else if (!householdActiveValid) reason = 'HOUSEHOLD_DOC_NOT_ACTIVE';
+    else if (!memberExists) reason = 'MEMBER_DOC_MISSING';
+    else if (!memberUidMatches) reason = 'MEMBER_UID_MISMATCH';
+    else if (!memberRoleValid) reason = 'MEMBER_ROLE_INVALID';
+    else if (!memberActiveValid) reason = 'MEMBER_ACTIVE_FIELD_MISMATCH';
+    else if (!membershipValid) reason = 'MEMBERSHIP_INVALID';
+    else if (!inspectedActiveId && !inspectedPendingId) reason = 'INSPECT_CLEARED_ACTIVE_ID_DESPITE_RAW_POINTER';
+    else reason = 'UNKNOWN';
+  }
+
+  logActiveHouseholdValidationDebug({
+    userRefPath: userRef.path,
+    userExists: userSnap.exists,
+    activeHouseholdId,
+    householdPath,
+    householdExists,
+    ownerId,
+    name,
+    memberPath,
+    memberExists,
+    memberData,
+    ownerIdMatches,
+    memberExistsFlag: memberExists,
+    memberUidMatches,
+    memberRoleValid,
+    memberActiveValid,
+    householdActiveValid,
+    membershipValid,
+    enteredDiscovery,
+    inspectedActiveId,
+    inspectedPendingId,
+    returnReason: reason,
+  });
+
+  return { reason, membershipValid, activeId };
+}
+
+function logCurrentHouseholdDebug({
+  uid,
+  userExists,
+  userData,
+  activeHouseholdId,
+  pendingHouseholdId,
+  ownerHouseholds,
+  memberHouseholds,
+  inspectedActiveId = null,
+  inspectedPendingId = null,
+  returnReason,
+}) {
+  console.info([
+    '[CURRENT HOUSEHOLD DEBUG]',
+    `uid: ${uid}`,
+    `userExists: ${userExists}`,
+    `userData: ${JSON.stringify(userData)}`,
+    `activeHouseholdId: ${activeHouseholdId == null ? 'null' : activeHouseholdId}`,
+    `pendingHouseholdId: ${pendingHouseholdId == null ? 'null' : pendingHouseholdId}`,
+    `inspectedActiveId: ${inspectedActiveId == null ? 'null' : inspectedActiveId}`,
+    `inspectedPendingId: ${inspectedPendingId == null ? 'null' : inspectedPendingId}`,
+    `ownerHouseholds: ${JSON.stringify(ownerHouseholds)}`,
+    `ownerCount: ${ownerHouseholds.length}`,
+    `memberHouseholds: ${JSON.stringify(memberHouseholds)}`,
+    `memberCount: ${memberHouseholds.length}`,
+    `returnReason: ${returnReason}`,
+  ].join('\n'));
+}
+
+async function loadCurrentHouseholdDiagnostics(db, uid) {
+  const userSnap = await db.collection(USERS).doc(uid).get();
+  const userDataRaw = userSnap.exists ? (userSnap.data() || {}) : null;
+  const ownedSnap = await db.collection(HOUSEHOLDS).where('ownerId', '==', uid).get();
+  const ownerHouseholds = ownedSnap.docs.map((snap) => snap.id);
+
+  let memberHouseholds = [];
+  let memberQueryError = null;
+  try {
+    const memberHits = await db.collectionGroup('members').where('uid', '==', uid).get();
+    memberHouseholds = [...new Set(
+      memberHits.docs
+        .map((snap) => snap.ref.parent.parent?.id)
+        .filter(Boolean),
+    )];
+  } catch (err) {
+    memberQueryError = err?.message || String(err);
+  }
+
+  return {
+    userExists: userSnap.exists,
+    userData: sanitizeUserDataForDebug(userDataRaw),
+    activeHouseholdId: storedHouseholdId(userDataRaw?.activeHouseholdId),
+    pendingHouseholdId: storedHouseholdId(userDataRaw?.pendingHouseholdId),
+    rawActiveHouseholdId: userDataRaw?.activeHouseholdId ?? null,
+    rawPendingHouseholdId: userDataRaw?.pendingHouseholdId ?? null,
+    ownerHouseholds,
+    memberHouseholds,
+    memberQueryError,
+  };
+}
+
+/**
+ * owner 후보 household 비교용 진단 로그.
+ * 읽기만 하며 문서 생성/수정/삭제를 하지 않는다.
+ */
+async function logHouseholdCandidateDiagnostics(db, snap) {
+  const householdId = snap.id;
+  const data = snap.data() || {};
+  const root = householdRef(db, householdId);
+
+  const countCollection = async (name) => {
+    try {
+      const agg = await root.collection(name).count().get();
+      return Number(agg.data().count || 0);
+    } catch (err) {
+      console.warn('[HOUSEHOLD CANDIDATE] count failed', {
+        householdId,
+        collection: name,
+        message: err?.message || String(err),
+      });
+      return -1;
+    }
+  };
+
+  const [
+    ingredientsCount,
+    shoppingCount,
+    mealCalendarCount,
+    membersCount,
+    mealPlanSnap,
+    groceryPrefsSnap,
+  ] = await Promise.all([
+    countCollection('ingredients'),
+    countCollection('shopping'),
+    countCollection('mealCalendar'),
+    countCollection('members'),
+    root.collection('mealPlans').doc('default').get().catch(() => null),
+    root.collection('grocery').doc('preferences').get().catch(() => null),
+  ]);
+
+  console.info(
+    [
+      '[HOUSEHOLD CANDIDATE]',
+      `id: ${householdId}`,
+      `name: ${data.name ?? ''}`,
+      `createdAt: ${serializeTimestamp(data.createdAt) || ''}`,
+      `updatedAt: ${serializeTimestamp(data.updatedAt) || ''}`,
+      `ingredientsCount: ${ingredientsCount}`,
+      `shoppingCount: ${shoppingCount}`,
+      `mealPlanExists: ${Boolean(mealPlanSnap?.exists)}`,
+      `mealCalendarCount: ${mealCalendarCount}`,
+      `groceryPreferencesExists: ${Boolean(groceryPrefsSnap?.exists)}`,
+      `membersCount: ${membersCount}`,
+    ].join('\n'),
+  );
+}
+
+/**
+ * active/pending 포인터가 없을 때 ownerId 또는 members 문서로 소속을 찾는다.
+ * 새 household는 만들지 않는다.
+ */
+async function discoverAndRepairHouseholdForUser(db, uid) {
+  // 1) ownerId 후보 진단만 (읽기 전용 — 자동 선택/쓰기 없음)
+  // 쿼리: db.collection('households').where('ownerId', '==', uid)
+  const ownedSnap = await db.collection(HOUSEHOLDS).where('ownerId', '==', uid).get();
+  console.info('[HOUSEHOLD DEBUG]\nowner query uid:\n%s\n\nowner households:\n%s\n\nowner count:\n%d\n\nowner query:\n.where("ownerId","==",uid)\ncollection: households',
+    uid,
+    ownedSnap.docs.map((snap) => snap.id).join('\n') || '(none)',
+    ownedSnap.size,
+  );
+
+  for (const snap of ownedSnap.docs) {
+    await logHouseholdCandidateDiagnostics(db, snap);
+  }
+
+  if (ownedSnap.size > 0) {
+    console.info('[HOUSEHOLD DEBUG] auto-select skipped; compare HOUSEHOLD CANDIDATE logs', {
+      uid,
+      ownerCount: ownedSnap.size,
+    });
+    return null;
+  }
+
+  // 2) owner 후보가 없을 때만 collectionGroup(members) 경로 유지
+  const repairs = [];
+  try {
+    const memberHits = await db.collectionGroup('members').where('uid', '==', uid).get();
+    for (const snap of memberHits.docs) {
+      const householdId = snap.ref.parent.parent?.id;
+      if (!householdId) continue;
+      const repaired = await ensureMembershipAndActivePointer(db, uid, householdId, {
+        allowCreateOwnerMember: false,
+        setActiveIfMissing: false,
+      });
+      if (repaired) {
+        const hSnap = await householdRef(db, repaired.householdId).get();
+        repairs.push({
+          ...repaired,
+          recency: householdRecencyMs(hSnap.data()),
+          source: 'members',
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[household] collectionGroup(members) discovery failed', {
+      uid,
+      message: err?.message || String(err),
+      code: err?.code || null,
+    });
+  }
+
+  if (!repairs.length) {
+    console.info('[household] membership discovery found nothing', { uid });
+    return null;
+  }
+
+  const unique = new Map();
+  for (const item of repairs) {
+    const prev = unique.get(item.householdId);
+    if (!prev || item.recency > prev.recency) unique.set(item.householdId, item);
+  }
+  const ranked = [...unique.values()].sort((a, b) => b.recency - a.recency);
+  const chosen = ranked[0];
+  if (ranked.length > 1) {
+    console.warn('[household] multiple recoverable households; using most recent', {
+      uid,
+      chosen: chosen.householdId,
+      candidates: ranked.map((item) => ({
+        householdId: item.householdId,
+        source: item.source,
+        recency: item.recency,
+      })),
+    });
+  } else {
+    console.info('[household] repaired membership links', {
+      uid,
+      householdId: chosen.householdId,
+      source: chosen.source,
+    });
+  }
+
+  await ensureMembershipAndActivePointer(db, uid, chosen.householdId, {
+    allowCreateOwnerMember: false,
+    forceActive: true,
+  });
+  return chosen;
 }
 
 export async function createHousehold({ idToken, name, headers = {}, ip = '' }) {
@@ -320,7 +817,7 @@ export async function activateHousehold({ idToken, householdId, migrationMode })
     if (state.activeId && state.activeId !== id) {
       throw new HouseholdError('ALREADY_IN_HOUSEHOLD', '이미 다른 가족 그룹에 참여하고 있습니다.', 409);
     }
-    if (!householdSnap.exists || householdSnap.data()?.status !== 'active' || !memberSnap.exists) {
+    if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data()) || !memberSnap.exists || !isMemberActiveDoc(memberSnap.data())) {
       throw new HouseholdError('HOUSEHOLD_NOT_FOUND', '활성화할 가족 그룹을 찾을 수 없습니다.', 404);
     }
     if (mode === MIGRATION_COPY && !memberSnap.data()?.migrationCopyCompletedAt) {
@@ -384,35 +881,177 @@ export async function getCurrentHousehold({ idToken }) {
   const user = await requireHouseholdUser(idToken);
   const db = getFirestoreAdmin();
   const userRef = db.collection(USERS).doc(user.uid);
-  const state = await db.runTransaction(async (tx) => {
+  console.info('[household] GET /api/households/current', { uid: user.uid });
+
+  const diagnostics = await loadCurrentHouseholdDiagnostics(db, user.uid);
+  const baseDebug = {
+    uid: user.uid,
+    userExists: diagnostics.userExists,
+    userData: diagnostics.userData,
+    activeHouseholdId: diagnostics.rawActiveHouseholdId,
+    pendingHouseholdId: diagnostics.rawPendingHouseholdId,
+    ownerHouseholds: diagnostics.ownerHouseholds,
+    memberHouseholds: diagnostics.memberHouseholds,
+  };
+  if (diagnostics.memberQueryError) {
+    console.warn('[CURRENT HOUSEHOLD DEBUG] collectionGroup(members) query failed', {
+      uid: user.uid,
+      message: diagnostics.memberQueryError,
+    });
+  }
+
+  // 1) users/{uid}.activeHouseholdId / pendingHouseholdId + members/{uid} 검증
+  //    주의: cleanupPayload 가 stale 로 판단하면 activeHouseholdId 를 delete 할 수 있다.
+  let state = await db.runTransaction(async (tx) => {
     const userSnap = await tx.get(userRef);
     const inspected = await inspectUserHouseholdState(tx, db, userSnap.data(), user.uid);
-    if (inspected.cleanupPayload) tx.set(userRef, inspected.cleanupPayload, { merge: true });
+    if (inspected.cleanupPayload) {
+      console.warn('[CURRENT HOUSEHOLD DEBUG] applying setup cleanupPayload', {
+        uid: user.uid,
+        path: userRef.path,
+        beforeActiveHouseholdId: userSnap.data()?.activeHouseholdId ?? null,
+        inspectedActiveId: inspected.activeId,
+        inspectedPendingId: inspected.pendingId,
+        cleanupKeys: Object.keys(inspected.cleanupPayload),
+      });
+      tx.set(userRef, inspected.cleanupPayload, { merge: true });
+    }
     return inspected;
   });
+
+  await buildActiveHouseholdValidationDebug(db, user.uid, {
+    inspectedActiveId: state.activeId,
+    inspectedPendingId: state.pendingId,
+    enteredDiscovery: false,
+    returnReason: state.activeId || state.pendingId
+      ? 'AFTER_INSPECT_HAS_POINTER'
+      : 'AFTER_INSPECT_NO_POINTER',
+  });
+
+  // 2) 포인터가 없거나 stale cleanup으로 비었으면 membership / ownerId로 소속 검색
+  //    (새 household 생성 금지, 공유 데이터 복사/삭제 금지)
+  let enteredDiscovery = false;
+  if (!state.activeId && !state.pendingId) {
+    enteredDiscovery = true;
+    console.info('[ACTIVE HOUSEHOLD VALIDATION DEBUG] entering discoverAndRepairHouseholdForUser', {
+      uid: user.uid,
+      reason: 'state.activeId and state.pendingId are both null after inspect',
+      rawActiveHouseholdId: diagnostics.rawActiveHouseholdId,
+    });
+    const discovered = await discoverAndRepairHouseholdForUser(db, user.uid);
+    if (!discovered?.householdId) {
+      let returnReason = 'NO_ACTIVE_PENDING_OWNER_OR_MEMBER_HOUSEHOLD';
+      if (diagnostics.ownerHouseholds.length > 1) {
+        returnReason = 'NO_ACTIVE_AND_MULTIPLE_OWNER_HOUSEHOLDS';
+      } else if (diagnostics.ownerHouseholds.length === 1) {
+        returnReason = 'DISCOVERY_SKIPPED_OWNER_CANDIDATES_PRESENT';
+      } else if (diagnostics.memberHouseholds.length > 0) {
+        returnReason = 'DISCOVERY_FOUND_NO_REPAIRABLE_MEMBERSHIP';
+      } else if (diagnostics.memberQueryError) {
+        returnReason = 'NO_ACTIVE_AND_MEMBER_QUERY_FAILED';
+      }
+      await buildActiveHouseholdValidationDebug(db, user.uid, {
+        inspectedActiveId: state.activeId,
+        inspectedPendingId: state.pendingId,
+        enteredDiscovery: true,
+        returnReason,
+      });
+      logCurrentHouseholdDebug({
+        ...baseDebug,
+        inspectedActiveId: state.activeId,
+        inspectedPendingId: state.pendingId,
+        returnReason,
+      });
+      return null;
+    }
+
+    state = await db.runTransaction(async (tx) => {
+      const userSnap = await tx.get(userRef);
+      const inspected = await inspectUserHouseholdState(tx, db, userSnap.data(), user.uid);
+      if (inspected.cleanupPayload) tx.set(userRef, inspected.cleanupPayload, { merge: true });
+      return inspected;
+    });
+    // inspect가 아직 members를 못 보면 discovery 결과를 직접 사용
+    if (!state.activeId && !state.pendingId) {
+      state = {
+        activeId: discovered.householdId,
+        pendingId: null,
+        cleanupPayload: null,
+      };
+    }
+  }
+
   const householdId = state.activeId || state.pendingId || null;
-  if (!householdId) return null;
+  if (!householdId) {
+    await buildActiveHouseholdValidationDebug(db, user.uid, {
+      inspectedActiveId: state.activeId,
+      inspectedPendingId: state.pendingId,
+      enteredDiscovery,
+      returnReason: 'NO_HOUSEHOLD_ID_AFTER_INSPECT_AND_DISCOVERY',
+    });
+    logCurrentHouseholdDebug({
+      ...baseDebug,
+      inspectedActiveId: state.activeId,
+      inspectedPendingId: state.pendingId,
+      returnReason: 'NO_HOUSEHOLD_ID_AFTER_INSPECT_AND_DISCOVERY',
+    });
+    return null;
+  }
 
   const [householdSnap, memberSnap, membersSnap] = await Promise.all([
     householdRef(db, householdId).get(),
     memberRef(db, householdId, user.uid).get(),
     householdRef(db, householdId).collection('members').get(),
   ]);
-  if (!householdSnap.exists || householdSnap.data()?.status !== 'active' || !memberSnap.exists) {
+  if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data()) || !memberSnap.exists || !isMemberActiveDoc(memberSnap.data())) {
+    const returnReason = !householdSnap.exists
+      ? 'HOUSEHOLD_DOC_MISSING'
+      : !isHouseholdActiveDoc(householdSnap.data())
+        ? 'HOUSEHOLD_DOC_NOT_ACTIVE'
+        : !memberSnap.exists
+          ? 'MEMBER_DOC_MISSING_FOR_SELECTED_HOUSEHOLD'
+          : 'MEMBER_INACTIVE_FOR_SELECTED_HOUSEHOLD';
+    await buildActiveHouseholdValidationDebug(db, user.uid, {
+      inspectedActiveId: state.activeId,
+      inspectedPendingId: state.pendingId,
+      enteredDiscovery,
+      returnReason,
+    });
+    logCurrentHouseholdDebug({
+      ...baseDebug,
+      inspectedActiveId: state.activeId,
+      inspectedPendingId: state.pendingId,
+      returnReason,
+    });
     return null;
   }
   const data = householdSnap.data();
+  const okReason = state.activeId ? 'OK_ACTIVE_HOUSEHOLD' : 'OK_PENDING_HOUSEHOLD';
+  await buildActiveHouseholdValidationDebug(db, user.uid, {
+    inspectedActiveId: state.activeId,
+    inspectedPendingId: state.pendingId,
+    enteredDiscovery,
+    returnReason: okReason,
+  });
+  logCurrentHouseholdDebug({
+    ...baseDebug,
+    inspectedActiveId: state.activeId,
+    inspectedPendingId: state.pendingId,
+    returnReason: okReason,
+  });
   return {
     householdId,
     name: data.name,
     ownerId: data.ownerId,
     role: memberSnap.data()?.role || null,
     needsMigrationChoice: !memberSnap.data()?.migrationChoiceCompletedAt,
-    members: membersSnap.docs.map((snap) => ({
-      uid: snap.id,
-      role: snap.data()?.role || ROLE_MEMBER,
-      joinedAt: serializeTimestamp(snap.data()?.joinedAt),
-    })),
+    members: membersSnap.docs
+      .filter((snap) => isMemberActiveDoc(snap.data()))
+      .map((snap) => ({
+        uid: snap.id,
+        role: snap.data()?.role || ROLE_MEMBER,
+        joinedAt: serializeTimestamp(snap.data()?.joinedAt),
+      })),
     createdAt: serializeTimestamp(data.createdAt),
     pendingSetup: !state.activeId,
   };
@@ -437,7 +1076,7 @@ export async function issueInvite({ idToken, householdId, kind, expiresAt, maxUs
     await assertRateLimit(tx, db, 'invite:reissue:v2:ip', clientIp(headers, ip), 100, 60 * 60 * 1000, rateWrites);
     await assertOwner(tx, db, id, user.uid);
     const householdSnap = await tx.get(householdRef(db, id));
-    if (!householdSnap.exists || householdSnap.data()?.status !== 'active') {
+    if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data())) {
       throw new HouseholdError('HOUSEHOLD_NOT_FOUND', '활성 가족 그룹을 찾을 수 없습니다.', 404);
     }
     const activeInvites = await tx.get(db.collection(INVITES).where('householdId', '==', id));
@@ -494,7 +1133,7 @@ export async function reissueInvites({ idToken, householdId, expiresAt, maxUses,
     await assertOwner(tx, db, id, user.uid);
     const householdSnap = await tx.get(householdRef(db, id));
     const invitesSnap = await tx.get(db.collection(INVITES).where('householdId', '==', id));
-    if (!householdSnap.exists || householdSnap.data()?.status !== 'active') {
+    if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data())) {
       throw new HouseholdError('HOUSEHOLD_NOT_FOUND', '활성 가족 그룹을 찾을 수 없습니다.', 404);
     }
 
@@ -569,20 +1208,37 @@ export async function joinHousehold({ idToken, kind, secret, headers = {}, ip = 
     }
     const household = householdRef(db, invite.householdId);
     const householdSnap = await tx.get(household);
-    if (!householdSnap.exists || householdSnap.data()?.status !== 'active') {
+    if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data())) {
       throw new HouseholdError('HOUSEHOLD_NOT_FOUND', '활성 가족 그룹을 찾을 수 없습니다.', 404);
     }
     const membership = memberRef(db, invite.householdId, user.uid);
     const membershipSnap = await tx.get(membership);
-    if (membershipSnap.exists) throw new HouseholdError('ALREADY_MEMBER', '이미 가족 구성원입니다.', 409);
+    if (membershipSnap.exists && isMemberActiveDoc(membershipSnap.data())) {
+      throw new HouseholdError('ALREADY_MEMBER', '이미 가족 구성원입니다.', 409);
+    }
 
     writeRateLimits(tx, rateWrites);
-    tx.create(membership, {
-      uid: user.uid,
-      role: ROLE_MEMBER,
-      joinedAt: FieldValue.serverTimestamp(),
-      joinedBy: invite.createdBy,
-    });
+    if (membershipSnap.exists) {
+      tx.set(membership, {
+        uid: user.uid,
+        role: ROLE_MEMBER,
+        active: true,
+        joinedAt: membershipSnap.data()?.joinedAt || FieldValue.serverTimestamp(),
+        joinedBy: invite.createdBy,
+        rejoinedAt: FieldValue.serverTimestamp(),
+        removedAt: FieldValue.delete(),
+        removedBy: FieldValue.delete(),
+        removedReason: FieldValue.delete(),
+      }, { merge: true });
+    } else {
+      tx.create(membership, {
+        uid: user.uid,
+        role: ROLE_MEMBER,
+        active: true,
+        joinedAt: FieldValue.serverTimestamp(),
+        joinedBy: invite.createdBy,
+      });
+    }
     tx.update(inviteDoc.ref, {
       useCount: FieldValue.increment(1),
       updatedAt: FieldValue.serverTimestamp(),
@@ -626,7 +1282,7 @@ export async function renameHousehold({ idToken, householdId, name }) {
   await db.runTransaction(async (tx) => {
     await assertOwner(tx, db, id, user.uid);
     const household = await tx.get(householdRef(db, id));
-    if (!household.exists || household.data()?.status !== 'active') {
+    if (!household.exists || !isHouseholdActiveDoc(household.data())) {
       throw new HouseholdError('HOUSEHOLD_NOT_FOUND', '활성 가족 그룹을 찾을 수 없습니다.', 404);
     }
     tx.update(household.ref, { name: householdName, updatedAt: FieldValue.serverTimestamp() });
@@ -634,23 +1290,198 @@ export async function renameHousehold({ idToken, householdId, name }) {
   return { householdId: id, name: householdName };
 }
 
+function clearPointersForHouseholdPayload(userData, householdId) {
+  const payload = { updatedAt: FieldValue.serverTimestamp() };
+  if (storedHouseholdId(userData?.activeHouseholdId) === householdId) {
+    payload.activeHouseholdId = FieldValue.delete();
+  }
+  if (storedHouseholdId(userData?.pendingHouseholdId) === householdId) {
+    payload.pendingHouseholdId = FieldValue.delete();
+  }
+  for (const field of USER_HOUSEHOLD_SETUP_FIELDS) {
+    if (field === 'activeHouseholdId' || field === 'pendingHouseholdId') continue;
+    if (userData?.[field] !== undefined) payload[field] = FieldValue.delete();
+  }
+  return payload;
+}
+
+/**
+ * 탈퇴/제거 전: household 공유 데이터를 개인 경로로 복사한다.
+ * household 원본은 삭제하지 않으며, 개인에 이미 있는 문서는 건너뛴다.
+ */
+async function copyHouseholdSharedDataToPersonal(db, { householdId, uid }) {
+  const id = validateHouseholdId(householdId);
+  const targetUid = String(uid || '').trim();
+  if (!targetUid) throw new HouseholdError('INVALID_MEMBER_REMOVAL', '복구할 구성원이 필요합니다.');
+
+  const householdRoot = householdRef(db, id);
+  const userRoot = db.collection(USERS).doc(targetUid);
+  const copied = [];
+  const skipped = [];
+
+  await copyCollectionDocs({
+    source: householdRoot.collection('ingredients'),
+    target: userRoot.collection('ingredients'),
+    copied,
+    skipped,
+  });
+  // household 원본은 삭제하지 않는다. 개인에 동일 ID가 있으면 건너뛰어 개인 데이터를 유지한다.
+
+  await copyCollectionDocs({
+    source: householdRoot.collection('shopping'),
+    target: userRoot.collection('shopping'),
+    copied,
+    skipped,
+  });
+  await copyCollectionDocs({
+    source: householdRoot.collection('mealCalendar'),
+    target: userRoot.collection('mealCalendar'),
+    copied,
+    skipped,
+  });
+
+  const sourceMeal = householdRoot.collection('mealPlans').doc('default');
+  const targetMeal = userRoot.collection('mealPlans').doc('default');
+  const [sourceMealSnap, targetMealSnap] = await Promise.all([sourceMeal.get(), targetMeal.get()]);
+  if (sourceMealSnap.exists && !targetMealSnap.exists) {
+    await targetMeal.create({ ...sourceMealSnap.data() });
+    copied.push(sourceMeal.path);
+  } else if (sourceMealSnap.exists) {
+    const sourceData = sourceMealSnap.data() || {};
+    const targetData = targetMealSnap.data() || {};
+    await targetMeal.set({
+      ...targetData,
+      ...Object.fromEntries(Object.entries(sourceData).filter(([key]) => !(key in targetData))),
+      plans: { ...(sourceData.plans || {}), ...(targetData.plans || {}) },
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    copied.push(`${sourceMeal.path}:merged`);
+  }
+
+  const grocerySnap = await householdRoot.collection('grocery').doc('preferences').get();
+  if (grocerySnap.exists) {
+    const prefsRef = userRoot.collection('settings').doc('preferences');
+    const prefsSnap = await prefsRef.get();
+    const existing = prefsSnap.exists ? (prefsSnap.data() || {}) : {};
+    const grocery = grocerySnap.data() || {};
+    const existingByWeek = existing.grocery?.byWeek || {};
+    const sharedByWeek = grocery.byWeek || {};
+    const missingWeeks = Object.fromEntries(
+      Object.entries(sharedByWeek).filter(([week]) => !(week in existingByWeek)),
+    );
+    await prefsRef.set({
+      grocery: {
+        ...(existing.grocery || {}),
+        activeWeekKey: existing.grocery?.activeWeekKey || grocery.activeWeekKey || '',
+        byWeek: { ...existingByWeek, ...missingWeeks },
+      },
+      currency: existing.currency || grocery.currency || 'KRW',
+      monthlyFoodBudget: existing.monthlyFoodBudget ?? grocery.monthlyFoodBudget ?? 0,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    copied.push(`${grocerySnap.ref.path}:merged`);
+  }
+
+  console.info('[household] copy shared data to personal completed', {
+    uid: targetUid,
+    householdId: id,
+    copiedCount: copied.length,
+    skippedCount: skipped.length,
+  });
+
+  return {
+    householdId: id,
+    uid: targetUid,
+    copied,
+    skipped,
+    copiedCount: copied.length,
+    skippedCount: skipped.length,
+    ok: true,
+  };
+}
+
+async function deactivateHouseholdMember(db, {
+  householdId,
+  memberUid,
+  removedBy,
+  removedReason,
+}) {
+  const id = validateHouseholdId(householdId);
+  const targetUid = String(memberUid || '').trim();
+  const actorUid = String(removedBy || '').trim();
+  if (!targetUid || !actorUid) {
+    throw new HouseholdError('INVALID_MEMBER_REMOVAL', '구성원 제거 정보가 올바르지 않습니다.');
+  }
+
+  const recovery = await copyHouseholdSharedDataToPersonal(db, {
+    householdId: id,
+    uid: targetUid,
+  });
+  if (!recovery?.ok) {
+    throw new HouseholdError('MEMBER_DATA_RECOVERY_FAILED', '구성원 개인 데이터 복구에 실패했습니다.', 500);
+  }
+
+  await db.runTransaction(async (tx) => {
+    const [householdSnap, memberSnap, userSnap] = await Promise.all([
+      tx.get(householdRef(db, id)),
+      tx.get(memberRef(db, id, targetUid)),
+      tx.get(db.collection(USERS).doc(targetUid)),
+    ]);
+    if (!householdSnap.exists || !isHouseholdActiveDoc(householdSnap.data())) {
+      throw new HouseholdError('HOUSEHOLD_NOT_FOUND', '활성 가족 그룹을 찾을 수 없습니다.', 404);
+    }
+    if (!memberSnap.exists || !isMemberActiveDoc(memberSnap.data())) {
+      throw new HouseholdError('MEMBER_NOT_FOUND', '활성 가족 구성원을 찾을 수 없습니다.', 404);
+    }
+    if (memberSnap.data()?.role === ROLE_OWNER) {
+      throw new HouseholdError('OWNER_TRANSFER_REQUIRED', 'owner는 소유권을 이전한 후 탈퇴할 수 있습니다.', 409);
+    }
+
+    const userData = userSnap.exists ? (userSnap.data() || {}) : {};
+    tx.set(
+      db.collection(USERS).doc(targetUid),
+      clearPointersForHouseholdPayload(userData, id),
+      { merge: true },
+    );
+    tx.set(memberRef(db, id, targetUid), {
+      active: false,
+      removedAt: FieldValue.serverTimestamp(),
+      removedBy: actorUid,
+      removedReason: removedReason || 'removed',
+      lastRecoveryCopiedCount: recovery.copiedCount,
+      lastRecoverySkippedCount: recovery.skippedCount,
+      recoveryCompletedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  return recovery;
+}
+
 export async function removeMember({ idToken, householdId, memberUid }) {
   const user = await requireHouseholdUser(idToken);
   const db = getFirestoreAdmin();
   const id = validateHouseholdId(householdId);
   const targetUid = String(memberUid || '').trim();
-  if (!targetUid || targetUid === user.uid) throw new HouseholdError('INVALID_MEMBER_REMOVAL', 'owner는 자신을 제거할 수 없습니다.');
+  if (!targetUid || targetUid === user.uid) {
+    throw new HouseholdError('INVALID_MEMBER_REMOVAL', 'owner는 자신을 제거할 수 없습니다.');
+  }
 
   await db.runTransaction(async (tx) => {
     await assertOwner(tx, db, id, user.uid);
     const target = await tx.get(memberRef(db, id, targetUid));
-    if (!target.exists) throw new HouseholdError('MEMBER_NOT_FOUND', '가족 구성원을 찾을 수 없습니다.', 404);
-    if (target.data()?.role === ROLE_OWNER) throw new HouseholdError('OWNER_TRANSFER_REQUIRED', 'owner는 먼저 소유권을 이전해야 합니다.', 409);
-    tx.delete(target.ref);
-    tx.set(db.collection(USERS).doc(targetUid), {
-      ...clearHouseholdSetupPayload(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+    if (!target.exists || !isMemberActiveDoc(target.data())) {
+      throw new HouseholdError('MEMBER_NOT_FOUND', '가족 구성원을 찾을 수 없습니다.', 404);
+    }
+    if (target.data()?.role === ROLE_OWNER) {
+      throw new HouseholdError('OWNER_TRANSFER_REQUIRED', 'owner는 먼저 소유권을 이전해야 합니다.', 409);
+    }
+  });
+
+  await deactivateHouseholdMember(db, {
+    householdId: id,
+    memberUid: targetUid,
+    removedBy: user.uid,
+    removedReason: 'removed_by_owner',
   });
 }
 
@@ -661,15 +1492,19 @@ export async function leaveHousehold({ idToken, householdId }) {
 
   await db.runTransaction(async (tx) => {
     const member = await tx.get(memberRef(db, id, user.uid));
-    if (!member.exists) throw new HouseholdError('MEMBER_NOT_FOUND', '가족 구성원을 찾을 수 없습니다.', 404);
+    if (!member.exists || !isMemberActiveDoc(member.data())) {
+      throw new HouseholdError('MEMBER_NOT_FOUND', '가족 구성원을 찾을 수 없습니다.', 404);
+    }
     if (member.data()?.role === ROLE_OWNER) {
       throw new HouseholdError('OWNER_TRANSFER_REQUIRED', 'owner는 소유권을 이전한 후 탈퇴할 수 있습니다.', 409);
     }
-    tx.delete(member.ref);
-    tx.set(db.collection(USERS).doc(user.uid), {
-      ...clearHouseholdSetupPayload(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+  });
+
+  await deactivateHouseholdMember(db, {
+    householdId: id,
+    memberUid: user.uid,
+    removedBy: user.uid,
+    removedReason: 'left',
   });
 }
 

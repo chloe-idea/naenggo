@@ -54,6 +54,18 @@ export const FirestoreMealPlansService = {
       onPlans?.({});
       return null;
     }
+    const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
+    const householdId = FamilySharingService.getActiveFamily()?.householdId || activeHouseholdId || null;
+    const collectionPath = activeHouseholdId
+      ? `households/${activeHouseholdId}/${SUBCOLLECTION}/${DOC_ID}`
+      : `users/${uid}/${SUBCOLLECTION}/${DOC_ID}`;
+    console.info([
+      '[CURRENT MEAL PLAN SOURCE]',
+      `uid: ${uid}`,
+      `activeHouseholdId: ${activeHouseholdId || ''}`,
+      `householdId: ${householdId || ''}`,
+      `collectionPath: ${collectionPath}`,
+    ].join('\n'));
     snapshotUnsubscribe = onSnapshot(
       planDoc(uid),
       (snap) => {

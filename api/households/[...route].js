@@ -49,7 +49,8 @@ export default async function handler(req, res) {
     }
     if (req.method === 'GET' && first === 'current') {
       const household = await getCurrentHousehold(context(req));
-      if (!household) return res.status(404).json({ success: false, error: 'HOUSEHOLD_NOT_FOUND', message: '참여 중인 가족 그룹이 없습니다.' });
+      // 라우트 미등록 404와 구분: 참여 household 없음은 200 + null
+      if (!household) return res.status(200).json({ success: true, household: null });
       return res.json({ success: true, household });
     }
     if (req.method === 'POST' && first === 'invites') {

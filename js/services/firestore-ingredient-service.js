@@ -202,10 +202,20 @@ export const FirestoreIngredientService = {
     }
 
     const col = ingredientsCollection(user.uid);
+    const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
+    const householdId = FamilySharingService.getActiveFamily()?.householdId || activeHouseholdId || null;
+    const collectionPath = ingredientPath(user.uid);
+    console.info([
+      '[CURRENT INGREDIENT SOURCE]',
+      `uid: ${user.uid}`,
+      `activeHouseholdId: ${activeHouseholdId || ''}`,
+      `householdId: ${householdId || ''}`,
+      `collectionPath: ${collectionPath}`,
+    ].join('\n'));
     console.info('[FirestoreIngredientService] onSnapshot subscription', {
       uid: user.uid,
-      path: ingredientPath(user.uid),
-      householdId: FamilySharingService.getActiveHouseholdId(),
+      path: collectionPath,
+      householdId: activeHouseholdId,
     });
 
     snapshotUnsubscribe = onSnapshot(

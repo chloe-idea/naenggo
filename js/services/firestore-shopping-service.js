@@ -71,6 +71,18 @@ export const FirestoreShoppingService = {
       onItems?.([]);
       return null;
     }
+    const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
+    const householdId = FamilySharingService.getActiveFamily()?.householdId || activeHouseholdId || null;
+    const collectionPath = activeHouseholdId
+      ? `households/${activeHouseholdId}/${SUBCOLLECTION}`
+      : `users/${uid}/${SUBCOLLECTION}`;
+    console.info([
+      '[CURRENT SHOPPING SOURCE]',
+      `uid: ${uid}`,
+      `activeHouseholdId: ${activeHouseholdId || ''}`,
+      `householdId: ${householdId || ''}`,
+      `collectionPath: ${collectionPath}`,
+    ].join('\n'));
     snapshotUnsubscribe = onSnapshot(
       col(uid),
       (snap) => {

@@ -78,6 +78,21 @@ export function getFirestoreAdmin() {
   return getFirebaseAdmin().firestore();
 }
 
+/**
+ * db 와 동일한 firebase-admin 인스턴스의 FieldValue/Timestamp 를 함께 반환한다.
+ * 스크립트에서 firebase-admin/firestore 를 별도 import 하면 이중 설치 시
+ * ServerTimestampTransform 직렬화 오류가 날 수 있다.
+ */
+export function getFirestoreAdminContext() {
+  const app = getFirebaseAdmin();
+  return {
+    admin: app,
+    db: app.firestore(),
+    FieldValue: app.firestore.FieldValue,
+    Timestamp: app.firestore.Timestamp,
+  };
+}
+
 export async function verifyFirebaseIdToken(idToken) {
   const token = String(idToken || '').trim();
   if (!token) return null;

@@ -79,6 +79,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`       POST /api/user-profile`);
   console.log(`       GET  /api/coupang-search?keyword=...`);
   console.log(`       POST /api/households`);
+  console.log(`       GET  /api/households/current`);
   console.log(`  OpenAI: ${openAiInfo.present ? '설정됨' : '⚠️  OPENAI_API_KEY 미설정 (.env 확인)'}`);
   if (openAiInfo.present) {
     logOpenAiKeyConfig('startup');

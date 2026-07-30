@@ -1,0 +1,23 @@
+---
+description: Family sharing baseline — require regression checklist before done
+globs: server/lib/household-service.js,server/routes/households.js,api/households/**,js/services/family-sharing-service.js,js/firebase-bootstrap.js,firestore.rules
+alwaysApply: false
+---
+
+# Family Sharing Baseline
+
+Do not treat family-sharing / household changes as complete until
+`docs/Family Sharing Regression Checklist.md` has been run (or explicitly
+scheduled with the user). Contracts live in `docs/family-sharing-baseline.md`.
+
+Hard rules:
+
+- Do not return `status: deleted` households from `GET /api/households/current`
+- Do not hardcode UID/householdId to force `activeHouseholdId`
+- Do not auto-create households in current/discovery
+- Do not raise/remove `create:user` rate limits to mask duplicate creates
+- remove/leave must soft-deactivate members; keep household `active` for remaining members
+- Do not physically delete shared or personal pantry data in remove/leave/migrate
+
+Smoke guide: `scripts/family-sharing-smoke-test.md`
+Project rule copy: `CLAUDE.md`
