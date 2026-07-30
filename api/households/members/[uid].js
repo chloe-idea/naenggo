@@ -2,7 +2,7 @@
  * DELETE /api/households/members/:uid
  * Single dynamic segment — supported on non-Next Vercel (unlike [...catchAll]).
  */
-import { runVercelHouseholdDispatch } from '../_vercel-entry.js';
+import { runVercelHouseholdDispatch } from '../../../server/lib/vercel-household-entry.js';
 
 export default async function handler(req, res) {
   const uid = req.query?.uid;

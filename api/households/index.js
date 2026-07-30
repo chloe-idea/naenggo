@@ -1,7 +1,7 @@
 /**
  * POST /api/households  (create)
  */
-import { runVercelHouseholdDispatch } from './_vercel-entry.js';
+import { runVercelHouseholdDispatch } from '../../server/lib/vercel-household-entry.js';
 
 export default async function handler(req, res) {
   return runVercelHouseholdDispatch(req, res, {

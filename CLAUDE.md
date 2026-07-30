@@ -27,7 +27,7 @@
 - `server/lib/household-api-handler.js`
 - `server/routes/households.js`
 - `api/households/current.js` 및 `api/households/*.js` 명시적 엔트리
-- `api/households/_vercel-entry.js`
+- `server/lib/vercel-household-entry.js`
 - `js/services/family-sharing-service.js`
 - `js/firebase-bootstrap.js` (가족 공유 UI 바인딩)
 - Firestore rules 중 household/members 관련 부분
