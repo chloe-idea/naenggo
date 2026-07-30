@@ -8,8 +8,14 @@
 | 영역 | 경로 |
 |------|------|
 | API 서비스 | `server/lib/household-service.js` |
-| Express / Vercel | `server/routes/households.js`, `api/households/[...route].js` |
+| **공통 API dispatcher** | `server/lib/household-api-handler.js` |
+| Express | `server/routes/households.js` |
+| Vercel (non-Next 명시적 파일) | `api/households/current.js`, `index.js`, `migrate-copy.js`, `activate.js`, `join.js`, `leave.js`, `invites.js`, … — **`[...route]` catch-all 사용 금지** |
 | 클라이언트 | `js/services/family-sharing-service.js`, `js/firebase-bootstrap.js` |
+| 계약 테스트 | `node scripts/test-household-api-contract.mjs` |
+
+> household API 변경 시 Express와 Vercel 진입점을 **모두** 검증한다. localhost 성공만으로 완료 처리하지 않는다.  
+> production 확인: 응답 헤더 `X-Household-Handler`, `X-Deploy-Commit` (예: `current-v3`).
 
 ---
 

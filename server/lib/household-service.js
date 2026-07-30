@@ -1044,6 +1044,7 @@ export async function getCurrentHousehold({ idToken }) {
     name: data.name,
     ownerId: data.ownerId,
     role: memberSnap.data()?.role || null,
+    status: data.status ?? 'active',
     needsMigrationChoice: !memberSnap.data()?.migrationChoiceCompletedAt,
     members: membersSnap.docs
       .filter((snap) => isMemberActiveDoc(snap.data()))

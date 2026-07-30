@@ -1,6 +1,6 @@
 ---
 description: Family sharing baseline — require regression checklist before done
-globs: server/lib/household-service.js,server/routes/households.js,api/households/**,js/services/family-sharing-service.js,js/firebase-bootstrap.js,firestore.rules
+globs: server/lib/household-service.js,server/lib/household-api-handler.js,server/routes/households.js,api/households/**,js/services/family-sharing-service.js,js/firebase-bootstrap.js,firestore.rules
 alwaysApply: false
 ---
 
@@ -9,6 +9,14 @@ alwaysApply: false
 Do not treat family-sharing / household changes as complete until
 `docs/Family Sharing Regression Checklist.md` has been run (or explicitly
 scheduled with the user). Contracts live in `docs/family-sharing-baseline.md`.
+
+When changing household APIs, verify **both** localhost Express
+(`server/routes/households.js`) and Vercel **explicit** entries under
+`api/households/` (`current.js`, `index.js`, etc.). Do **not** use
+`[...route]` catch-all on this non-Next Vercel project. Localhost success alone
+is not enough. Keep routing/responses in `server/lib/household-api-handler.js`
+and run `node scripts/test-household-api-contract.mjs`. After deploy, confirm
+production via `X-Household-Handler` / `X-Deploy-Commit` headers.
 
 Hard rules:
 
