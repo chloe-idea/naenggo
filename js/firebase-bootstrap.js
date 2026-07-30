@@ -94,9 +94,7 @@ function startDataLoading(user) {
 
 function isModalBlockingSyncHint() {
   const recipeFormModal = document.getElementById('recipe-form-modal');
-  const profileModal = document.getElementById('profile-menu-modal');
   if (recipeFormModal && !recipeFormModal.hidden) return true;
-  if (profileModal && !profileModal.hidden) return true;
   return false;
 }
 
@@ -252,7 +250,8 @@ function updateProfileMenuSyncStatus() {
 function updateProfileMenuContent(authUser, profile = null) {
   const resolvedProfile = profile || cachedUserProfile;
   const avatar = renderProfileAvatar(authUser, resolvedProfile);
-  const titleEl = $('profile-menu-title');
+  const previewNameEl = $('profile-preview-name');
+  const previewBioEl = $('profile-preview-bio');
   const emailEl = $('profile-menu-email');
   const nameInput = $('profile-display-name');
   const bioInput = $('profile-bio');
@@ -260,13 +259,16 @@ function updateProfileMenuContent(authUser, profile = null) {
   const errorEl = $('profile-menu-error');
   const social = resolvedProfile?.socialLinks || {};
 
-  if (titleEl) titleEl.textContent = avatar.displayName || '프로필';
+  const displayName = resolvedProfile?.displayName || avatar.displayName || '프로필';
+  const bio = resolvedProfile?.bio || '';
+  if (previewNameEl) previewNameEl.textContent = displayName;
+  if (previewBioEl) previewBioEl.textContent = bio;
   if (emailEl) emailEl.textContent = authUser?.email || '—';
   if (nameInput && document.activeElement !== nameInput) {
     nameInput.value = resolvedProfile?.displayName || avatar.displayName || '';
   }
   if (bioInput && document.activeElement !== bioInput) {
-    bioInput.value = resolvedProfile?.bio || '';
+    bioInput.value = bio;
   }
 
   const socialFields = [
@@ -296,6 +298,19 @@ function updateProfileMenuContent(authUser, profile = null) {
   }
 
   updateProfileMenuSyncStatus();
+}
+
+function syncProfilePreviewFromInputs() {
+  const previewNameEl = $('profile-preview-name');
+  const previewBioEl = $('profile-preview-bio');
+  const nameInput = $('profile-display-name');
+  const bioInput = $('profile-bio');
+  if (previewNameEl && nameInput) {
+    previewNameEl.textContent = nameInput.value.trim() || '프로필';
+  }
+  if (previewBioEl && bioInput) {
+    previewBioEl.textContent = bioInput.value.trim();
+  }
 }
 
 async function loadUserProfile(authUser) {
@@ -392,40 +407,33 @@ function refreshHeaderQuota() {
 }
 
 function openProfileMenu() {
-  const modal = $('profile-menu-modal');
   const btn = $('profile-menu-btn');
-  if (!modal || !resolveAuthUser()) return;
+  if (!resolveAuthUser()) return;
 
-  modal.hidden = false;
-  modal.setAttribute('aria-hidden', 'false');
-  if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
-  else document.body.style.overflow = 'hidden';
+  if (typeof window.openProfileManagePage === 'function') {
+    window.openProfileManagePage();
+  } else {
+    console.warn('[firebase-bootstrap] openProfileManagePage unavailable');
+  }
+
   if (btn) btn.setAttribute('aria-expanded', 'true');
-
   updateProfileMenuContent(resolveAuthUser(), cachedUserProfile);
   refreshProfileQuota();
-  window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 
 function closeProfileMenu() {
-  const modal = $('profile-menu-modal');
   const btn = $('profile-menu-btn');
-  if (!modal) return;
-
-  modal.hidden = true;
-  modal.setAttribute('aria-hidden', 'true');
   if (btn) btn.setAttribute('aria-expanded', 'false');
+}
 
-  if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
-  else {
-    const anyModalOpen = ['recipe-form-modal', 'meal-modal', 'shopping-modal', 'pantry-modal']
-      .some((id) => {
-        const el = document.getElementById(id);
-        return el && !el.hidden;
-      });
-    if (!anyModalOpen) document.body.style.overflow = '';
+function leaveProfileManagePage() {
+  closeProfileMenu();
+  if (typeof window.closeProfileManagePage === 'function') {
+    const profileView = document.getElementById('view-profile');
+    if (profileView && !profileView.hidden) {
+      window.closeProfileManagePage();
+    }
   }
-  window.dispatchEvent(new CustomEvent('ui-modal-change'));
 }
 
 async function saveProfileViaServer(updates) {
@@ -758,7 +766,7 @@ async function handleSignedOutUser() {
   syncedUid = null;
   cachedUserProfile = null;
   clearDataLoading('signed out');
-  closeProfileMenu();
+  leaveProfileManagePage();
 
   if (typeof window.clearUserData === 'function') {
     window.clearUserData();
@@ -994,7 +1002,6 @@ function renderFamilySharing() {
 function openFamilySharing() {
   const modal = $('family-sharing-modal');
   if (!modal || !resolveAuthUser()) return;
-  closeProfileMenu();
   setFamilyError('');
   familyWizardStep = FamilySharingService.getActiveFamily()?.pendingSetup ? 'setup' : 'start';
   familyWizardNotice = '';
@@ -1218,7 +1225,8 @@ function bindAuthUi() {
   const saveNameBtn = $('profile-save-name-btn');
   const saveProfileBtn = $('profile-save-btn');
   const avatarPicker = $('profile-avatar-picker');
-  const profileModal = $('profile-menu-modal');
+  const nameInput = $('profile-display-name');
+  const bioInput = $('profile-bio');
 
   if (!loginBtn) {
     console.error('[firebase-bootstrap] #auth-login-btn not found');
@@ -1238,7 +1246,7 @@ function bindAuthUi() {
 
   profileBtn?.addEventListener('click', () => openProfileMenu());
   logoutBtn?.addEventListener('click', (event) => {
-    closeProfileMenu();
+    leaveProfileManagePage();
     signOutFlow(event);
   }, { capture: true });
   saveNameBtn?.addEventListener('click', saveFullProfile);
@@ -1248,11 +1256,15 @@ function bindAuthUi() {
     if (!btn || btn.disabled) return;
     saveProfileAvatarType(btn.dataset.avatarType);
   });
-  bindFamilySharingUi();
-
-  profileModal?.querySelectorAll('[data-close-modal="profile"]').forEach((el) => {
-    el.addEventListener('click', closeProfileMenu);
+  nameInput?.addEventListener('input', syncProfilePreviewFromInputs);
+  bioInput?.addEventListener('input', syncProfilePreviewFromInputs);
+  window.addEventListener('profile-manage-open', () => {
+    const user = resolveAuthUser();
+    if (!user) return;
+    updateProfileMenuContent(user, cachedUserProfile);
+    refreshProfileQuota();
   });
+  bindFamilySharingUi();
 
   window.__authSignOut = signOutFlow;
   window.__authSignInGoogle = signInWithGoogleFlow;

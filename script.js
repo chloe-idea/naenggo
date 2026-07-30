@@ -95,6 +95,7 @@ const VIEW_TITLES = {
   planner: '일주일 식단과 장보기 리스트를 준비하세요',
   calendar: '해먹은 음식을 기록하고 확인하세요',
   'author-profile': '작성자 프로필',
+  profile: '프로필 관리',
 };
 
 const MEAL_TYPES = [
@@ -4400,6 +4401,7 @@ const state = {
   myRecipesSortSheetSection: null,
   authorProfileId: null,
   authorProfileReturnView: 'main',
+  profileReturnView: 'main',
   detailRecipeId: null,
   detailReturnView: 'main',
   detailReturnScrollY: 0,
@@ -4413,9 +4415,12 @@ const dom = {
   views: {
     main: $('#view-main'), 'my-recipes': $('#view-my-recipes'),
     pantry: $('#view-pantry'), planner: $('#view-planner'), calendar: $('#view-calendar'),
-    'author-profile': $('#view-author-profile'), 'recipe-detail': $('#view-recipe-detail'),
+    'author-profile': $('#view-author-profile'),
+    profile: $('#view-profile'),
+    'recipe-detail': $('#view-recipe-detail'),
   },
   authorProfileBack: $('#author-profile-back'),
+  profileManageBack: $('#profile-manage-back'),
   authorProfileHeader: $('#author-profile-header'),
   authorProfileRecipes: $('#author-profile-recipes'),
   authorProfileEmpty: $('#author-profile-empty'),
@@ -4545,7 +4550,7 @@ const dom = {
   videoReviewErrorText: $('#video-review-error')?.querySelector('.video-form-error-card__text'),
   videoAnalyzeBtn: $('#video-analyze-btn'),
   loginPromptModal: $('#login-prompt-modal'),
-  profileMenuModal: $('#profile-menu-modal'),
+  profileMenuModal: null,
   loginPromptGoogleBtn: $('#login-prompt-google-btn'),
   loginPromptDismissBtn: $('#login-prompt-dismiss-btn'),
   loginPromptQuota: $('#login-prompt-quota'),
@@ -5053,6 +5058,7 @@ function switchView(view) {
   document.body.classList.toggle('view--main', view === 'main');
   document.body.classList.toggle('view--calendar', view === 'calendar');
   document.body.classList.toggle('view--author-profile', view === 'author-profile');
+  document.body.classList.toggle('view--profile', view === 'profile');
   document.body.classList.toggle('view--recipe-detail', view === 'recipe-detail');
   if (prevView === 'main' && view !== 'main') {
     toggleHomeFilterPanel(false);
@@ -5060,7 +5066,7 @@ function switchView(view) {
     setHomeSearchKeyboardActive(false);
   }
   if (dom.headerSubtitle) {
-    if (view === 'main' || view === 'recipe-detail') {
+    if (view === 'main' || view === 'recipe-detail' || view === 'profile') {
       dom.headerSubtitle.hidden = true;
       dom.headerSubtitle.textContent = '';
     } else {
@@ -5078,6 +5084,34 @@ function navigate(view) {
   closeAllModals();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+function openProfileManagePage() {
+  if (!isLoggedInAppUser()) {
+    requireAppLogin({
+      preset: 'default',
+      redirectAfterLogin: () => openProfileManagePage(),
+    });
+    return;
+  }
+  state.profileReturnView = state.view === 'profile'
+    ? (state.profileReturnView || 'main')
+    : state.view;
+  switchView('profile');
+  closeAllModals();
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  window.dispatchEvent(new CustomEvent('profile-manage-open'));
+}
+
+function closeProfileManagePage() {
+  const target = state.profileReturnView && dom.views[state.profileReturnView]
+    ? state.profileReturnView
+    : 'main';
+  navigate(target);
+}
+
+window.openProfileManagePage = openProfileManagePage;
+window.closeProfileManagePage = closeProfileManagePage;
+window.showToast = showToast;
 
 function openVideoRecipeForm() {
   if (!isLoggedInAppUser()) {
@@ -5480,6 +5514,7 @@ const HOME_CARD_BOOKMARK_ICON = `<svg class="recipe-card-home__bookmark-icon" vi
 const HOME_CARD_BOOKMARK_ICON_FILLED = `<svg class="recipe-card-home__bookmark-icon" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 3.75h8a1 1 0 011 1V16l-5-2.75L5 16V4.75a1 1 0 011-1z" fill="currentColor"/></svg>`;
 const HOME_CARD_CART_ICON = `<svg class="recipe-card-home__hint-icon recipe-card-home__hint-icon--cart" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 2.5h1.2l.35 1.4M4.05 3.9h9.2l-1.1 5.1H5.2L4.05 3.9z" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.1" cy="12.2" r="1.05" fill="currentColor"/><circle cx="11.1" cy="12.2" r="1.05" fill="currentColor"/></svg>`;
 const HOME_CARD_SWAP_ICON = `<svg class="recipe-card-home__hint-icon recipe-card-home__hint-icon--swap" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3.2 5.2h7.2M8.6 3.2l2.2 2-2.2 2M12.8 10.8H5.6M7.4 8.8l-2.2 2 2.2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const HOME_CARD_READY_HTML = `<span class="material-symbols-outlined recipe-card-status__ready-icon" aria-hidden="true">task_alt</span>바로 가능`;
 
 /** 홈 카드 추천 태그 (최대 2개, 이모지 없음). 대체 문구가 없을 때만 사용 */
 function getHomeRecipeRecommendTags({ recipe, matchedPantryNames, expiryBoost }) {
@@ -5531,7 +5566,7 @@ function buildHomeCardMissingStatusVariants(names) {
   ];
 }
 
-function formatHomeReadyMessage(missing, { readyHtml = '바로 가능' } = {}) {
+function formatHomeReadyMessage(missing, { readyHtml = HOME_CARD_READY_HTML } = {}) {
   const names = uniqueShortIngredientLabels(missing);
   const count = names.length;
   if (count <= 0) {
@@ -5559,9 +5594,9 @@ function formatHomeSubstitutionLine(substituted) {
   };
 }
 
-/** 내 레시피 카드 준비 상태 — 홈과 동일한 긍정형 부족 안내 */
+/** 내 레시피 카드 준비 상태 — 홈과 동일한 준비/부족 안내 UI */
 function formatMyRecipeReadyMessage(missing) {
-  return formatHomeReadyMessage(missing, { readyHtml: '바로 가능' });
+  return formatHomeReadyMessage(missing);
 }
 
 /** 내 레시피 대체 문구 — 초록 교체 아이콘 + 초록 "A → B" + 회색 "로 대체 가능" */
@@ -5678,7 +5713,7 @@ function homeRecipeCardHTML(result, options = {}) {
     action = 'save', // 'save' | 'fork' | 'none'
     showVisibility = false,
     showAuthor = true,
-    readyHtml = '바로 가능',
+    readyHtml = HOME_CARD_READY_HTML,
     showRecommendTags = true,
     showSavedBy = false,
     variant = 'home', // 'home' | 'my'
@@ -5740,7 +5775,7 @@ function homeRecipeCardHTML(result, options = {}) {
   const authorRow = showAuthor && !isMy ? recipeAuthorRowHTML(recipe) : '';
   const savedByMembers = SavedRecipeRepository.getSavedByMembers(recipe.id);
   const savedByRow = showSavedBy && savedByMembers.length
-    ? `<p class="recipe-card-home__row recipe-card-home__saved-by">${esc(formatSavedByMembers(savedByMembers))}</p>`
+    ? `<p class="recipe-card-home__row recipe-card-home__saved-by">${savedByMembersHTML(savedByMembers)}</p>`
     : '';
 
   const cardClass = isMy
@@ -5771,11 +5806,53 @@ function homeRecipeCardHTML(result, options = {}) {
     </div>`;
 }
 
-function formatSavedByMembers(members) {
-  const names = [...new Set((members || []).map((member) => String(member?.name || '').trim()).filter(Boolean))];
-  if (names.length === 1) return `${names[0]}가 저장`;
-  if (names.length === 2) return `${names.join(', ')}가 저장`;
-  return `${names[0]} 외 ${names.length - 1}명이 저장`;
+const HOME_CARD_SAVED_BY_ICON = `<span class="material-symbols-outlined recipe-card-home__saved-by-icon" aria-hidden="true">person</span>`;
+
+/** 저장자 아바타 정보 — member / public profile 캐시에서 확장 가능 */
+function resolveSavedByAvatar(member = {}) {
+  const uid = String(member?.uid || '').trim();
+  const name = String(member?.name || '').trim() || '냉장GO 사용자';
+  const peeked = uid
+    ? window.FirebaseServices?.FirestorePublicProfilesService?.peek?.(uid)
+    : null;
+  const profileImageUrl = String(
+    member?.profileImageUrl
+    || member?.profileImage
+    || peeked?.profileImageUrl
+    || peeked?.profileImage
+    || '',
+  ).trim();
+  const initial = (name.charAt(0) || '냉').toUpperCase();
+  return { uid, name, profileImageUrl, initial };
+}
+
+function savedByAvatarHTML(member) {
+  const avatar = resolveSavedByAvatar(member);
+  if (avatar.profileImageUrl) {
+    return `<img class="recipe-card-home__saved-by-avatar" src="${esc(avatar.profileImageUrl)}" alt="" loading="lazy" decoding="async" width="16" height="16">`;
+  }
+  return `<span class="recipe-card-home__saved-by-avatar recipe-card-home__saved-by-avatar--initial" aria-hidden="true">${esc(avatar.initial)}</span>`;
+}
+
+/** 가족 저장자 표시 — 아바타(이미지/이니셜) + 이름 */
+function savedByMembersHTML(members) {
+  const list = (members || [])
+    .map((member) => ({
+      uid: String(member?.uid || '').trim(),
+      name: String(member?.name || '').trim(),
+      profileImageUrl: String(member?.profileImageUrl || member?.profileImage || '').trim(),
+    }))
+    .filter((member) => member.name);
+  const unique = [];
+  list.forEach((member) => {
+    if (!unique.some((item) => (item.uid && item.uid === member.uid) || (!item.uid && item.name === member.name))) {
+      unique.push(member);
+    }
+  });
+  if (!unique.length) return '';
+  return unique.map((member) => (
+    `<span class="recipe-card-home__saved-by-item">${savedByAvatarHTML(member)}<span class="recipe-card-home__saved-by-name">${esc(member.name)}</span></span>`
+  )).join('');
 }
 
 function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryNames, exact, substituted, recommendationReason, showAuthor, showVisibility, showCardSave, showCardMealLog, showCardFork, showSaveCount, hideMatchBadge, hideOrigin, hideReason, hideExpiryHint, showMissingLine, showCommunityBadge }) {
@@ -6770,7 +6847,6 @@ function renderMyRecipes() {
     dom.savedList.innerHTML = savedResults.map((r) => homeRecipeCardHTML(r, {
       action: 'save',
       showVisibility: false,
-      readyHtml: '바로 가능',
       showRecommendTags: true,
       // 개인 저장 레시피에는 저장자 배열이 없으므로 행이 렌더링되지 않는다.
       // 가족 상태 갱신보다 저장 레시피 동기화가 먼저 도착해도 저장자 표시는 유지한다.
@@ -10625,10 +10701,14 @@ function init() {
   dom.authorProfileBack?.addEventListener('click', () => {
     navigate(state.authorProfileReturnView || 'main');
   });
+  dom.profileManageBack?.addEventListener('click', () => {
+    closeProfileManagePage();
+  });
   window.addEventListener('public-profile-updated', () => {
     getAuthorProfilesService()?.clearCache?.();
     if (state.view === 'author-profile') renderAuthorProfile();
     else if (state.view === 'main') renderHome();
+    else if (state.view === 'my-recipes') renderMyRecipes();
   });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
   dom.quickForm.addEventListener('submit', handleQuickAdd);

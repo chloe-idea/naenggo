@@ -15,3 +15,4 @@ server/data/
 *serviceAccount*.json
 *service-account*.json
 firebase-service-account.json
+.vercel

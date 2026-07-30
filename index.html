@@ -45,7 +45,7 @@
             </button>
           </div>
           <div id="auth-user" class="header-auth header-auth--user" hidden>
-            <button type="button" id="profile-menu-btn" class="profile-avatar-btn" aria-label="프로필 메뉴" aria-haspopup="dialog" aria-expanded="false">
+            <button type="button" id="profile-menu-btn" class="profile-avatar-btn" aria-label="프로필 관리" aria-expanded="false">
               <img id="profile-avatar-img" class="profile-avatar-btn__img" alt="" hidden>
               <span id="profile-avatar-emoji" class="profile-avatar-btn__emoji" hidden aria-hidden="true">🧊</span>
               <span id="profile-avatar-initial" class="profile-avatar-btn__initial">냉</span>
@@ -921,78 +921,93 @@
       </div>
     </div>
 
-    <div id="profile-menu-modal" class="modal modal--center profile-menu-modal" hidden aria-hidden="true">
-      <div class="modal__backdrop" data-close-modal="profile"></div>
-      <div class="modal__panel profile-menu" role="dialog" aria-modal="true" aria-labelledby="profile-menu-title">
-        <button type="button" class="modal__close" data-close-modal="profile" aria-label="닫기">&times;</button>
-        <div class="profile-menu__header">
-          <div id="profile-menu-avatar" class="profile-menu__avatar" aria-hidden="true">
+    <!-- 프로필 관리 페이지 -->
+    <div id="view-profile" class="view profile-manage-view" hidden>
+      <header class="profile-manage__header">
+        <div class="profile-manage__header-inner">
+          <button type="button" id="profile-manage-back" class="profile-manage__back" aria-label="뒤로가기">
+            <span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+          </button>
+          <h1 class="profile-manage__title">프로필 관리</h1>
+        </div>
+      </header>
+
+      <div class="profile-manage">
+        <section class="profile-manage__preview" aria-label="프로필 미리보기">
+          <div id="profile-menu-avatar" class="profile-menu__avatar profile-manage__preview-avatar" aria-hidden="true">
             <img id="profile-menu-avatar-img" class="profile-menu__avatar-img" alt="" hidden>
             <span id="profile-menu-avatar-emoji" class="profile-menu__avatar-emoji" hidden>🧊</span>
             <span id="profile-menu-avatar-initial" class="profile-menu__avatar-initial">냉</span>
           </div>
-          <div class="profile-menu__header-text">
-            <h2 id="profile-menu-title" class="profile-menu__name">프로필</h2>
+          <div class="profile-manage__preview-text">
+            <p id="profile-preview-name" class="profile-manage__preview-name">프로필</p>
+            <p id="profile-preview-bio" class="profile-manage__preview-bio"></p>
             <span id="profile-menu-quota" class="profile-menu__quota">무료 분석 확인 중…</span>
           </div>
-        </div>
+        </section>
 
-        <div class="profile-menu__section">
-          <label for="profile-display-name" class="profile-menu__label">닉네임</label>
-          <div class="profile-menu__name-row">
-            <input type="text" id="profile-display-name" class="profile-menu__input" maxlength="20" placeholder="닉네임 입력" autocomplete="nickname">
+        <section class="profile-manage__card" aria-labelledby="profile-section-basic">
+          <h2 id="profile-section-basic" class="profile-manage__section-title">기본 정보</h2>
+          <div class="profile-menu__section">
+            <label for="profile-display-name" class="profile-menu__label">닉네임</label>
+            <div class="profile-menu__name-row">
+              <input type="text" id="profile-display-name" class="profile-menu__input" maxlength="20" placeholder="닉네임 입력" autocomplete="nickname">
+            </div>
           </div>
-        </div>
+          <div class="profile-menu__section profile-menu__section--last">
+            <label for="profile-bio" class="profile-menu__label">한 줄 소개</label>
+            <input type="text" id="profile-bio" class="profile-menu__input" maxlength="80" placeholder="나를 한 줄로 소개해 보세요" autocomplete="off">
+          </div>
+        </section>
 
-        <div class="profile-menu__section">
-          <label for="profile-bio" class="profile-menu__label">한 줄 소개</label>
-          <input type="text" id="profile-bio" class="profile-menu__input" maxlength="80" placeholder="나를 한 줄로 소개해 보세요" autocomplete="off">
-        </div>
-
-        <div class="profile-menu__section">
-          <p class="profile-menu__label">프로필 이미지</p>
+        <section class="profile-manage__card" aria-labelledby="profile-section-avatar">
+          <h2 id="profile-section-avatar" class="profile-manage__section-title">프로필 이미지</h2>
           <div id="profile-avatar-picker" class="profile-avatar-picker" role="group" aria-label="프로필 이미지 선택">
             <button type="button" class="profile-avatar-picker__btn" data-avatar-type="initial">글자</button>
             <button type="button" class="profile-avatar-picker__btn" data-avatar-type="fridge">냉장GO</button>
             <button type="button" class="profile-avatar-picker__btn" data-avatar-type="google">Google</button>
           </div>
-        </div>
+        </section>
 
-        <div class="profile-menu__section">
-          <label for="profile-social-youtube" class="profile-menu__label">YouTube</label>
-          <input type="url" id="profile-social-youtube" class="profile-menu__input" placeholder="https://youtube.com/@채널" autocomplete="off" inputmode="url">
-        </div>
-        <div class="profile-menu__section">
-          <label for="profile-social-instagram" class="profile-menu__label">Instagram</label>
-          <input type="url" id="profile-social-instagram" class="profile-menu__input" placeholder="https://instagram.com/계정" autocomplete="off" inputmode="url">
-        </div>
-        <div class="profile-menu__section">
-          <label for="profile-social-tiktok" class="profile-menu__label">TikTok</label>
-          <input type="url" id="profile-social-tiktok" class="profile-menu__input" placeholder="https://tiktok.com/@계정" autocomplete="off" inputmode="url">
-        </div>
-        <div class="profile-menu__section">
-          <label for="profile-social-website" class="profile-menu__label">웹사이트</label>
-          <input type="url" id="profile-social-website" class="profile-menu__input" placeholder="https://example.com" autocomplete="off" inputmode="url">
-        </div>
+        <section class="profile-manage__card" aria-labelledby="profile-section-social">
+          <h2 id="profile-section-social" class="profile-manage__section-title">소셜 링크</h2>
+          <div class="profile-menu__section">
+            <label for="profile-social-youtube" class="profile-menu__label">YouTube</label>
+            <input type="url" id="profile-social-youtube" class="profile-menu__input" placeholder="https://youtube.com/@채널" autocomplete="off" inputmode="url">
+          </div>
+          <div class="profile-menu__section">
+            <label for="profile-social-instagram" class="profile-menu__label">Instagram</label>
+            <input type="url" id="profile-social-instagram" class="profile-menu__input" placeholder="https://instagram.com/계정" autocomplete="off" inputmode="url">
+          </div>
+          <div class="profile-menu__section">
+            <label for="profile-social-tiktok" class="profile-menu__label">TikTok</label>
+            <input type="url" id="profile-social-tiktok" class="profile-menu__input" placeholder="https://tiktok.com/@계정" autocomplete="off" inputmode="url">
+          </div>
+          <div class="profile-menu__section profile-menu__section--last">
+            <label for="profile-social-website" class="profile-menu__label">웹사이트</label>
+            <input type="url" id="profile-social-website" class="profile-menu__input" placeholder="https://example.com" autocomplete="off" inputmode="url">
+          </div>
+        </section>
 
         <p id="profile-menu-error" class="profile-menu__error" hidden role="alert"></p>
 
-        <button type="button" id="profile-save-btn" class="btn btn--primary btn--full">프로필 저장</button>
-
-        <div class="profile-menu__section">
-          <p class="profile-menu__label">가족 공유</p>
+        <section class="profile-manage__card" aria-labelledby="profile-section-family">
+          <h2 id="profile-section-family" class="profile-manage__section-title">가족 공유</h2>
           <p class="profile-menu__sync">가족과 냉장고 재료, 장보기, 식단을 함께 관리할 수 있습니다.</p>
           <button type="button" id="profile-family-sharing-btn" class="btn btn--ghost btn--full">👨‍👩‍👧‍👦 가족 공유</button>
-        </div>
+        </section>
 
-        <div class="profile-menu__section profile-menu__account">
+        <section class="profile-manage__card profile-manage__card--account" aria-labelledby="profile-section-account">
+          <h2 id="profile-section-account" class="profile-manage__section-title">계정</h2>
           <p class="profile-menu__label">계정 정보</p>
           <p id="profile-menu-email" class="profile-menu__email"></p>
-        </div>
+          <p id="profile-menu-sync" class="profile-menu__sync">데이터 동기화 완료</p>
+          <button type="button" id="profile-logout-btn" class="btn btn--ghost btn--full profile-menu__logout">로그아웃</button>
+        </section>
+      </div>
 
-        <p id="profile-menu-sync" class="profile-menu__sync">데이터 동기화 완료</p>
-
-        <button type="button" id="profile-logout-btn" class="btn btn--ghost btn--full profile-menu__logout">로그아웃</button>
+      <div class="profile-manage__footer">
+        <button type="button" id="profile-save-btn" class="btn btn--primary btn--full">프로필 저장</button>
       </div>
     </div>
 

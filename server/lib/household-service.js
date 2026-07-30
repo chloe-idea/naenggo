@@ -3,6 +3,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { normalizeIngredientName } from './ingredient-normalizer.js';
 import {
   getFirestoreAdmin,
+  getLastFirebaseAdminEnvDebug,
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken,
 } from './firebase-admin.js';
@@ -29,7 +30,13 @@ class HouseholdError extends Error {
 
 function requireAdmin() {
   if (!isFirebaseAdminConfigured()) {
-    throw new HouseholdError('FIREBASE_ADMIN_NOT_CONFIGURED', '서버 Firebase 설정이 완료되지 않았습니다.', 503);
+    const envDebug = getLastFirebaseAdminEnvDebug();
+    throw new HouseholdError(
+      'FIREBASE_ADMIN_NOT_CONFIGURED',
+      '서버 Firebase 설정이 완료되지 않았습니다.',
+      503,
+      envDebug ? { envDebug } : {},
+    );
   }
 }
 
