@@ -250,11 +250,41 @@ export function getFirestoreAdminContext() {
   };
 }
 
+/** 동일 프로세스 내 단기 캐시 — 초기 로딩에서 연속 API 호출 시 verify 중복 비용 완화 */
+const ID_TOKEN_CACHE_TTL_MS = 45_000;
+const idTokenCache = new Map();
+
+function purgeExpiredIdTokenCache(now = Date.now()) {
+  for (const [key, entry] of idTokenCache) {
+    if (!entry || entry.expiresAt <= now) idTokenCache.delete(key);
+  }
+  // 메모리 상한 (대략)
+  if (idTokenCache.size > 200) {
+    const overflow = idTokenCache.size - 200;
+    let removed = 0;
+    for (const key of idTokenCache.keys()) {
+      idTokenCache.delete(key);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
+  }
+}
+
 export async function verifyFirebaseIdToken(idToken) {
   const token = String(idToken || '').trim();
   if (!token) return null;
+  const now = Date.now();
+  purgeExpiredIdTokenCache(now);
+  const cached = idTokenCache.get(token);
+  if (cached && cached.expiresAt > now) {
+    return cached.decoded;
+  }
   try {
     const decoded = await getFirebaseAdmin().auth().verifyIdToken(token);
+    idTokenCache.set(token, {
+      decoded,
+      expiresAt: now + ID_TOKEN_CACHE_TTL_MS,
+    });
     return decoded;
   } catch (err) {
     if (err?.code === 'FIREBASE_ADMIN_NOT_CONFIGURED') throw err;

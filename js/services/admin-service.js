@@ -3,6 +3,7 @@
  */
 import { doc, getDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
 import { db } from '../firebase.js';
+import { StartupPerf } from './startup-perf.js';
 
 const COLLECTION = 'admins';
 
@@ -56,10 +57,18 @@ export const AdminService = {
       return;
     }
     const ref = doc(db, COLLECTION, uid);
+    const perfPath = 'admins/{uid}';
+    const syncStartMs = StartupPerf.begin('admin status loaded (extra)', perfPath);
+    StartupPerf.markListener(perfPath);
     unsubscribe = onSnapshot(
       ref,
       (snap) => {
         applyAdminSnapshot(snap);
+        StartupPerf.end('admin status loaded (extra)', {
+          documentCount: snap.exists() ? 1 : 0,
+          firestorePath: perfPath,
+          startMs: syncStartMs,
+        });
       },
       (err) => {
         console.error('[AdminService] snapshot error:', err?.code, err?.message);

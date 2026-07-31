@@ -14,6 +14,7 @@ import { auth, db } from '../firebase.js';
 import { timestampToIso, nowIso } from './firestore-timestamp.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { FamilySharingService } from './family-sharing-service.js';
+import { StartupPerf } from './startup-perf.js';
 
 const SUBCOLLECTION = 'mealCalendar';
 
@@ -80,10 +81,20 @@ export const FirestoreMealCalendarService = {
       `householdId: ${householdId || ''}`,
       `collectionPath: ${collectionPath}`,
     ].join('\n'));
+    const perfPath = activeHouseholdId
+      ? 'households/{householdId}/mealCalendar'
+      : 'users/{uid}/mealCalendar';
+    const syncStartMs = StartupPerf.begin('meal calendar loaded (extra)', perfPath);
+    StartupPerf.markListener(perfPath);
     snapshotUnsubscribe = onSnapshot(
       col(uid),
       (snap) => {
         const items = snap.docs.map(mapDoc).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        StartupPerf.end('meal calendar loaded (extra)', {
+          documentCount: items.length,
+          firestorePath: perfPath,
+          startMs: syncStartMs,
+        });
         onItems?.(items);
       },
       (err) => onError?.(err),

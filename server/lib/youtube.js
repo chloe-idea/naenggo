@@ -12,6 +12,10 @@ import {
 import { VIDEO_EXTRACT_UI } from './video-pipeline/constants.js';
 import { buildAnalysisContextFromMetadata } from './video-pipeline/context.js';
 import { logVideoExtractPipeline } from './video-pipeline/debug.js';
+import {
+  fetchYouTubeCaptionTranscript,
+  logYouTubeCaptionDebug,
+} from './youtube-captions.js';
 
 export {
   extractYouTubeVideoId,
@@ -33,21 +37,18 @@ function getYouTubeApiKey() {
   return String(process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 }
 
-function normalizeYouTubeUrl(videoId, originalUrl) {
-  try {
-    return new URL(originalUrl).href;
-  } catch {
-    return `https://www.youtube.com/watch?v=${videoId}`;
-  }
+/** watch / youtu.be / shorts 모두 동일 canonical watch URL로 정규화 */
+function normalizeYouTubeUrl(videoId) {
+  return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
-function createBaseContent(videoId, url) {
+function createBaseContent(videoId) {
   return {
     platform: 'youtube',
     videoId,
     title: '',
     thumbnailUrl: getYouTubeThumbnail(videoId),
-    sourceUrl: normalizeYouTubeUrl(videoId, url),
+    sourceUrl: normalizeYouTubeUrl(videoId),
     extractedDescription: '',
     extractedTranscript: '',
     text: '',
@@ -56,6 +57,9 @@ function createBaseContent(videoId, url) {
     apiStatus: 'pending',
     extractionMode: 'legacy-scraper',
     autoExtractFailed: false,
+    availableCaptionLanguages: [],
+    selectedCaptionLanguage: null,
+    captionFetchError: null,
   };
 }
 
@@ -71,73 +75,11 @@ async function getInnertube() {
   return innertubeClient;
 }
 
-function transcriptToText(transcriptInfo) {
-  const segments = transcriptInfo?.transcript?.content?.body?.initial_segments;
-  if (!segments?.length) return '';
-  return segments
-    .map((seg) => seg.snippet?.text || '')
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-async function fetchTranscriptFromInfo(info) {
-  try {
-    let transcriptInfo = await info.getTranscript();
-    const preferredLangs = [
-      '한국어',
-      'Korean',
-      'English',
-      'English (auto-generated)',
-      '日本語',
-      'Auto-generated',
-    ];
-
-    const selectLanguage = async (lang) => {
-      if (!transcriptInfo.languages?.includes(lang)) return null;
-      try {
-        return await transcriptInfo.selectLanguage(lang);
-      } catch {
-        return null;
-      }
-    };
-
-    for (const lang of preferredLangs) {
-      const selected = await selectLanguage(lang);
-      if (selected) transcriptInfo = selected;
-      const text = transcriptToText(transcriptInfo);
-      if (text.length >= 20) {
-        return {
-          text,
-          language: transcriptInfo.selectedLanguage || lang,
-        };
-      }
-    }
-
-    for (const lang of transcriptInfo.languages || []) {
-      if (preferredLangs.includes(lang)) continue;
-      const selected = await selectLanguage(lang);
-      if (!selected) continue;
-      transcriptInfo = selected;
-      const text = transcriptToText(transcriptInfo);
-      if (text.length >= 20) {
-        return {
-          text,
-          language: lang,
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('[youtube] transcript unavailable:', err?.message || err);
-  }
-  return null;
-}
-
 /**
- * youtubei.js Innertube — API Key 없이 title/description/transcript 수집 (기존 방식)
+ * youtubei.js Innertube — title/description 수집 (transcript는 PoToken 경로 사용)
  */
 async function fetchLegacyInnertubeContent(videoId) {
-  const out = { title: '', description: '', transcript: '' };
+  const out = { title: '', description: '' };
   try {
     const yt = await getInnertube();
     const info = await yt.getInfo(videoId);
@@ -148,9 +90,6 @@ async function fetchLegacyInnertubeContent(videoId) {
       || info.basic_info?.description
       || '',
     ).trim();
-
-    const transcriptResult = await fetchTranscriptFromInfo(info);
-    if (transcriptResult) out.transcript = transcriptResult.text;
   } catch (err) {
     console.warn('[youtube] legacy innertube getInfo failed:', err?.message || err);
   }
@@ -220,8 +159,15 @@ function logYouTubeExtraction({ extractionMode, videoId, result, apiStatus }) {
     apiStatus,
     titleLength: result.title.length,
     descriptionLength: result.extractedDescription.length,
+    availableCaptionLanguages: result.availableCaptionLanguages || [],
+    selectedCaptionLanguage: result.selectedCaptionLanguage || null,
+    captionTextLength: result.extractedTranscript.length,
     transcriptLength: result.extractedTranscript.length,
+    transcriptPreview: result.extractedTranscript
+      ? `${result.extractedTranscript.slice(0, 300)}${result.extractedTranscript.length > 300 ? '…' : ''}`
+      : '(없음)',
     combinedTextLength: result.combinedText.length,
+    captionFetchError: result.captionFetchError || null,
   });
 
   logVideoExtractPipeline({
@@ -232,6 +178,7 @@ function logYouTubeExtraction({ extractionMode, videoId, result, apiStatus }) {
     extractionMode,
     title: result.title,
     description: result.extractedDescription,
+    captionText: result.extractedTranscript,
     transcriptText: result.extractedTranscript,
     combinedText: result.combinedText,
   });
@@ -239,8 +186,9 @@ function logYouTubeExtraction({ extractionMode, videoId, result, apiStatus }) {
 
 /**
  * 영상 메타데이터 수집
- * 1) YOUTUBE_API_KEY 있으면 Data API 시도 (선택)
- * 2) 없거나 실패 시 youtubei.js legacy fallback (API Key 불필요)
+ * 1) YOUTUBE_API_KEY 있으면 Data API로 title/description (선택)
+ * 2) 없거나 실패 시 youtubei.js로 title/description
+ * 3) 자막은 PoToken 대응 caption 경로로 별도 수집 (수동·자동 모두)
  */
 export async function fetchYouTubeContent(url) {
   const videoId = extractYouTubeVideoId(url);
@@ -250,7 +198,13 @@ export async function fetchYouTubeContent(url) {
     throw err;
   }
 
-  const result = createBaseContent(videoId, url);
+  console.log('[YouTube Extract] normalized videoId', {
+    inputUrl: String(url || '').slice(0, 200),
+    videoId,
+    canonicalUrl: normalizeYouTubeUrl(videoId),
+  });
+
+  const result = createBaseContent(videoId);
   let extractionMode = 'legacy-scraper';
   let apiStatus = getYouTubeApiKey() ? 'api-attempted' : 'no-api-key';
 
@@ -263,24 +217,39 @@ export async function fetchYouTubeContent(url) {
     apiStatus = 'ok';
   }
 
-  const needsLegacy = !result.title
+  const needsLegacyMeta = !result.title
     || !result.extractedDescription
-    || result.extractedDescription.length < 20
-    || !result.extractedTranscript;
+    || result.extractedDescription.length < 20;
 
-  if (needsLegacy) {
+  if (needsLegacyMeta) {
     const legacy = await fetchLegacyInnertubeContent(videoId);
     if (legacy.title && !result.title) result.title = legacy.title;
     if (legacy.description && (!result.extractedDescription || result.extractedDescription.length < legacy.description.length)) {
       result.extractedDescription = legacy.description;
     }
-    if (legacy.transcript && !result.extractedTranscript) {
-      result.extractedTranscript = legacy.transcript;
-    }
-    if (extractionMode !== 'youtube-api' && (legacy.description || legacy.transcript || legacy.title)) {
+    if (extractionMode !== 'youtube-api' && (legacy.description || legacy.title)) {
       extractionMode = 'legacy-scraper';
     }
   }
+
+  // 자막: Data API/innertube getTranscript 대신 PoToken 대응 경로 (항상 시도)
+  const captionResult = await fetchYouTubeCaptionTranscript(videoId);
+  result.availableCaptionLanguages = captionResult.availableCaptionLanguages;
+  result.selectedCaptionLanguage = captionResult.selectedCaptionLanguage;
+  result.captionFetchError = captionResult.error;
+  if (captionResult.text && captionResult.text.length >= 20) {
+    result.extractedTranscript = captionResult.text;
+  }
+  logYouTubeCaptionDebug({
+    videoId,
+    availableCaptionLanguages: captionResult.availableCaptionLanguages,
+    selectedCaptionLanguage: captionResult.selectedCaptionLanguage,
+    selectedCaptionKind: captionResult.selectedCaptionKind,
+    captionTextLength: captionResult.captionTextLength,
+    transcriptLength: captionResult.transcriptLength,
+    transcriptText: captionResult.text,
+    error: captionResult.error,
+  });
 
   if (!result.title) {
     try {

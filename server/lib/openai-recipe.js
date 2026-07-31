@@ -7,7 +7,6 @@ import {
   summarizeContentAvailability,
 } from './video-extract-debug.js';
 import {
-  looksLikeRecipeText,
   logExtractTextPreview,
   buildFullCombinedText,
   detectDishNameFromSource,
@@ -31,24 +30,30 @@ function buildSystemPrompt(platform = 'youtube') {
   const label = PLATFORM_LABELS[platform] || '영상';
   return `당신은 요리 레시피 추출 전문가입니다. ${label} URL, 제목, 설명글, 자막/캡션, 사용자 입력 텍스트에서 레시피를 추출하세요.
 
-반드시 JSON 객체 하나만 반환하세요. 키:
-- title (문자열, 레시피 이름 — 반드시 출처에서 확인된 요리명)
-- ingredients (문자열 배열, 필수 재료 — 출처에 명시된 것만)
-- optionalIngredients (문자열 배열, 선택 재료 — 출처에 명시된 것만)
-- substituteIngredients (문자열 배열, "재료 → 대체" 형식)
-- steps (문자열 배열, 조리 순서 — 출처에 명시된 것만)
-- cookingTime (숫자, 분 — 출처에 없으면 0)
-- difficulty ("쉬움"|"보통"|"어려움" — 판단 불가 시 "보통")
-- category ("korean"|"western"|"japanese"|"chinese"|"diet"|"high-protein")
-- sourceTitle (문자열, 영상/게시물 제목 그대로)
-- detectedDishName (문자열, 제목·캡션·자막에서 확인한 요리명)
-- confidence (0~1 숫자, 출처 근거 확실성)
-- sourceValidation ("passed" | "failed")
-- reason (문자열, sourceValidation 판단 근거)
+반드시 JSON 객체 하나만 반환하세요. 스키마:
+{
+  "title": "문자열 (출처에서 확인된 요리명)",
+  "description": "문자열 (짧은 요약, 없으면 빈 문자열)",
+  "ingredients": [{ "name": "", "amount": "", "unit": "" }],
+  "optionalIngredients": [{ "name": "", "amount": "", "unit": "" }],
+  "substituteIngredients": ["재료 → 대체"],
+  "steps": [{ "order": 1, "description": "" }],
+  "cookingTime": 0,
+  "difficulty": "쉬움|보통|어려움",
+  "category": "korean|western|japanese|chinese|diet|high-protein",
+  "sourceTitle": "영상/게시물 제목 그대로",
+  "detectedDishName": "제목·캡션·자막에서 확인한 요리명",
+  "confidence": 0,
+  "sourceValidation": "passed|failed",
+  "reason": "sourceValidation 판단 근거"
+}
 
 중요 규칙:
+- steps는 반드시 배열이며, 각 항목은 order(숫자)와 description(문자열)을 포함하세요.
+- ingredients / optionalIngredients도 배열이며, 각 항목은 name·amount·unit을 포함하세요. 양을 모르면 amount·unit은 빈 문자열로 두세요.
 - 영상/캡션/자막/제목에서 확인된 정보만 사용하세요.
 - 확인되지 않은 재료·조리순서는 추측하거나 일반적인 레시피로 채우지 마세요.
+- 조리 순서를 확인할 수 없으면 steps는 빈 배열 []로 두고, 단계를 지어내지 마세요.
 - 제목만 있고 재료·조리 정보가 없으면 sourceValidation을 "failed"로 하고 error에 "NOT_A_RECIPE"를 넣으세요.
 - 다른 요리의 예시 레시피를 반환하지 마세요.
 - 음악·예능·브이로그 등 요리와 무관한 영상이면 error에 "NOT_A_RECIPE"를 넣으세요.
@@ -60,21 +65,115 @@ function cleanStringArray(value) {
   return value.map((s) => String(s).trim()).filter(Boolean);
 }
 
+/** 재료 항목 → 앱 저장용 문자열 ("이름 양단위") */
+function formatIngredientItem(item) {
+  if (item == null) return '';
+  if (typeof item === 'string') return item.trim();
+  if (typeof item !== 'object') return String(item).trim();
+  if (item.originalText) return String(item.originalText).trim();
+  const name = String(item.name || item.ingredient || '').trim();
+  const amount = String(item.amount ?? item.quantity ?? '').trim();
+  const unit = String(item.unit || '').trim();
+  const amountPart = amount ? (unit ? `${amount}${unit}` : amount) : unit;
+  return [name, amountPart].filter(Boolean).join(' ').trim();
+}
+
+function normalizeIngredientsArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(formatIngredientItem).filter(Boolean);
+}
+
+/** step 항목 → description 문자열 */
+function extractStepDescription(item) {
+  if (item == null) return '';
+  if (typeof item === 'string') return item.trim();
+  if (typeof item !== 'object') return String(item).trim();
+  return String(
+    item.description
+    || item.text
+    || item.step
+    || item.content
+    || item.instruction
+    || '',
+  ).trim();
+}
+
+/**
+ * OpenAI가 steps / instructions / cookingSteps / directions 중 어떤 키로
+ * 주든, 앱 저장 구조(string[])로 정규화한다.
+ */
+function normalizeStepsFromParsed(raw) {
+  const candidates = [
+    { key: 'steps', value: raw?.steps },
+    { key: 'instructions', value: raw?.instructions },
+    { key: 'cookingSteps', value: raw?.cookingSteps },
+    { key: 'directions', value: raw?.directions },
+  ];
+
+  let chosenKey = null;
+  let arr = null;
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate.value)) {
+      chosenKey = candidate.key;
+      arr = candidate.value;
+      if (candidate.value.length > 0) break;
+    }
+  }
+
+  if (!Array.isArray(arr)) {
+    return { steps: [], sourceField: null, rawCount: 0 };
+  }
+
+  const normalized = arr
+    .map((item, index) => ({
+      order: (item && typeof item === 'object' && Number(item.order) > 0)
+        ? Number(item.order)
+        : index + 1,
+      description: extractStepDescription(item),
+    }))
+    .filter((item) => item.description)
+    .sort((a, b) => a.order - b.order)
+    .map((item) => item.description);
+
+  return {
+    steps: normalized,
+    sourceField: chosenKey,
+    rawCount: arr.length,
+  };
+}
+
+function logStepsNormalization(parsed, normalized) {
+  console.log('[VideoExtract] steps normalization', {
+    parsedKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
+    hasSteps: Array.isArray(parsed?.steps),
+    hasInstructions: Array.isArray(parsed?.instructions),
+    hasCookingSteps: Array.isArray(parsed?.cookingSteps),
+    hasDirections: Array.isArray(parsed?.directions),
+    sourceField: normalized.sourceField,
+    rawCount: normalized.rawCount,
+    normalizedCount: normalized.steps.length,
+    normalizedPreview: normalized.steps.slice(0, 3),
+  });
+}
+
 function normalizeRecipe(raw, meta) {
   const title = String(raw.title || meta.title || '영상 레시피').trim().slice(0, 80);
   const category = VALID_CATEGORIES.has(raw.category) ? raw.category : 'korean';
   const platform = meta.sourcePlatform || 'youtube';
   const confidence = Math.max(0, Math.min(1, Number(raw.confidence) || 0));
+  const stepsNormalized = normalizeStepsFromParsed(raw);
+  logStepsNormalization(raw, stepsNormalized);
 
   return {
     title,
+    description: String(raw.description || '').trim().slice(0, 500),
     sourceUrl: meta.sourceUrl,
     sourcePlatform: platform,
     thumbnailUrl: meta.thumbnailUrl,
-    ingredients: cleanStringArray(raw.ingredients),
-    optionalIngredients: cleanStringArray(raw.optionalIngredients),
+    ingredients: normalizeIngredientsArray(raw.ingredients),
+    optionalIngredients: normalizeIngredientsArray(raw.optionalIngredients),
     substituteIngredients: cleanStringArray(raw.substituteIngredients),
-    steps: cleanStringArray(raw.steps),
+    steps: stepsNormalized.steps,
     cookingTime: Math.max(0, Number(raw.cookingTime) || 0),
     difficulty: VALID_DIFFICULTIES.has(raw.difficulty) ? raw.difficulty : '보통',
     category,
@@ -106,35 +205,39 @@ function buildPromptContent(context) {
     extractedTranscript,
     extractedCaption,
     userText,
-    textSource,
-    combinedText,
   } = context;
 
   const platformLabel = PLATFORM_LABELS[platform] || '영상';
+  const titleText = String(title || '').trim();
   const descriptionText = String(extractedDescription || '').trim();
   const captionText = String(extractedCaption || '').trim();
-  const metadataText = [descriptionText, captionText].filter(Boolean).join('\n\n').trim();
-  const fullCombinedText = String(combinedText || '').trim()
-    || buildFullCombinedText({
-      title,
-      description: descriptionText,
-      caption: captionText,
-      transcript: extractedTranscript,
-      userText,
-    });
-  const preferDescription = textSource === 'description'
-    || textSource === 'description-fallback'
-    || looksLikeRecipeText(metadataText);
+  const transcriptText = String(extractedTranscript || '').trim();
+  const userTextValue = String(userText || '').trim();
+  const hasTranscript = transcriptText.length >= 20;
 
   const parts = [`${platformLabel} URL: ${sourceUrl}`];
 
-  if (fullCombinedText) {
-    const label = preferDescription
-      ? '[최우선 — title+description+caption+transcript+사용자 입력 (description/metadata 우선)]'
-      : '[통합 텍스트 — title+description+caption+transcript+사용자 입력]';
-    parts.push(`${label}\n${fullCombinedText.slice(0, 12000)}`);
-  } else if (title) {
-    parts.push(`영상 제목(참고): ${title}`);
+  if (hasTranscript) {
+    // 자막 성공 시 title + description + transcript를 명시적으로 전달
+    if (titleText) parts.push(`[title]\n${titleText.slice(0, 500)}`);
+    if (descriptionText) parts.push(`[description]\n${descriptionText.slice(0, 6000)}`);
+    if (captionText) parts.push(`[caption]\n${captionText.slice(0, 3000)}`);
+    parts.push(`[transcript]\n${transcriptText.slice(0, 10000)}`);
+    if (userTextValue) parts.push(`[userText]\n${userTextValue.slice(0, 4000)}`);
+  } else {
+    // transcript 없을 때만 description 기반 부분 추출 fallback
+    const fallbackText = buildFullCombinedText({
+      title: titleText,
+      description: descriptionText,
+      caption: captionText,
+      transcript: '',
+      userText: userTextValue,
+    });
+    if (fallbackText) {
+      parts.push(`[description-fallback — transcript 없음]\n${fallbackText.slice(0, 12000)}`);
+    } else if (titleText) {
+      parts.push(`영상 제목(참고): ${titleText}`);
+    }
   }
 
   return parts.filter(Boolean).join('\n\n');
@@ -249,6 +352,18 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
     sourcePlatform: platform,
   });
 
+  console.log('[VideoExtract] OpenAI vs final recipe', {
+    openaiKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
+    openaiStepCount: Array.isArray(parsed?.steps) ? parsed.steps.length : null,
+    openaiInstructionCount: Array.isArray(parsed?.instructions) ? parsed.instructions.length : null,
+    openaiCookingStepsCount: Array.isArray(parsed?.cookingSteps) ? parsed.cookingSteps.length : null,
+    openaiDirectionsCount: Array.isArray(parsed?.directions) ? parsed.directions.length : null,
+    openaiIngredientCount: Array.isArray(parsed?.ingredients) ? parsed.ingredients.length : null,
+    finalStepCount: recipe.steps.length,
+    finalIngredientCount: recipe.ingredients.length,
+    stepsPreview: recipe.steps.slice(0, 3),
+  });
+
   const sourceDetectedDish = detectDishNameFromSource({
     title: context.title || context.rawTitle,
     description: context.extractedDescription,
@@ -317,9 +432,14 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
   }
 
   if (parsedIngredientsCount === 0 || parsedStepsCount === 0) {
-    recipe.extractionWarning = parsedIngredientsCount === 0
-      ? VIDEO_EXTRACT_UI.PARTIAL_INGREDIENTS
-      : VIDEO_EXTRACT_UI.PARTIAL_STEPS;
+    const hasTranscript = String(context.extractedTranscript || '').trim().length >= 20;
+    if (parsedIngredientsCount === 0) {
+      recipe.extractionWarning = VIDEO_EXTRACT_UI.PARTIAL_INGREDIENTS;
+    } else if (!hasTranscript) {
+      recipe.extractionWarning = VIDEO_EXTRACT_UI.MISSING_TRANSCRIPT_FOR_STEPS;
+    } else {
+      recipe.extractionWarning = VIDEO_EXTRACT_UI.PARTIAL_STEPS;
+    }
   }
 
   if (!recipe.cookingTime) recipe.cookingTime = 20;
@@ -370,12 +490,21 @@ export async function analyzeVideoTextToRecipe(context) {
 
   const userContent = buildPromptContent(context);
   const systemPrompt = buildSystemPrompt(platform);
+  const transcriptText = String(context.extractedTranscript || '').trim();
 
   logOpenAiPromptDebug(systemPrompt, userContent);
 
-  console.log('[OpenAI:request] key fingerprint:', {
-    first10: apiKey.slice(0, 10),
-    last4: apiKey.slice(-4),
+  console.log('[VideoExtract] OpenAI source text', {
+    videoId: context.videoId || null,
+    availableCaptionLanguages: context.availableCaptionLanguages || [],
+    selectedCaptionLanguage: context.selectedCaptionLanguage || null,
+    captionTextLength: transcriptText.length,
+    transcriptLength: transcriptText.length,
+    transcriptPreview: transcriptText
+      ? `${transcriptText.slice(0, 300)}${transcriptText.length > 300 ? '…' : ''}`
+      : '(없음)',
+    sourceTextLength: userContent.length,
+    hasTranscript: transcriptText.length >= 20,
     model,
     endpoint,
   });

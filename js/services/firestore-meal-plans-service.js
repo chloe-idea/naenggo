@@ -14,6 +14,7 @@ import {
 import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { FamilySharingService } from './family-sharing-service.js';
+import { StartupPerf } from './startup-perf.js';
 
 const SUBCOLLECTION = 'mealPlans';
 const DOC_ID = 'default';
@@ -66,11 +67,22 @@ export const FirestoreMealPlansService = {
       `householdId: ${householdId || ''}`,
       `collectionPath: ${collectionPath}`,
     ].join('\n'));
+    const perfPath = activeHouseholdId
+      ? 'households/{householdId}/mealPlans/default'
+      : 'users/{uid}/mealPlans/default';
+    const syncStartMs = StartupPerf.begin('meal plan loaded', perfPath);
+    StartupPerf.markListener(perfPath);
     snapshotUnsubscribe = onSnapshot(
       planDoc(uid),
       (snap) => {
         const data = snap.exists() ? snap.data() : {};
-        onPlans?.(data.plans && typeof data.plans === 'object' ? clonePlans(data.plans) : {});
+        const plans = data.plans && typeof data.plans === 'object' ? clonePlans(data.plans) : {};
+        StartupPerf.end('meal plan loaded', {
+          documentCount: snap.exists() ? 1 : 0,
+          firestorePath: perfPath,
+          startMs: syncStartMs,
+        });
+        onPlans?.(plans);
       },
       (err) => onError?.(err),
     );

@@ -23,6 +23,7 @@ import {
   userSubcollectionPath,
   logFirestorePermissionDenied,
 } from './firestore-debug.js';
+import { StartupPerf } from './startup-perf.js';
 
 const SUBCOLLECTION = 'myRecipes';
 
@@ -214,6 +215,9 @@ export const FirestoreMyRecipesService = {
     }
     const personalCol = recipesCol(uid);
     let personalItems = [];
+    const perfPath = 'users/{uid}/myRecipes';
+    const syncStartMs = StartupPerf.begin('my recipes loaded', perfPath);
+    StartupPerf.markListener(perfPath);
     const emit = () => {
       onItems?.([...personalItems].sort(
         (a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''),
@@ -223,6 +227,11 @@ export const FirestoreMyRecipesService = {
       personalCol,
       (snap) => {
         personalItems = snap.docs.map((d) => mapMyRecipeDoc(d, uid));
+        StartupPerf.end('my recipes loaded', {
+          documentCount: personalItems.length,
+          firestorePath: perfPath,
+          startMs: syncStartMs,
+        });
         emit();
       },
       (err) => onError?.(err),

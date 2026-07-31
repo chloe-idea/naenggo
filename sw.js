@@ -32,7 +32,7 @@ const ASSETS = [
   'js/login-required-modal.js?v=67',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
-  'recipe-images.js?v=57',
+  'recipe-images.js?v=50',
   'js/data/builtin-recipes.js?v=1',
   'manifest.json',
   'icons/icon-192.png',

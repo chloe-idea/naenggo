@@ -15,9 +15,11 @@ import {
   isFirebaseConfigured,
 } from '../firebase.js';
 import { formatAuthError, logAuthError } from './auth-errors.js';
+import { StartupPerf } from './startup-perf.js';
 
 let currentUser = null;
 let initialAuthResolved = false;
+let authInitStartedMs = null;
 /** @type {Promise<void> | null} */
 let initialAuthPromise = null;
 /** @type {((value?: void) => void) | null} */
@@ -45,6 +47,11 @@ function markInitialAuthResolved() {
   if (initialAuthResolved) return;
   initialAuthResolved = true;
   console.log('[VideoAuth] auth initialized');
+  StartupPerf.end('auth resolved', {
+    documentCount: 0,
+    firestorePath: 'auth/onAuthStateChanged',
+    startMs: authInitStartedMs ?? StartupPerf.originMs,
+  });
   resolveInitialAuth?.();
   resolveInitialAuth = null;
 }
@@ -82,6 +89,8 @@ export const AuthService = {
 
   async init(onChange) {
     if (typeof onChange === 'function') listeners.add(onChange);
+    authInitStartedMs = performance.now();
+    StartupPerf.begin('auth resolved', 'auth/onAuthStateChanged');
 
     if (!isFirebaseConfigured()) {
       console.error('[AuthService] Firebase auth is not ready (config or init failed).');
@@ -93,7 +102,7 @@ export const AuthService = {
     ensureInitialAuthPromise();
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('[AuthService] auth state changed:', user ? user.email || user.uid : 'signed out');
+      console.log('[AuthService] auth state changed:', user ? 'signed in' : 'signed out');
       if (user) currentUser = user;
       else currentUser = null;
       notifyListeners(user);

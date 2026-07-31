@@ -1,21 +1,58 @@
 /**
  * 가족 공유 상태 및 household Admin API 클라이언트.
  * 화면에는 household 대신 "가족 공유"만 노출한다.
+ *
+ * 초기 로딩 최적화:
+ * - refresh in-flight dedupe
+ * - 세션 메모리 캐시 (검증된 activeFamily)
+ * - sessionStorage hint (구독 경로 가속용, 권한 판정 금지)
  */
 import { AuthService } from './auth-service.js';
 
+const HINT_STORAGE_KEY = 'naengjanggo_family_hint_v1';
+const MUTATION_REASONS = new Set([
+  'mutation',
+  'create',
+  'join',
+  'leave',
+  'activate',
+  'delete',
+  'cancel',
+  'transfer',
+  'remove-member',
+  'rename',
+  'load-members',
+]);
+
 let activeFamily = null;
+/** 이번 세션에서 /current 검증을 통과한 상태인지 */
+let sessionValidated = false;
+/** @type {Promise<ReturnType<typeof FamilySharingService.getActiveFamily>> | null} */
+let refreshInFlight = null;
+
+const perf = {
+  refreshCalls: 0,
+  fetchCalls: 0,
+  cacheHits: 0,
+  lastCacheHit: false,
+  lastResolutionPath: null,
+  lastDurationMs: null,
+};
+
 const listeners = new Set();
 
 function apiUrl(path = '') {
   return `/api/households${path}`;
 }
 
-function notify() {
+function notify(source = 'user-action') {
+  const family = activeFamily;
   listeners.forEach((listener) => {
-    try { listener(activeFamily); } catch (err) { console.warn('[FamilySharingService] listener failed:', err); }
+    try { listener(family); } catch (err) { console.warn('[FamilySharingService] listener failed:', err); }
   });
-  window.dispatchEvent(new CustomEvent('family-sharing-changed', { detail: activeFamily }));
+  window.dispatchEvent(new CustomEvent('family-sharing-changed', {
+    detail: { family, source },
+  }));
 }
 
 function clearFamilySetupCache() {
@@ -24,6 +61,63 @@ function clearFamilySetupCache() {
   } catch {
     // Storage access can be unavailable in private browser contexts.
   }
+}
+
+function readSessionHint() {
+  try {
+    const raw = sessionStorage.getItem(HINT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      householdId: typeof parsed.householdId === 'string' ? parsed.householdId : null,
+      pendingHouseholdId: typeof parsed.pendingHouseholdId === 'string' ? parsed.pendingHouseholdId : null,
+      cachedAt: Number(parsed.cachedAt) || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionHint(family) {
+  try {
+    if (!family?.householdId) {
+      sessionStorage.removeItem(HINT_STORAGE_KEY);
+      return;
+    }
+    const pending = Boolean(family.pendingSetup);
+    sessionStorage.setItem(HINT_STORAGE_KEY, JSON.stringify({
+      householdId: pending ? null : family.householdId,
+      pendingHouseholdId: pending ? family.householdId : null,
+      cachedAt: Date.now(),
+    }));
+  } catch {
+    // ignore
+  }
+}
+
+function clearSessionHint() {
+  try {
+    sessionStorage.removeItem(HINT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function invalidateSessionCache() {
+  sessionValidated = false;
+  clearSessionHint();
+}
+
+function logHouseholdPerf(extra = {}) {
+  console.log('[HouseholdPerf]', {
+    refreshCalls: perf.refreshCalls,
+    fetchCalls: perf.fetchCalls,
+    cacheHit: perf.lastCacheHit,
+    resolutionPath: perf.lastResolutionPath,
+    durationMs: perf.lastDurationMs,
+    ...extra,
+  });
 }
 
 async function authHeaders() {
@@ -66,6 +160,82 @@ async function request(path, { method = 'GET', body } = {}) {
   return payload;
 }
 
+async function fetchCurrentHousehold({ includeMembers = false } = {}) {
+  perf.fetchCalls += 1;
+  const started = performance.now();
+  const path = includeMembers ? '/current?includeMembers=1' : '/current';
+  const data = await request(path);
+  perf.lastDurationMs = Math.round(performance.now() - started);
+  perf.lastResolutionPath = data?.resolutionPath || data?.household?.resolutionPath || null;
+  return data;
+}
+
+async function runRefresh({
+  force = false,
+  reason = 'default',
+  notifySource = 'user-action',
+  includeMembers = false,
+} = {}) {
+  const started = performance.now();
+  perf.refreshCalls += 1;
+  perf.lastCacheHit = false;
+
+  if (!AuthService.isLoggedIn()) {
+    activeFamily = null;
+    sessionValidated = false;
+    clearSessionHint();
+    notify(notifySource);
+    perf.lastDurationMs = Math.round(performance.now() - started);
+    logHouseholdPerf({ reason, loggedIn: false });
+    return null;
+  }
+
+  const allowNetworkForce = Boolean(force && MUTATION_REASONS.has(reason));
+  const needFullMembers = Boolean(includeMembers || reason === 'load-members');
+
+  // 세션 캐시: mutation force가 아니면 검증된 결과 재사용
+  // 단, 부분 members만 있을 때 전체 목록이 필요하면 네트워크 강제
+  if (
+    !allowNetworkForce
+    && sessionValidated
+    && !(needFullMembers && activeFamily?.membersPartial)
+  ) {
+    perf.lastCacheHit = true;
+    perf.lastDurationMs = Math.round(performance.now() - started);
+    perf.cacheHits += 1;
+    logHouseholdPerf({ reason, fromCache: true });
+    return FamilySharingService.getActiveFamily();
+  }
+
+  const previousKey = JSON.stringify(activeFamily);
+  try {
+    const data = await fetchCurrentHousehold({ includeMembers: needFullMembers });
+    activeFamily = data.household || null;
+    if (activeFamily && data.resolutionPath && !activeFamily.resolutionPath) {
+      activeFamily = { ...activeFamily, resolutionPath: data.resolutionPath };
+    }
+    sessionValidated = true;
+    writeSessionHint(activeFamily);
+  } catch (err) {
+    if (err.status === 404) {
+      activeFamily = null;
+      sessionValidated = true;
+      clearSessionHint();
+      clearFamilySetupCache();
+    } else {
+      throw err;
+    }
+  }
+
+  perf.lastDurationMs = Math.round(performance.now() - started);
+  logHouseholdPerf({ reason, fromCache: false, includeMembers: needFullMembers });
+
+  if (previousKey !== JSON.stringify(activeFamily)) {
+    notify(notifySource);
+  }
+  return FamilySharingService.getActiveFamily();
+}
+
 export const FamilySharingService = {
   getActiveFamily() {
     return activeFamily ? { ...activeFamily } : null;
@@ -79,44 +249,113 @@ export const FamilySharingService = {
     return Boolean(activeFamily?.householdId && !activeFamily.pendingSetup);
   },
 
+  /** 구독 경로 가속용 hint (권한 판정에 사용 금지) */
+  getSessionHint() {
+    return readSessionHint();
+  },
+
+  /**
+   * hint로 임시 scope만 설정. sessionValidated=false 유지 → 뒤이어 /current 검증 필수.
+   * @returns {{ householdId: string|null, fromHint: boolean }}
+   */
+  applySessionHintForScope() {
+    if (sessionValidated) {
+      return {
+        householdId: this.getActiveHouseholdId(),
+        fromHint: false,
+      };
+    }
+    const hint = readSessionHint();
+    if (!hint) {
+      return { householdId: this.getActiveHouseholdId(), fromHint: false };
+    }
+    if (hint.householdId) {
+      activeFamily = {
+        householdId: hint.householdId,
+        pendingSetup: false,
+        _fromHint: true,
+      };
+      return { householdId: hint.householdId, fromHint: true };
+    }
+    if (hint.pendingHouseholdId) {
+      activeFamily = {
+        householdId: hint.pendingHouseholdId,
+        pendingSetup: true,
+        _fromHint: true,
+      };
+      return { householdId: null, fromHint: true };
+    }
+    return { householdId: null, fromHint: false };
+  },
+
+  getPerfSnapshot() {
+    return { ...perf };
+  },
+
   subscribe(listener) {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
 
-  async refresh() {
-    if (!AuthService.isLoggedIn()) {
-      activeFamily = null;
-      notify();
-      return null;
+  /**
+   * @param {{ force?: boolean, reason?: string, notifySource?: string }} [options]
+   * force+mutation reason 일 때만 네트워크 강제. 그 외 force는 in-flight dedupe/캐시와 동일.
+   */
+  async refresh(options = {}) {
+    const opts = typeof options === 'boolean'
+      ? { force: options, reason: 'default' }
+      : options;
+    const force = Boolean(opts.force);
+    const reason = opts.reason || 'default';
+    const notifySource = opts.notifySource || (reason === 'hydration' ? 'hydration' : 'user-action');
+    const includeMembers = Boolean(opts.includeMembers || reason === 'load-members');
+    const allowNetworkForce = Boolean(force && MUTATION_REASONS.has(reason));
+    const needNetworkForMembers = Boolean(includeMembers && activeFamily?.membersPartial);
+
+    if (allowNetworkForce) {
+      if (reason === 'load-members') {
+        sessionValidated = false; // hint는 유지
+      } else {
+        invalidateSessionCache();
+      }
     }
-    const previousKey = JSON.stringify(activeFamily);
-    try {
-      const data = await request('/current');
-      activeFamily = data.household || null;
-    } catch (err) {
-      // 서버가 membership 없는 pending/active 참조를 정리한 경우 클라이언트
-      // 메모리에도 남기지 않는다. 새 setup은 서버에도 pending 문서가 있으므로
-      // /current가 404가 될 이유가 없다.
-      if (err.status === 404) {
-        activeFamily = null;
-        clearFamilySetupCache();
-      } else throw err;
+
+    if (refreshInFlight) {
+      if (!allowNetworkForce && !needNetworkForMembers) {
+        return refreshInFlight;
+      }
+      // mutation force / full members: 진행 중 요청이 끝난 뒤 한 번 더 검증
+      await refreshInFlight;
+      if (allowNetworkForce) {
+        if (reason === 'load-members') sessionValidated = false;
+        else invalidateSessionCache();
+      }
     }
-    if (previousKey !== JSON.stringify(activeFamily)) notify();
-    return this.getActiveFamily();
+
+    refreshInFlight = runRefresh({
+      force: allowNetworkForce || needNetworkForMembers,
+      reason: needNetworkForMembers && !allowNetworkForce ? 'load-members' : reason,
+      notifySource,
+      includeMembers,
+    }).finally(() => {
+      refreshInFlight = null;
+    });
+    return refreshInFlight;
   },
 
   clear() {
     activeFamily = null;
+    invalidateSessionCache();
     clearFamilySetupCache();
-    notify();
+    notify('user-action');
   },
 
   async createFamily(name = '우리 가족') {
+    invalidateSessionCache();
     const data = await request('', { method: 'POST', body: { name } });
-    // 선택이 끝나기 전에는 scope를 바꾸지 않는다.
     activeFamily = { ...data.household, pendingSetup: true };
+    sessionValidated = false;
+    writeSessionHint(activeFamily);
     return data.household;
   },
 
@@ -137,47 +376,61 @@ export const FamilySharingService = {
   },
 
   async join({ kind, secret }) {
+    invalidateSessionCache();
     const data = await request('/join', { method: 'POST', body: { kind, secret } });
     activeFamily = { ...data.household, pendingSetup: true };
+    sessionValidated = false;
+    writeSessionHint(activeFamily);
     return data.household;
   },
 
   async rename(name) {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     const data = await request('/current', {
       method: 'PATCH',
       body: { householdId: family?.householdId, name },
     });
     activeFamily = { ...family, ...data.household };
-    notify();
+    sessionValidated = true;
+    writeSessionHint(activeFamily);
+    notify('user-action');
     return this.getActiveFamily();
   },
 
   async transferOwner(toUid) {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     await request('/transfer-owner', { method: 'POST', body: { householdId: family?.householdId, toUid } });
-    return this.refresh();
+    return this.refresh({ force: true, reason: 'transfer', notifySource: 'user-action' });
   },
 
   async removeMember(uid) {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     await request(`/members/${encodeURIComponent(uid)}?householdId=${encodeURIComponent(family?.householdId || '')}`, { method: 'DELETE' });
   },
 
   async leave() {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     await request('/leave', { method: 'POST', body: { householdId: family?.householdId } });
     activeFamily = null;
+    sessionValidated = true;
+    clearSessionHint();
     clearFamilySetupCache();
-    notify();
+    notify('user-action');
   },
 
   async deleteFamily() {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     await request(`/current?householdId=${encodeURIComponent(family?.householdId || '')}`, { method: 'DELETE' });
     activeFamily = null;
+    sessionValidated = true;
+    clearSessionHint();
     clearFamilySetupCache();
-    notify();
+    notify('user-action');
   },
 
   async copyCurrentData(scopes) {
@@ -199,22 +452,26 @@ export const FamilySharingService = {
 
   async cancelPendingSetup() {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     await request('/cancel-pending', {
       method: 'POST',
       body: { householdId: family?.householdId },
     });
     activeFamily = null;
+    sessionValidated = true;
+    clearSessionHint();
     clearFamilySetupCache();
-    notify();
+    notify('user-action');
   },
 
   async activate({ migrationMode } = {}) {
     const family = this.getActiveFamily();
+    invalidateSessionCache();
     await request('/activate', {
       method: 'POST',
       body: { householdId: family?.householdId, migrationMode },
     });
     activeFamily = { ...family, pendingSetup: false };
-    return this.refresh();
+    return this.refresh({ force: true, reason: 'activate', notifySource: 'user-action' });
   },
 };

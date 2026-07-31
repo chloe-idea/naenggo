@@ -114,9 +114,21 @@ export function resolveHouseholdRoute(method, routeParts = [], body = {}) {
       ok: true,
       handler: 'GET current',
       normalizedRoute,
-      run: async (services, ctx) => {
-        const household = await services.getCurrentHousehold(ctx);
-        return { status: 200, body: { success: true, household: household || null } };
+      run: async (services, ctx, { query } = {}) => {
+        const includeMembers = String(query?.includeMembers || '') === '1'
+          || String(query?.includeMembers || '').toLowerCase() === 'true';
+        const household = await services.getCurrentHousehold({
+          ...ctx,
+          includeMembers,
+        });
+        return {
+          status: 200,
+          body: {
+            success: true,
+            household: household || null,
+            resolutionPath: household?.resolutionPath || (household ? null : 'recovery'),
+          },
+        };
       },
     };
   }

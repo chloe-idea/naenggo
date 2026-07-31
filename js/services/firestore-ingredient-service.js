@@ -15,6 +15,7 @@ import {
 import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { FamilySharingService } from './family-sharing-service.js';
+import { StartupPerf } from './startup-perf.js';
 
 const INGREDIENTS_COLLECTION = 'ingredients';
 
@@ -213,10 +214,17 @@ export const FirestoreIngredientService = {
       `collectionPath: ${collectionPath}`,
     ].join('\n'));
     console.info('[FirestoreIngredientService] onSnapshot subscription', {
-      uid: user.uid,
-      path: collectionPath,
-      householdId: activeHouseholdId,
+      path: collectionPath.replace(/\/(?:users|households)\/[^/]+/, (m) => (
+        m.startsWith('/users/') ? '/users/{uid}' : '/households/{householdId}'
+      )),
+      hasHousehold: Boolean(activeHouseholdId),
     });
+
+    const perfPath = activeHouseholdId
+      ? 'households/{householdId}/ingredients'
+      : 'users/{uid}/ingredients';
+    const syncStartMs = StartupPerf.begin('ingredients loaded', perfPath);
+    StartupPerf.markListener(perfPath);
 
     snapshotUnsubscribe = onSnapshot(
       col,
@@ -225,6 +233,11 @@ export const FirestoreIngredientService = {
           .map((docSnap) => mapFirestoreDoc(docSnap, user.uid))
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         console.log('[FirestoreIngredientService] onSnapshot 수신:', items.length, '개');
+        StartupPerf.end('ingredients loaded', {
+          documentCount: items.length,
+          firestorePath: perfPath,
+          startMs: syncStartMs,
+        });
         onItems?.(items);
       },
       (error) => {

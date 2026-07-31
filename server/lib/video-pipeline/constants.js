@@ -29,7 +29,9 @@ export const VIDEO_EXTRACT_UI = {
   PARTIAL_CAPTION_HINT: '영상 설명글, 자막, 고정 댓글을 함께 붙여넣으면 더 정확합니다.',
   AUTO_EXTRACT_FAILED: '영상 정보를 자동으로 읽지 못해 입력된 텍스트 기준으로 분석했습니다.',
   PARTIAL_INGREDIENTS: '재료를 자동으로 추출하지 못했어요. 검토 화면에서 직접 추가해 주세요.',
-  PARTIAL_STEPS: '조리 순서를 자동으로 추출하지 못했어요. 검토 화면에서 직접 추가해 주세요.',
+  PARTIAL_STEPS: '영상에서 조리 순서를 충분히 확인하지 못했습니다.',
+  MISSING_TRANSCRIPT_FOR_STEPS:
+    '이 영상에서는 자막을 가져오지 못해 조리 순서를 추출할 수 없습니다.',
 };
 
 /** API 라우팅용 — youtube / youtube_shorts → youtube 백엔드 */

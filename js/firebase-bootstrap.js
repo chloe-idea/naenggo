@@ -14,6 +14,7 @@ import { FirestorePublicRecipesService } from './services/firestore-public-recip
 import { FamilySharingService } from './services/family-sharing-service.js';
 import { normalizeSocialLinks } from './lib/social-url.js';
 import { formatAuthError } from './services/auth-errors.js';
+import { StartupPerf } from './services/startup-perf.js';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
 
 const USER_ERROR_MESSAGE = '로그인에 실패했어요. 잠시 후 다시 시도해 주세요.';
@@ -318,12 +319,17 @@ async function loadUserProfile(authUser) {
     cachedUserProfile = null;
     return null;
   }
+  const profileStartMs = StartupPerf.begin('user profile loaded', 'users/{uid}');
+  let documentCount = 0;
   try {
-    cachedUserProfile = await FirestoreUserService.getUserDocument(authUser.uid);
-    if (!cachedUserProfile) {
-      cachedUserProfile = await FirestoreUserService.ensureUserDocument(authUser);
-    } else {
+    // ensureUserDocument 한 번만 getDoc — 별도 getUserDocument 호출 제거
+    StartupPerf.markRead('users/{uid}');
+    cachedUserProfile = await FirestoreUserService.ensureUserDocument(authUser);
+    documentCount += 1;
+    if (cachedUserProfile) {
+      StartupPerf.markRead('publicProfiles/{uid}');
       const publicProfile = await FirestorePublicProfilesService.getById(authUser.uid);
+      documentCount += 1;
       if (!publicProfile) {
         const avatarType = cachedUserProfile.avatarType;
         const profileImageUrl = avatarType === 'google' && authUser.photoURL
@@ -339,8 +345,23 @@ async function loadUserProfile(authUser) {
     console.error('[firebase-bootstrap] loadUserProfile failed:', err);
     cachedUserProfile = null;
   }
+  StartupPerf.end('user profile loaded', {
+    documentCount,
+    firestorePath: 'users/{uid}+publicProfiles/{uid}',
+    startMs: profileStartMs,
+  });
   updateProfileMenuContent(authUser, cachedUserProfile);
   return cachedUserProfile;
+}
+
+function ensureAdminSync() {
+  const user = resolveAuthUser();
+  if (!user?.uid || authState.isLoggingOut) return;
+  AdminService.startSync(user.uid);
+}
+
+function ensureDeferredUserDataSync(keys) {
+  return FirestoreUserDataSync.ensureDeferredSync(keys);
 }
 
 function renderAuthUi(user) {
@@ -587,6 +608,39 @@ async function saveProfileAvatarType(avatarType) {
   }
 }
 
+/** 초기 hydration 중 family-sharing-changed → force sync 루프 방지 */
+let householdHydrationInProgress = false;
+
+function buildUserSyncHandlers(markHomeSnapshot) {
+  return {
+    onIngredients: (items) => {
+      window.dispatchEvent(new CustomEvent('pantry-firestore-sync', { detail: { items } }));
+      markHomeSnapshot?.('ingredients');
+    },
+    onMyRecipes: (recipes) => {
+      window.dispatchEvent(new CustomEvent('my-recipes-firestore-sync', { detail: { recipes } }));
+      markHomeSnapshot?.('myRecipes');
+    },
+    onMealCalendar: (logs) => {
+      window.dispatchEvent(new CustomEvent('meal-calendar-firestore-sync', { detail: { logs } }));
+    },
+    onMealPlans: (plans) => {
+      window.dispatchEvent(new CustomEvent('meal-plans-firestore-sync', { detail: { plans } }));
+    },
+    onShopping: (records) => {
+      window.dispatchEvent(new CustomEvent('shopping-firestore-sync', { detail: { records } }));
+    },
+    onSettings: (settings) => {
+      window.dispatchEvent(new CustomEvent('settings-firestore-sync', { detail: { settings } }));
+    },
+    onError: (err) => {
+      console.error('[firebase-bootstrap] user data sync failed:', err?.code, err?.message, err);
+      markHomeSnapshot?.('ingredients');
+      markHomeSnapshot?.('myRecipes');
+    },
+  };
+}
+
 async function syncUserData(user, { force = false } = {}) {
   const uid = user.uid;
   if (!AuthService.isLoggedIn()) {
@@ -598,13 +652,59 @@ async function syncUserData(user, { force = false } = {}) {
   FirestoreUserDataSync.stopAll();
   syncedUid = uid;
   startDataLoading(user);
+  householdHydrationInProgress = true;
 
   if (typeof window.clearAllUserDataState === 'function') {
     window.clearAllUserDataState();
   }
 
   try {
-    await FamilySharingService.refresh();
+    const householdStartMs = StartupPerf.begin('household resolved', 'api/households/current');
+
+    // sessionStorage hint로 구독 경로를 먼저 잡고, /current 검증은 병렬
+    const hintApply = FamilySharingService.applySessionHintForScope();
+    const scopeBeforeVerify = FamilySharingService.getActiveHouseholdId();
+
+    const refreshPromise = FamilySharingService.refresh({
+      reason: 'hydration',
+      notifySource: 'hydration',
+    });
+
+    let firstSnapshotDone = false;
+    const finishFirstSnapshot = (reason) => {
+      if (firstSnapshotDone) return;
+      firstSnapshotDone = true;
+      clearDataLoading(reason);
+      const hp = FamilySharingService.getPerfSnapshot?.() || {};
+      // household refresh와 race 가능 — 미완료면 pending으로 표기 (recovery로 오인 방지)
+      StartupPerf.markHomeReady({
+        firestorePath: `composite:home; refreshCalls=${hp.refreshCalls}|fetchCalls=${hp.fetchCalls}|cacheHit=${hp.lastCacheHit}|path=${hp.lastResolutionPath || 'pending'}`,
+      });
+      StartupPerf.summarize();
+    };
+
+    let pending = 2;
+    const homeSeen = { ingredients: false, myRecipes: false };
+    const markHomeSnapshot = (key) => {
+      if (homeSeen[key]) return;
+      homeSeen[key] = true;
+      pending -= 1;
+      if (pending <= 0) finishFirstSnapshot('home user snapshots');
+    };
+
+    const handlers = buildUserSyncHandlers(markHomeSnapshot);
+    // hint/캐시 기준으로 즉시 구독 시작 (권한은 Firestore Rules가 최종 판정)
+    FirestoreUserDataSync.startUserSync({
+      householdId: scopeBeforeVerify,
+      ...handlers,
+    });
+    console.log('[HouseholdPerf] subscribe-started', {
+      fromHint: Boolean(hintApply?.fromHint),
+      householdId: scopeBeforeVerify ? '{householdId}' : null,
+    });
+
+    await refreshPromise;
+
     if (pendingFamilyLinkInvite && !FamilySharingService.isActive() && !familyLinkJoinInFlight) {
       familyLinkJoinInFlight = true;
       try {
@@ -612,33 +712,67 @@ async function syncUserData(user, { force = false } = {}) {
         pendingFamilyMigration = true;
         sessionStorage.removeItem('pending-family-link-invite');
         pendingFamilyLinkInvite = null;
+        await FamilySharingService.refresh({
+          force: true,
+          reason: 'join',
+          notifySource: 'hydration',
+        });
       } finally {
         familyLinkJoinInFlight = false;
       }
     }
+
     const householdId = FamilySharingService.getActiveHouseholdId();
+    const hp = FamilySharingService.getPerfSnapshot?.() || {};
+    StartupPerf.end('household resolved', {
+      documentCount: householdId ? 1 : 0,
+      firestorePath: `api/households/current path=${hp.lastResolutionPath || 'n/a'} cacheHit=${hp.lastCacheHit} fetchCalls=${hp.fetchCalls}`,
+      startMs: householdStartMs,
+    });
+
+    // hint와 서버 결과가 다르면 household-scoped(ingredients)만 재구독.
+    // myRecipes는 users/{uid}/myRecipes 고정이라 재등록하지 않는다 (duplicateListeners 방지).
+    if (scopeBeforeVerify !== householdId) {
+      console.log('[HouseholdPerf] scope-mismatch-resubscribe', {
+        hintHadHousehold: Boolean(scopeBeforeVerify),
+        resolvedHadHousehold: Boolean(householdId),
+        keepMyRecipes: true,
+      });
+      homeSeen.ingredients = false;
+      if (homeSeen.myRecipes) {
+        pending = 1;
+      } else {
+        pending = 2;
+      }
+      if (firstSnapshotDone) {
+        startDataLoading(user);
+        firstSnapshotDone = false;
+      }
+      FirestoreUserDataSync.restartIngredientsSync(
+        buildUserSyncHandlers(markHomeSnapshot),
+      );
+    }
+
     if (householdId && !deduplicatedHouseholdsThisSession.has(householdId)) {
       try {
         await FamilySharingService.deduplicateIngredients();
         deduplicatedHouseholdsThisSession.add(householdId);
-        console.info('[FamilySharing] household ingredient deduplication completed', { householdId });
+        console.info('[FamilySharing] household ingredient deduplication completed', { householdId: '{householdId}' });
       } catch (error) {
         console.error('[FamilySharing] household ingredient deduplication failed', {
-          householdId,
           code: error?.code || null,
           message: error?.message || String(error),
         });
       }
     }
     // 로컬 냉장고 이관은 개인 scope에서 끝낸 뒤에만 가족 복사를 허용한다.
-    // 가족 활성 상태에서 실행하면 개인 로컬 데이터를 공유 household에 섞을 수 있다.
     if (!householdId) {
       const legacyResult = await migrateLegacyPantryToFirestore(FirestoreIngredientService, uid);
       if (legacyResult.migrated) {
         console.info('[FamilySharing] personal pantry migration completed before household setup', legacyResult);
       }
     }
-    const scopeRoot = householdId ? `households/${householdId}` : `users/${uid}`;
+    const scopeRoot = householdId ? 'households/{householdId}' : 'users/{uid}';
     console.info('[FamilySharing] Firestore data scope', {
       mode: householdId ? 'family' : 'personal',
       ingredients: `${scopeRoot}/ingredients`,
@@ -652,62 +786,17 @@ async function syncUserData(user, { force = false } = {}) {
         ? `${scopeRoot}/savedRecipes`
         : `${scopeRoot}/settings/preferences.savedRecipeIds`,
       extractedRecipes: householdId ? `${scopeRoot}/extractedRecipes` : '(not shared)',
-      myRecipes: `users/${uid}/myRecipes`,
+      myRecipes: 'users/{uid}/myRecipes',
       statistics: householdId ? 'derived from shared mealCalendar + shopping + grocery' : 'derived from personal mealCalendar + shopping + settings',
-    });
-    let firstSnapshotDone = false;
-    const finishFirstSnapshot = (reason) => {
-      if (firstSnapshotDone) return;
-      firstSnapshotDone = true;
-      clearDataLoading(reason);
-    };
-
-    let pending = 6;
-    const markSnapshot = () => {
-      pending -= 1;
-      if (pending <= 0) finishFirstSnapshot('all user snapshots');
-    };
-
-    FirestoreUserDataSync.startUserSync({
-      householdId,
-      onIngredients: (items) => {
-        window.dispatchEvent(new CustomEvent('pantry-firestore-sync', { detail: { items } }));
-        markSnapshot();
-      },
-      onMyRecipes: (recipes) => {
-        window.dispatchEvent(new CustomEvent('my-recipes-firestore-sync', { detail: { recipes } }));
-        markSnapshot();
-      },
-      onMealCalendar: (logs) => {
-        window.dispatchEvent(new CustomEvent('meal-calendar-firestore-sync', { detail: { logs } }));
-        markSnapshot();
-      },
-      onMealPlans: (plans) => {
-        window.dispatchEvent(new CustomEvent('meal-plans-firestore-sync', { detail: { plans } }));
-        markSnapshot();
-      },
-      onShopping: (records) => {
-        window.dispatchEvent(new CustomEvent('shopping-firestore-sync', { detail: { records } }));
-        markSnapshot();
-      },
-      onSettings: (settings) => {
-        window.dispatchEvent(new CustomEvent('settings-firestore-sync', { detail: { settings } }));
-        markSnapshot();
-      },
-      onError: (err) => {
-        console.error('[firebase-bootstrap] user data sync failed:', err?.code, err?.message, err);
-        markSnapshot();
-      },
-    });
-
-    FirestoreUserService.ensureUserDocument(user).then((doc) => {
-      if (doc) cachedUserProfile = doc;
-    }).catch((error) => {
-      console.error('[firebase-bootstrap] ensureUserDocument failed:', error);
     });
   } catch (err) {
     console.error('[firebase-bootstrap] syncUserData failed:', err);
     clearDataLoading('sync error');
+  } finally {
+    // notify(hydration) 핸들러가 같은 틱에서 force sync 하지 않도록 다음 마이크로태스크에서 해제
+    queueMicrotask(() => {
+      householdHydrationInProgress = false;
+    });
   }
 }
 
@@ -741,11 +830,12 @@ async function handleSignedInUser(user) {
   patchAuthState({ isLoggingIn: false, authLoading: false, user });
   renderAuthUi(user);
 
-  AdminService.startSync(uid);
+  // admin 구독은 프로필 탭 등에서 지연 시작 (초기 홈 로딩에서 제외)
   window.dispatchEvent(new CustomEvent('admin-status-changed', {
     detail: AdminService.getState(),
   }));
 
+  // 홈 셸을 먼저 그리도록 auth 이벤트를 sync 전에 발행
   window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { user } }));
 
   await syncUserData(user);
@@ -755,8 +845,11 @@ async function handleSignedInUser(user) {
     return;
   }
 
-  await loadUserProfile(user);
-  refreshProfileQuota();
+  // household scope 확정 후 홈 브리핑 식비(이번 주 grocery) 1회 로드 트리거
+  window.dispatchEvent(new CustomEvent('home-user-sync-ready', { detail: { uid } }));
+
+  // 프로필/쿼터는 홈 스냅샷과 병렬 — 홈 진입을 막지 않음
+  void loadUserProfile(user).then(() => refreshProfileQuota());
 }
 
 async function handleSignedOutUser() {
@@ -804,7 +897,7 @@ async function handleAuthChange(user) {
       patchAuthState({ authLoading: false });
     }
 
-    console.log('[firebase-bootstrap] handleAuthChange:', user?.email || 'guest');
+    console.log('[firebase-bootstrap] handleAuthChange:', user ? 'signed in' : 'guest');
 
     if (user) {
       await handleSignedInUser(user);
@@ -999,7 +1092,7 @@ function renderFamilySharing() {
   $('family-delete-btn').hidden = setupPending || family.role !== 'owner' || members.length !== 1;
 }
 
-function openFamilySharing() {
+async function openFamilySharing() {
   const modal = $('family-sharing-modal');
   if (!modal || !resolveAuthUser()) return;
   setFamilyError('');
@@ -1009,6 +1102,18 @@ function openFamilySharing() {
   modal.setAttribute('aria-hidden', 'false');
   if (typeof window.updateBodyScrollLock === 'function') window.updateBodyScrollLock();
   renderFamilySharing();
+  // 홈 Fast path는 members 부분 목록만 가져오므로, 모달에서 전체 구성원을 로드한다.
+  try {
+    await FamilySharingService.refresh({
+      force: true,
+      reason: 'load-members',
+      includeMembers: true,
+      notifySource: 'user-action',
+    });
+    renderFamilySharing();
+  } catch (err) {
+    console.warn('[firebase-bootstrap] load family members failed:', err?.message || err);
+  }
 }
 
 function closeFamilySharing() {
@@ -1103,8 +1208,10 @@ function bindFamilySharingUi() {
     const remove = event.target.closest('[data-family-remove]')?.dataset.familyRemove;
     try {
       if (transfer && window.confirm('이 구성원에게 관리자 권한을 이전할까요?')) await FamilySharingService.transferOwner(transfer);
-      if (remove && window.confirm('이 구성원을 가족 공유에서 제거할까요?')) await FamilySharingService.removeMember(remove);
-      await FamilySharingService.refresh();
+      if (remove && window.confirm('이 구성원을 가족 공유에서 제거할까요?')) {
+        await FamilySharingService.removeMember(remove);
+        await FamilySharingService.refresh({ force: true, reason: 'remove-member', notifySource: 'user-action' });
+      }
       renderFamilySharing();
     } catch (err) { setFamilyError(err.message); }
   });
@@ -1261,6 +1368,8 @@ function bindAuthUi() {
   window.addEventListener('profile-manage-open', () => {
     const user = resolveAuthUser();
     if (!user) return;
+    ensureDeferredUserDataSync(['settings']);
+    ensureAdminSync();
     updateProfileMenuContent(user, cachedUserProfile);
     refreshProfileQuota();
   });
@@ -1268,6 +1377,8 @@ function bindAuthUi() {
 
   window.__authSignOut = signOutFlow;
   window.__authSignInGoogle = signInWithGoogleFlow;
+  window.__ensureDeferredUserDataSync = ensureDeferredUserDataSync;
+  window.__ensureAdminSync = ensureAdminSync;
 }
 
 async function bootstrap() {
@@ -1327,9 +1438,12 @@ async function bootstrap() {
     FirestoreIngredientService,
     FirestoreBuiltinRecipesService,
     FirestoreUserDataSync,
+    FirestoreSettingsService: FirestoreUserDataSync.settings,
     FamilySharingService,
     AnalysisQuotaService,
     refreshHeaderQuota,
+    ensureDeferredUserDataSync,
+    ensureAdminSync,
     isConfigured: isFirebaseConfigured(),
     getAuthGateState: () => ({ ...authState }),
     waitForAuthReady: () => AuthService.waitForInitialAuth(),
@@ -1351,12 +1465,22 @@ window.addEventListener('auth-error', (e) => {
   }
 });
 
-window.addEventListener('family-sharing-changed', () => {
+window.addEventListener('family-sharing-changed', (event) => {
+  const source = event?.detail?.source || 'user-action';
+  // 초기 hydration notify는 이벤트는 유지하되 force sync/refresh 루프만 차단
+  if (source === 'hydration' || householdHydrationInProgress) {
+    console.log('[HouseholdPerf] skip-resync', { source, hydration: householdHydrationInProgress });
+    return;
+  }
   const user = resolveAuthUser();
   if (!user?.uid || authState.isLoggingOut) return;
-  syncUserData(user, { force: true }).catch((err) => {
-    console.error('[firebase-bootstrap] family sharing resync failed:', err);
-  });
+  syncUserData(user, { force: true })
+    .then(() => {
+      window.dispatchEvent(new CustomEvent('user-data-sync-restarted'));
+    })
+    .catch((err) => {
+      console.error('[firebase-bootstrap] family sharing resync failed:', err);
+    });
 });
 
 window.addEventListener('ui-modal-change', () => {

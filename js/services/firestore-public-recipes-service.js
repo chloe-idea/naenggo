@@ -22,6 +22,7 @@ import {
   runFirestoreWrite,
   publicRecipePath,
 } from './firestore-debug.js';
+import { StartupPerf } from './startup-perf.js';
 
 const COLLECTION = 'publicRecipes';
 
@@ -32,7 +33,12 @@ function publicRecipeDoc(recipeId) {
   return doc(db, COLLECTION, recipeId);
 }
 
-function mapPublicRecipe(docSnap) {
+/**
+ * @param {import('firebase/firestore').DocumentSnapshot} docSnap
+ * @param {{ lite?: boolean }} [options]
+ *   lite=true: 홈 추천용. steps/memo 등 큰 필드는 메모리에 올리지 않음 (Firestore 문서는 그대로 수신)
+ */
+function mapPublicRecipe(docSnap, { lite = false } = {}) {
   const data = docSnap.data() || {};
   return {
     id: docSnap.id,
@@ -41,7 +47,8 @@ function mapPublicRecipe(docSnap) {
     ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
     optionalIngredients: Array.isArray(data.optionalIngredients) ? data.optionalIngredients : [],
     ingredientSubstitutes: Array.isArray(data.ingredientSubstitutes) ? data.ingredientSubstitutes : [],
-    steps: Array.isArray(data.steps) ? data.steps : [],
+    // 추천·카드에는 steps/memo 불필요 — 상세/포크 시 getById로 전체 로드
+    steps: lite ? [] : (Array.isArray(data.steps) ? data.steps : []),
     cookTime: Number(data.cookTime) || 20,
     difficulty: data.difficulty || '보통',
     category: data.category || 'korean',
@@ -52,7 +59,7 @@ function mapPublicRecipe(docSnap) {
     image: data.image || '',
     thumbnailUrl: data.thumbnailUrl || '',
     calories: data.calories ?? null,
-    memo: data.memo || '',
+    memo: lite ? '' : (data.memo || ''),
     sourceUrl: data.sourceUrl || data.sourcePostUrl || null,
     sourcePostUrl: data.sourcePostUrl || data.sourceUrl || null,
     sourcePlatform: data.sourcePlatform || null,
@@ -71,6 +78,7 @@ function mapPublicRecipe(docSnap) {
     createdAt: timestampToIso(data.createdAt) || nowIso(),
     updatedAt: timestampToIso(data.updatedAt) || nowIso(),
     publishedAt: timestampToIso(data.publishedAt) || timestampToIso(data.createdAt) || nowIso(),
+    _homeLite: Boolean(lite),
   };
 }
 
@@ -91,12 +99,22 @@ export const FirestorePublicRecipesService = {
     }
 
     const col = query(collection(db, COLLECTION), where('isPublic', '==', true));
+    const perfPath = 'publicRecipes?isPublic==true';
+    const syncStartMs = StartupPerf.begin('publicRecipes fetch complete', perfPath);
+    StartupPerf.markListener(perfPath);
     snapshotUnsubscribe = onSnapshot(
       col,
       (snap) => {
-        const items = snap.docs.map(mapPublicRecipe).sort(
+        // 홈 추천용 lite 매핑 — steps/memo는 상세 진입 시 getById로 채움
+        // 추천 계산은 renderHome에서 별도 계측
+        const items = snap.docs.map((docSnap) => mapPublicRecipe(docSnap, { lite: true })).sort(
           (a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''),
         );
+        StartupPerf.end('publicRecipes fetch complete', {
+          documentCount: items.length,
+          firestorePath: `${perfPath} (lite:no-steps-in-memory)`,
+          startMs: syncStartMs,
+        });
         onItems?.(items);
       },
       (err) => onError?.(err),
@@ -227,7 +245,7 @@ export const FirestorePublicRecipesService = {
     if (!ref) return null;
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
-    const recipe = mapPublicRecipe(snap);
+    const recipe = mapPublicRecipe(snap, { lite: false });
     return recipe.isPublic === false ? null : recipe;
   },
 

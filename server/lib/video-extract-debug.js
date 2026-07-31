@@ -133,6 +133,28 @@ export function logOpenAiPromptDebug(systemPrompt, userContent) {
 }
 
 export function logOpenAiResponseDebug(rawContent, parsed) {
+  const stepAliases = {
+    steps: parsed?.steps,
+    instructions: parsed?.instructions,
+    cookingSteps: parsed?.cookingSteps,
+    directions: parsed?.directions,
+  };
+  const stepFieldCounts = Object.fromEntries(
+    Object.entries(stepAliases).map(([key, value]) => [
+      key,
+      Array.isArray(value) ? value.length : null,
+    ]),
+  );
+  const stepsSample = Array.isArray(parsed?.steps)
+    ? parsed.steps.slice(0, 2)
+    : Array.isArray(parsed?.instructions)
+      ? parsed.instructions.slice(0, 2)
+      : Array.isArray(parsed?.cookingSteps)
+        ? parsed.cookingSteps.slice(0, 2)
+        : Array.isArray(parsed?.directions)
+          ? parsed.directions.slice(0, 2)
+          : [];
+
   console.log(`${LOG_PREFIX} OpenAI response`, {
     rawPreview: preview(rawContent, 500),
     rawLength: String(rawContent || '').length,
@@ -140,6 +162,11 @@ export function logOpenAiResponseDebug(rawContent, parsed) {
     parsedError: parsed?.error || null,
     ingredientCount: Array.isArray(parsed?.ingredients) ? parsed.ingredients.length : 0,
     stepCount: Array.isArray(parsed?.steps) ? parsed.steps.length : 0,
+    stepFieldCounts,
+    stepsSample,
+    ingredientsSample: Array.isArray(parsed?.ingredients)
+      ? parsed.ingredients.slice(0, 2)
+      : [],
   });
 }
 

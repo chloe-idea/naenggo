@@ -1,22 +1,163 @@
 /**
  * 레시피 대표 이미지 — /public/images/recipes (URL: /images/recipes)
- * 파일명: {slug}.webp | {id}.webp → 없으면 default-recipe.webp
+ *
+ * 규칙:
+ * - imageUrl/image/thumbnailUrl이 있고 유효할 때만 <img> 요청
+ * - id/slug로 경로를 추측해 요청하지 않음
+ * - 번들 이미지는 실제 파일 allowlist에 있을 때만 사용
+ * - 없으면 placeholder(로컬 SVG/아이콘) — 없는 경로로 <img> 만들지 않음
+ * - 실제 이미지 로드 실패 시에만 default-recipe.webp 1회
  */
 window.RECIPE_IMAGE_MAP = {};
 
 const RECIPE_IMAGES_BASE = 'images/recipes/';
 const DEFAULT_RECIPE_IMAGE = `${RECIPE_IMAGES_BASE}default-recipe.webp`;
 const RECIPE_IMAGE_VERSION = '2';
-const RECIPE_IMAGE_EXTENSIONS = ['webp', 'jpg', 'jpeg', 'png'];
 
-function withRecipeImageVersion(url) {
-  if (!url || typeof url !== 'string') return url;
-  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}v=${RECIPE_IMAGE_VERSION}`;
-}
+/** public/images/recipes 에 실제로 있는 파일 (default 제외) */
+const EXISTING_RECIPE_IMAGE_FILES = new Set([
+  '--152.webp',
+  '--153.webp',
+  'aglio-olio.webp',
+  'bun-bo-hue.webp',
+  'cheese-pancake.webp',
+  'cheese-rice-ball.webp',
+  'cold-pasta.webp',
+  'egg-fried-rice.webp',
+  'egg-in-hell.webp',
+  'egg-soup-diet.webp',
+  'egg-white-omelet.webp',
+  'khao-pad.webp',
+  'kimchi-fried-rice.webp',
+  'kimchi-pancake.webp',
+  'kimchi-rice-ball.webp',
+  'kimchi-stew.webp',
+  'natto-rice-bowl.webp',
+  'omurice.webp',
+  'onion-egg-rice-bowl.webp',
+  'onion-egg-stir-fry.webp',
+  'onion-stir-fry.webp',
+  'pad-thai.webp',
+  'pho.webp',
+  'potato-cheese-bake.webp',
+  'potato-fries.webp',
+  'potato-pancake.webp',
+  'ramen-snack.webp',
+  'ramen.webp',
+  'recipe-110.webp',
+  'recipe-12.webp',
+  'recipe-120.webp',
+  'recipe-125.webp',
+  'recipe-127.webp',
+  'recipe-129.webp',
+  'recipe-13.webp',
+  'recipe-138.webp',
+  'recipe-14.webp',
+  'recipe-141.webp',
+  'recipe-147.webp',
+  'recipe-149.webp',
+  'recipe-15.webp',
+  'recipe-159.webp',
+  'recipe-16.webp',
+  'recipe-17.webp',
+  'recipe-174.webp',
+  'recipe-175.webp',
+  'recipe-176.webp',
+  'recipe-177.webp',
+  'recipe-178.webp',
+  'recipe-179.webp',
+  'recipe-18.webp',
+  'recipe-180.webp',
+  'recipe-181.webp',
+  'recipe-19.webp',
+  'recipe-192.webp',
+  'recipe-20.webp',
+  'recipe-21.webp',
+  'recipe-22.webp',
+  'recipe-23.webp',
+  'recipe-24.webp',
+  'recipe-26.webp',
+  'recipe-27.webp',
+  'recipe-28.webp',
+  'recipe-29.webp',
+  'recipe-30.webp',
+  'recipe-31.webp',
+  'recipe-32.webp',
+  'recipe-33.webp',
+  'recipe-34.webp',
+  'recipe-35.webp',
+  'recipe-38.webp',
+  'recipe-39.webp',
+  'recipe-40.webp',
+  'recipe-41.webp',
+  'recipe-42.webp',
+  'recipe-43.webp',
+  'recipe-44.webp',
+  'recipe-45.webp',
+  'recipe-47.webp',
+  'recipe-48.webp',
+  'recipe-49.webp',
+  'recipe-5.webp',
+  'recipe-50.webp',
+  'recipe-51.webp',
+  'recipe-52.webp',
+  'recipe-53.webp',
+  'recipe-55.webp',
+  'recipe-56.webp',
+  'recipe-57.webp',
+  'recipe-58.webp',
+  'recipe-59.webp',
+  'recipe-60.webp',
+  'recipe-61.webp',
+  'recipe-62.webp',
+  'recipe-63.webp',
+  'recipe-64.webp',
+  'recipe-66.webp',
+  'recipe-67.webp',
+  'recipe-68.webp',
+  'recipe-69.webp',
+  'recipe-70.webp',
+  'recipe-72.webp',
+  'recipe-73.webp',
+  'recipe-74.webp',
+  'recipe-75.webp',
+  'recipe-76.webp',
+  'recipe-77.webp',
+  'recipe-79.webp',
+  'recipe-8.webp',
+  'recipe-80.webp',
+  'recipe-81.webp',
+  'recipe-82.webp',
+  'recipe-83.webp',
+  'recipe-84.webp',
+  'recipe-86.webp',
+  'recipe-87.webp',
+  'recipe-88.webp',
+  'recipe-89.webp',
+  'recipe-9.webp',
+  'recipe-90.webp',
+  'scrambled-eggs.webp',
+  'sesame-seaweed-fried-rice.webp',
+  'shrimp-tofu.webp',
+  'soft-tofu-stew.webp',
+  'soy-sauce-egg-rice.webp',
+  'soybean-paste-stew.webp',
+  'spam-rice-ball.webp',
+  'steamed-egg.webp',
+  'stir-fried-udon.webp',
+  'sweet-potato-fries.webp',
+  'sweet-potato-sticks.webp',
+  'tofu-salad.webp',
+  'tomato-pasta.webp',
+  'tteokbokki.webp',
+  'tuna-mayo-rice-ball.webp',
+  'tuna-mayo-rice.webp',
+  'tuna-rice-ball.webp',
+  'tuna-salad.webp',
+  'vietnamese-fried-rice.webp',
+]);
 
-/** 레시피명 → slug (이미지 파일명). scripts/recipe-collage-tiles.json 과 동기화 */
+/** 레시피명 → slug (명시적 image 필드 검증·표시용) */
 const RECIPE_NAME_SLUGS = {
   '고구마튀김': 'sweet-potato-fries',
   '감자튀김': 'potato-fries',
@@ -51,6 +192,30 @@ function isUnsplashUrl(url) {
   return String(url || '').includes('images.unsplash.com');
 }
 
+/** 기존 ?v= / &v= 제거 후 단일 버전만 부여 (?v=2&v=2 방지) */
+function withRecipeImageVersion(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+  const pathOnly = url.split('?')[0].split('#')[0];
+  if (!pathOnly) return url;
+  return `${pathOnly}?v=${RECIPE_IMAGE_VERSION}`;
+}
+
+function stripToRecipeImageFilename(url) {
+  if (!url || typeof url !== 'string') return null;
+  const pathOnly = url.split('?')[0].split('#')[0].replace(/^\/+/, '');
+  const normalized = pathOnly.replace(/^public\//, '');
+  if (!normalized.startsWith(RECIPE_IMAGES_BASE)) return null;
+  return normalized.slice(RECIPE_IMAGES_BASE.length) || null;
+}
+
+function isKnownBundledImage(url) {
+  const file = stripToRecipeImageFilename(url);
+  if (!file) return false;
+  if (/^default-recipe\./i.test(file)) return false;
+  return EXISTING_RECIPE_IMAGE_FILES.has(file);
+}
+
 function normalizeRecipePhotoUrl(url) {
   if (!url || typeof url !== 'string') return null;
   const trimmed = url.trim();
@@ -58,54 +223,30 @@ function normalizeRecipePhotoUrl(url) {
   if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-  if (trimmed.startsWith(RECIPE_IMAGES_BASE)) return withRecipeImageVersion(trimmed);
-  if (trimmed.startsWith('public/images/recipes/')) {
-    return trimmed.replace(/^public\//, '');
+  let path = trimmed.replace(/^\/+/, '').replace(/^public\//, '');
+  if (path.startsWith(RECIPE_IMAGES_BASE) || path.startsWith('images/recipes/')) {
+    if (!path.startsWith(RECIPE_IMAGES_BASE)) path = path.replace(/^images\/recipes\//, RECIPE_IMAGES_BASE);
+    return withRecipeImageVersion(path.split('?')[0]);
   }
-  if (trimmed.startsWith('images/recipes/')) return trimmed;
-  if (trimmed.startsWith('src/assets/')) return trimmed;
-  if (trimmed.startsWith('/')) return trimmed.replace(/^\//, '');
-  return `${RECIPE_IMAGES_BASE}${trimmed}`;
+  if (path.startsWith('src/assets/')) return path.split('?')[0];
+  // 파일명만 온 경우 — allowlist에 있을 때만
+  if (!path.includes('/') && EXISTING_RECIPE_IMAGE_FILES.has(path)) {
+    return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${path}`);
+  }
+  return null;
 }
 
 function inferRecipeSlug(recipe) {
   const name = recipe?.name || recipe?.title || '';
   if (recipe?.slug) {
-    const slug = String(recipe.slug).trim();
-    if (slug && !slug.startsWith('builtin-')) return slug;
+    const slug = String(recipe.slug).trim().replace(/^builtin-/, '');
+    if (slug) return slug;
   }
   if (recipe?.imageSlug) return String(recipe.imageSlug).trim();
   if (name && RECIPE_NAME_SLUGS[name]) return RECIPE_NAME_SLUGS[name];
-  const id = recipe?.id ? String(recipe.id).trim() : '';
-  if (id && !id.startsWith('builtin-')) return id;
+  const id = recipe?.id ? String(recipe.id).trim().replace(/^builtin-/, '') : '';
+  if (id) return id;
   return '';
-}
-
-function getBundledImageSrc(recipe) {
-  const slug = inferRecipeSlug(recipe);
-  if (!slug) return null;
-  return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${slug}.webp`);
-}
-
-function buildRecipeImageCandidates(recipe) {
-  const slugs = [];
-  const slug = inferRecipeSlug(recipe);
-  if (slug) slugs.push(slug);
-  if (recipe?.id && !slugs.includes(recipe.id)) slugs.push(recipe.id);
-  if (recipe?.source === 'builtin' && recipe?.id?.startsWith('builtin-')) {
-    const numericId = recipe.id.replace(/^builtin-/, '');
-    if (numericId && !slugs.includes(numericId)) slugs.push(numericId);
-  }
-
-  const paths = [];
-  slugs.forEach((key) => {
-    RECIPE_IMAGE_EXTENSIONS.forEach((ext) => {
-      paths.push(withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${key}.${ext}`));
-    });
-  });
-  paths.push(withRecipeImageVersion(DEFAULT_RECIPE_IMAGE));
-  paths.push(withRecipeImageVersion(`${RECIPE_IMAGES_BASE}default-recipe.png`));
-  return [...new Set(paths)];
 }
 
 function resolveLegacyCategoryAsset(recipe) {
@@ -125,9 +266,33 @@ function resolveLegacyCategoryAsset(recipe) {
   return `${LEGACY_ASSET_BASE}default.png`;
 }
 
+function renderPlaceholderMarkup(recipe, variant = 'card') {
+  if (typeof recipePlaceholderHTML === 'function') {
+    return recipePlaceholderHTML(recipe, variant === 'hero' || variant === 'home-hero' ? 'hero' : 'card');
+  }
+  const type = typeof DishTypeService !== 'undefined'
+    ? DishTypeService.resolve(recipe)
+    : 'default';
+  const label = typeof DishTypeService !== 'undefined'
+    ? DishTypeService.label(recipe)
+    : '요리';
+  const classMap = {
+    card: `recipe-card__image recipe-card__image--placeholder recipe-card__image--${type}`,
+    feed: `recipe-card__image recipe-card__image--feed recipe-card__image--placeholder recipe-card__image--${type}`,
+    hero: `recipe-detail__hero--placeholder recipe-detail__hero--${type}`,
+    thumb: `home-recipe-row__thumb home-recipe-row__thumb--placeholder recipe-card__image--${type}`,
+    'home-hero': `home-today-hero__img home-today-hero__img--placeholder recipe-card__image--${type}`,
+    planner: `planner-meal__img planner-meal__img--placeholder recipe-card__image--${type}`,
+  };
+  const cls = classMap[variant] || classMap.card;
+  const escLabel = typeof esc === 'function' ? esc(label) : String(label).replace(/"/g, '&quot;');
+  return `<div class="${cls}" aria-label="${escLabel}" title="${escLabel}"></div>`;
+}
+
 window.RecipeImageService = {
   basePath: RECIPE_IMAGES_BASE,
   defaultSrc: DEFAULT_RECIPE_IMAGE,
+  existingFiles: EXISTING_RECIPE_IMAGE_FILES,
 
   inferSlug: inferRecipeSlug,
 
@@ -140,7 +305,7 @@ window.RecipeImageService = {
 
   isUserUploadedPhoto(url) {
     if (!this.isValidPhoto(url)) return false;
-    const normalized = normalizeRecipePhotoUrl(url);
+    const normalized = normalizeRecipePhotoUrl(url) || url;
     if (!normalized) return false;
     if (normalized.startsWith('data:')) return true;
     if (normalized.startsWith('http://') || normalized.startsWith('https://')) return true;
@@ -149,60 +314,69 @@ window.RecipeImageService = {
     return true;
   },
 
+  isKnownBundledImage,
+
+  /**
+   * 표시 가능한 실제 사진만 반환. 없으면 null (네트워크 요청 없음).
+   * - hasImage === false 이면 무조건 null
+   * - 사용자 업로드(data/http) 또는 allowlist 번들 경로만 허용
+   * - id/slug로 경로를 새로 만들지 않음
+   */
   pickPhoto(recipe) {
     if (!recipe) return null;
+    if (recipe.hasImage === false) return null;
+
     const candidates = [recipe.imageUrl, recipe.image, recipe.thumbnailUrl];
     for (const raw of candidates) {
+      if (raw == null || raw === '') continue;
       const normalized = normalizeRecipePhotoUrl(raw);
       if (!normalized || !this.isValidPhoto(normalized)) continue;
       if (this.isUserUploadedPhoto(normalized)) return normalized;
-      if (normalized.startsWith(RECIPE_IMAGES_BASE) && normalized !== DEFAULT_RECIPE_IMAGE) {
-        return normalized;
+      if (normalized.startsWith(RECIPE_IMAGES_BASE) && isKnownBundledImage(normalized)) {
+        return withRecipeImageVersion(normalized);
+      }
+      // 데이터에 자동 생성된 경로가 있어도 파일이 없으면 무시
+    }
+
+    // hasImage: true 이고 명시 필드가 비었을 때만 slug allowlist 조회
+    if (recipe.hasImage === true) {
+      const slug = inferRecipeSlug(recipe);
+      if (slug && EXISTING_RECIPE_IMAGE_FILES.has(`${slug}.webp`)) {
+        return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${slug}.webp`);
       }
     }
-    return getBundledImageSrc(recipe);
+    return null;
+  },
+
+  hasDisplayImage(recipe) {
+    return Boolean(this.pickPhoto(recipe));
   },
 
   getCandidatePaths(recipe) {
-    return buildRecipeImageCandidates(recipe);
+    const photo = this.pickPhoto(recipe);
+    return photo ? [photo] : [];
   },
 
   resolveSrc(recipe) {
-    const userPhoto = this.pickPhoto(recipe);
-    if (userPhoto) return userPhoto;
-    return getBundledImageSrc(recipe) || DEFAULT_RECIPE_IMAGE;
+    return this.pickPhoto(recipe);
   },
 
+  /** 저장용 — 실제 사진만. 없으면 빈 문자열 (가짜 /images/recipes/recipe-xxx.webp 생성 금지) */
   resolveForStorage(recipe) {
-    const userPhoto = this.pickPhoto(recipe);
-    if (userPhoto && this.isUserUploadedPhoto(userPhoto)) return userPhoto;
-    return getBundledImageSrc(recipe) || DEFAULT_RECIPE_IMAGE;
+    return this.pickPhoto(recipe) || '';
+  },
+
+  resolveCategoryAssetSrc(recipe) {
+    return resolveLegacyCategoryAsset(recipe);
   },
 
   handleImgError(img) {
     if (!img) return;
-    let candidates = [];
-    try {
-      candidates = JSON.parse(img.dataset.fallbackCandidates || '[]');
-    } catch {
-      candidates = [];
-    }
-    const index = Number(img.dataset.fallbackIndex || '0');
-    const next = candidates[index];
-    if (next && img.src !== next) {
-      img.dataset.fallbackIndex = String(index + 1);
-      img.src = next;
-      return;
-    }
-    const legacy = img.dataset.fallbackLegacy;
-    if (legacy && img.src !== legacy) {
-      img.dataset.fallbackLegacy = '';
-      img.src = legacy;
-      return;
-    }
-    if (img.src !== DEFAULT_RECIPE_IMAGE) {
-      img.src = DEFAULT_RECIPE_IMAGE;
-    }
+    img.onerror = null;
+    const fallback = withRecipeImageVersion(DEFAULT_RECIPE_IMAGE);
+    const current = String(img.currentSrc || img.src || '');
+    if (current.includes('default-recipe')) return;
+    img.src = fallback;
   },
 
   renderImg(recipe, options = {}) {
@@ -213,22 +387,15 @@ window.RecipeImageService = {
       lazy = true,
     } = options;
 
+    const src = this.pickPhoto(recipe);
+    if (!src) {
+      return renderPlaceholderMarkup(recipe, variant);
+    }
+
     const name = recipe?.name || recipe?.title || '요리';
-    const candidates = buildRecipeImageCandidates(recipe);
-    const userPhoto = this.pickPhoto(recipe);
-    const src = userPhoto || candidates[0] || DEFAULT_RECIPE_IMAGE;
-    const legacyFallback = resolveLegacyCategoryAsset(recipe);
     const altText = typeof esc === 'function' ? esc(alt || name) : String(alt || name).replace(/"/g, '&quot;');
     const escSrc = typeof esc === 'function' ? esc(src) : src;
     const lazyAttr = lazy ? ' loading="lazy"' : '';
-    const fallbackCandidates = userPhoto
-      ? [DEFAULT_RECIPE_IMAGE, `${RECIPE_IMAGES_BASE}default-recipe.png`]
-      : candidates.slice(1);
-    const dataAttrs = [
-      `data-fallback-candidates="${typeof esc === 'function' ? esc(JSON.stringify(fallbackCandidates)) : JSON.stringify(fallbackCandidates)}"`,
-      `data-fallback-index="0"`,
-      `data-fallback-legacy="${typeof esc === 'function' ? esc(legacyFallback) : legacyFallback}"`,
-    ].join(' ');
 
     const classMap = {
       card: 'recipe-card__image recipe-display-image',
@@ -239,7 +406,7 @@ window.RecipeImageService = {
       planner: 'planner-meal__img recipe-display-image',
     };
     const imgClass = classMap[variant] || 'recipe-display-image';
-    const img = `<img class="${imgClass}" src="${escSrc}" alt="${altText}"${lazyAttr} onerror="RecipeImageService.handleImgError(this)" ${dataAttrs}>`;
+    const img = `<img class="${imgClass}" src="${escSrc}" alt="${altText}"${lazyAttr} onerror="this.onerror=null;RecipeImageService.handleImgError(this)">`;
 
     if (variant === 'card' && zoomable) {
       return `<button type="button" class="recipe-card__image-btn" data-zoom-src="${escSrc}" aria-label="${altText} 사진 크게 보기">${img}</button>`;
@@ -257,6 +424,6 @@ window.RecipeImageService = {
 /** @deprecated */
 window.RecipeThumbnailService = {
   getDataUri(name, dishType) {
-    return RecipeImageService.resolveSrc({ name, dishType });
+    return RecipeImageService.resolveSrc({ name, dishType }) || '';
   },
 };

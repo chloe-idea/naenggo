@@ -21,6 +21,7 @@ import {
 import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { FamilySharingService } from './family-sharing-service.js';
+import { StartupPerf } from './startup-perf.js';
 
 const SUBCOLLECTION = 'settings';
 const DOC_ID = 'preferences';
@@ -312,6 +313,82 @@ export const FirestoreSettingsService = {
     }
   },
 
+  /** settings onSnapshot이 이미 돌고 있으면 true */
+  isSyncActive() {
+    return Boolean(snapshotUnsubscribe);
+  },
+
+  /**
+   * 홈 브리핑용: 이번 주 grocery(예산·실지출)만 1회 getDoc.
+   * settings 전체 onSnapshot / mealCalendar 구독과 분리한다.
+   */
+  async fetchGroceryWeekForBriefing(weekKey) {
+    const uid = auth?.currentUser?.uid;
+    if (!uid || !db) {
+      return { ok: false, reason: 'no-auth' };
+    }
+    if (snapshotUnsubscribe) {
+      return { ok: false, reason: 'sync-active' };
+    }
+
+    const key = normalizeGroceryWeekKey(weekKey || toDateStr(getWeekStartDate(new Date())));
+    const started = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const ref = settingsDoc(uid);
+    const snap = await getDoc(ref);
+    const raw = snap.exists() ? (snap.data() || {}) : {};
+    const preferenceData = readSettingsData(raw);
+    const grocerySource = preferenceData.grocery && typeof preferenceData.grocery === 'object'
+      ? preferenceData.grocery
+      : raw;
+    const normalized = normalizeGroceryFromFirestore(grocerySource);
+
+    let weekState = null;
+    if (normalized.byWeek && typeof normalized.byWeek === 'object') {
+      weekState = normalized.byWeek[key] || null;
+    }
+    if (!weekState && (!normalized.byWeek || !Object.keys(normalized.byWeek).length)) {
+      // 레거시 flat grocery
+      weekState = {
+        weekKey: key,
+        budget: normalized.budget ?? '',
+        items: normalized.items || {},
+        manualItems: normalized.manualItems || [],
+        completedKeys: normalized.completedKeys || [],
+        purchasedLedger: normalized.purchasedLedger || [],
+      };
+    }
+    if (!weekState) {
+      weekState = {
+        weekKey: key,
+        budget: '',
+        items: {},
+        manualItems: [],
+        completedKeys: [],
+        purchasedLedger: [],
+      };
+    }
+
+    const durationMs = Math.round(
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started,
+    );
+    console.log('[Startup] briefing grocery week fetch complete', {
+      durationMs,
+      weekKey: key,
+      hasBudget: weekState.budget !== '' && weekState.budget != null,
+      ledgerCount: Array.isArray(weekState.purchasedLedger) ? weekState.purchasedLedger.length : 0,
+    });
+
+    return {
+      ok: true,
+      weekKey: key,
+      grocery: {
+        activeWeekKey: key,
+        byWeek: { [key]: { ...weekState, weekKey: key } },
+      },
+      currency: preferenceData.currency || raw.currency || null,
+    };
+  },
+
   startSync(onSettings, onError) {
     this.stopSync();
     familyBudgetHydrationAttempted = false;
@@ -324,12 +401,37 @@ export const FirestoreSettingsService = {
       });
       return null;
     }
+    const prefsPath = isFamilyScope()
+      ? 'households/{householdId}/grocery/preferences'
+      : 'users/{uid}/settings/preferences';
+    const savedPath = isFamilyScope()
+      ? 'households/{householdId}/savedRecipes'
+      : 'users/{uid}/settings/preferences.savedRecipeIds';
+    const groceryStartMs = StartupPerf.begin('grocery loaded', prefsPath);
+    const savedStartMs = StartupPerf.begin('saved recipes loaded', savedPath);
+    StartupPerf.markListener(prefsPath);
+    if (isFamilyScope()) StartupPerf.markListener(savedPath);
+
     const emit = (preferenceData, savedRecipes = []) => {
       const data = readSettingsData(preferenceData);
+      const grocery = normalizeGroceryFromFirestore(data.grocery);
+      const groceryItemCount = Array.isArray(grocery?.items)
+        ? grocery.items.length
+        : (grocery?.items && typeof grocery.items === 'object' ? Object.keys(grocery.items).length : 0);
+      StartupPerf.end('grocery loaded', {
+        documentCount: 1,
+        firestorePath: `${prefsPath} (groceryKeys≈${groceryItemCount})`,
+        startMs: groceryStartMs,
+      });
+      StartupPerf.end('saved recipes loaded', {
+        documentCount: savedRecipes.length,
+        firestorePath: savedPath,
+        startMs: savedStartMs,
+      });
       onSettings?.({
         currency: data.currency || DEFAULT_SETTINGS.currency,
         monthlyFoodBudget: Number(data.monthlyFoodBudget) || 0,
-        grocery: normalizeGroceryFromFirestore(data.grocery),
+        grocery,
         savedRecipeIds: savedRecipes.map((item) => item.recipeId),
         savedRecipes,
       });

@@ -13,6 +13,7 @@ import {
 import { db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { runFirestoreWrite } from './firestore-debug.js';
+import { StartupPerf } from './startup-perf.js';
 
 const RECIPES_COLLECTION = 'builtinRecipes';
 const TOMBSTONES_COLLECTION = 'builtinRecipeTombstones';
@@ -85,10 +86,21 @@ export const FirestoreBuiltinRecipesService = {
       });
     };
 
+    const recipesPath = 'builtinRecipes';
+    const tombstonesPath = 'builtinRecipeTombstones';
+    const recipesStartMs = StartupPerf.begin('builtinRecipes fetch complete', recipesPath);
+    StartupPerf.markListener(recipesPath);
+    StartupPerf.markListener(tombstonesPath);
+
     recipesUnsubscribe = onSnapshot(
       collection(db, RECIPES_COLLECTION),
       (snap) => {
         recipes = snap.docs.map(mapRecipeDoc);
+        StartupPerf.end('builtinRecipes fetch complete', {
+          documentCount: recipes.length,
+          firestorePath: recipesPath,
+          startMs: recipesStartMs,
+        });
         emit();
       },
       (err) => onError?.(err),
