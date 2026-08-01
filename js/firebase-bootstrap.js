@@ -998,6 +998,250 @@ async function signOutFlow(event) {
   }
 }
 
+const ACCOUNT_DELETE_CONFIRM_TEXT = '탈퇴하기';
+let accountDeleteInFlight = false;
+
+function setAccountDeleteError(message = '') {
+  const el = $('account-delete-error');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function syncAccountDeleteConfirmButton() {
+  const input = $('account-delete-confirm-input');
+  const btn = $('account-delete-confirm-btn');
+  if (!btn) return;
+  const matched = String(input?.value || '').trim() === ACCOUNT_DELETE_CONFIRM_TEXT;
+  btn.disabled = !matched || accountDeleteInFlight;
+}
+
+function openAccountDeleteModal() {
+  const modal = $('account-delete-modal');
+  if (!modal) return;
+  const input = $('account-delete-confirm-input');
+  if (input) input.value = '';
+  setAccountDeleteError('');
+  accountDeleteInFlight = false;
+  syncAccountDeleteConfirmButton();
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  input?.focus();
+}
+
+function closeAccountDeleteModal() {
+  const modal = $('account-delete-modal');
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+  setAccountDeleteError('');
+  accountDeleteInFlight = false;
+  syncAccountDeleteConfirmButton();
+}
+
+function mapAccountDeleteError(data, fallbackMessage) {
+  const code = data?.error || '';
+  if (code === 'OWNER_TRANSFER_REQUIRED') {
+    return '가족 공유 소유자입니다. 가족 공유에서 소유권을 다른 구성원에게 이전한 뒤 다시 시도해 주세요.';
+  }
+  if (code === 'MEMBERS_REMAIN') {
+    return data?.message
+      || '다른 가족 구성원 기록이 남아 있어 탈퇴할 수 없습니다. 가족 공유에서 구성원을 정리하거나 소유권을 이전해 주세요.';
+  }
+  if (code === 'DELETION_IN_PROGRESS') {
+    return '회원 탈퇴가 이미 진행 중입니다. 잠시 후 다시 시도해 주세요.';
+  }
+  if (code === 'AUTH_REQUIRED' || code === 'INVALID_ID_TOKEN') {
+    return '로그인이 필요합니다. Google로 다시 로그인해 주세요.';
+  }
+  return data?.message || fallbackMessage || '회원 탈퇴에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+async function requestAccountDeletionApi(idToken) {
+  const token = String(idToken || '').trim();
+  if (!token) {
+    const err = new Error('로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요.');
+    err.code = 'AUTH_REQUIRED';
+    throw err;
+  }
+  const res = await fetch('/api/account/delete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    // uid는 body에 넣지 않음 — 서버는 token uid만 사용
+    body: JSON.stringify({}),
+  });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok || !data?.success) {
+    const err = new Error(mapAccountDeleteError(data, '회원 탈퇴에 실패했습니다.'));
+    err.code = data?.error || `HTTP_${res.status}`;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+async function finishAccountDeletionSuccess() {
+  closeAccountDeleteModal();
+  try {
+    leaveProfileManagePage();
+  } catch {
+    // profile page helpers may be unavailable during teardown
+  }
+
+  // 서버에서 Auth 계정이 이미 삭제된 뒤라 signOut이 실패해도 로컬은 반드시 정리
+  logoutInProgress = true;
+  activeAuthTask = null;
+  pendingAuthUid = null;
+  patchAuthState({ isLoggingOut: true, user: null });
+  try {
+    FirestoreUserDataSync.stopAll();
+    try {
+      if (auth && authReady) await AuthService.signOut();
+    } catch (err) {
+      console.warn('[firebase-bootstrap] post-delete signOut:', err?.code || err?.message || err);
+    }
+    if (typeof window.clearUserData === 'function') {
+      window.clearUserData();
+    }
+  } finally {
+    logoutInProgress = false;
+    patchAuthState({ isLoggingOut: false, user: null });
+  }
+
+  if (typeof window.showToast === 'function') {
+    window.showToast('회원 탈퇴가 완료되었습니다');
+  }
+  if (typeof window.openLoginPrompt === 'function') {
+    window.openLoginPrompt();
+  } else if (typeof window.switchView === 'function') {
+    window.switchView('main');
+  }
+}
+
+function mapAccountDeleteClientError(err) {
+  const code = String(err?.code || '');
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    return 'Google 재인증이 취소되었습니다.';
+  }
+  if (code === 'auth/popup-blocked') {
+    return '팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.';
+  }
+  if (code === 'AUTH_ACCOUNT_MISMATCH') {
+    return '현재 로그인한 Google 계정으로 다시 인증해 주세요.';
+  }
+  if (code === 'AUTH_REQUIRED') {
+    return '로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요.';
+  }
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return err?.message
+      || '이 환경에서는 Google 팝업 재인증을 사용할 수 없습니다. 모바일 브라우저나 데스크톱에서 다시 시도해 주세요.';
+  }
+  return err?.message || '회원 탈퇴에 실패했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+/**
+ * 회원 탈퇴 확인 클릭 핸들러.
+ * Google 재인증 팝업은 이 호출 스택의 첫 async 지점에서 바로 연다.
+ */
+async function confirmAccountDeletionFlow() {
+  const input = $('account-delete-confirm-input');
+  if (String(input?.value || '').trim() !== ACCOUNT_DELETE_CONFIRM_TEXT) {
+    setAccountDeleteError(`확인을 위해 "${ACCOUNT_DELETE_CONFIRM_TEXT}"를 입력해 주세요.`);
+    return;
+  }
+  if (accountDeleteInFlight) return;
+
+  const current = auth?.currentUser || AuthService.getCurrentUser?.();
+  if (!current?.uid) {
+    setAccountDeleteError('로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요.');
+    if (typeof window.openLoginPrompt === 'function') window.openLoginPrompt();
+    return;
+  }
+
+  const expectedUid = current.uid;
+  const expectedEmail = current.email || null;
+  const confirmBtn = $('account-delete-confirm-btn');
+
+  accountDeleteInFlight = true;
+  syncAccountDeleteConfirmButton();
+  setAccountDeleteError('');
+  if (confirmBtn) confirmBtn.textContent = 'Google 계정 확인 중…';
+
+  try {
+    // 1) 클릭 직후 재인증 팝업 (사전 API/setTimeout 없음)
+    const reauthUser = await AuthService.reauthenticateWithGoogleForAccountDelete({
+      expectedUid,
+      expectedEmail,
+    });
+
+    // 2) 재인증 성공 후에만 토큰 갱신 + 탈퇴 API
+    if (confirmBtn) confirmBtn.textContent = '탈퇴 처리 중…';
+    const idToken = await reauthUser.getIdToken(true);
+    await requestAccountDeletionApi(idToken);
+    await finishAccountDeletionSuccess();
+  } catch (err) {
+    console.error('[firebase-bootstrap] account delete reauth/api failed:', err?.code, err?.message, err);
+    // API 실패·재인증 취소 모두: 로그아웃하지 않고 모달 유지 + 재시도 가능
+    setAccountDeleteError(mapAccountDeleteClientError(err));
+  } finally {
+    accountDeleteInFlight = false;
+    if (confirmBtn) confirmBtn.textContent = '회원 탈퇴';
+    syncAccountDeleteConfirmButton();
+  }
+}
+
+function bindAccountDeleteUi() {
+  const deleteBtn = $('profile-delete-account-btn');
+  const modal = $('account-delete-modal');
+  const confirmInput = $('account-delete-confirm-input');
+  const confirmBtn = $('account-delete-confirm-btn');
+
+  deleteBtn?.addEventListener('click', () => {
+    if (!AuthService.isLoggedIn()) {
+      if (typeof window.openLoginPrompt === 'function') window.openLoginPrompt();
+      return;
+    }
+    openAccountDeleteModal();
+  });
+
+  modal?.querySelectorAll('[data-close-modal="account-delete"]').forEach((el) => {
+    el.addEventListener('click', () => {
+      if (accountDeleteInFlight) return;
+      closeAccountDeleteModal();
+    });
+  });
+
+  confirmInput?.addEventListener('input', syncAccountDeleteConfirmButton);
+  confirmInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    if (String(confirmInput.value || '').trim() !== ACCOUNT_DELETE_CONFIRM_TEXT) return;
+    if (confirmBtn?.disabled || accountDeleteInFlight) return;
+    // Enter도 동일 클릭 스택에서 재인증 팝업 시작
+    confirmAccountDeletionFlow();
+  });
+  confirmBtn?.addEventListener('click', () => {
+    // 팝업 차단 방지: click 핸들러에서 바로 재인증 시작 (중간 디스패치 없음)
+    confirmAccountDeletionFlow();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (!modal || modal.hidden) return;
+    if (accountDeleteInFlight) return;
+    event.preventDefault();
+    closeAccountDeleteModal();
+  });
+}
+
 let pendingFamilyMigration = false;
 let familyInviteRequestInFlight = false;
 let familyMigrationInFlight = false;
@@ -1374,6 +1618,7 @@ function bindAuthUi() {
     refreshProfileQuota();
   });
   bindFamilySharingUi();
+  bindAccountDeleteUi();
 
   window.__authSignOut = signOutFlow;
   window.__authSignInGoogle = signInWithGoogleFlow;

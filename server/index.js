@@ -10,6 +10,7 @@ import openaiHealthRouter from './routes/openai-health.js';
 import userProfileRouter from './routes/user-profile.js';
 import coupangSearchRouter from './routes/coupang-search.js';
 import householdsRouter from './routes/households.js';
+import accountRouter from './routes/account.js';
 import { getFirebaseAdminStatus } from './lib/firebase-admin.js';
 import { describeOpenAiKeyConfig, logOpenAiKeyConfig } from './lib/openai-config.js';
 
@@ -31,6 +32,7 @@ app.use('/api', openaiHealthRouter);
 app.use('/api', userProfileRouter);
 app.use('/api', coupangSearchRouter);
 app.use('/api', householdsRouter);
+app.use('/api', accountRouter);
 
 app.use('/images/recipes', express.static(path.join(ROOT, 'public/images/recipes'), {
   maxAge: '7d',

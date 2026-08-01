@@ -46,6 +46,24 @@ export function formatAuthError(err) {
     };
   }
 
+  if (code === 'auth/requires-recent-login') {
+    return {
+      code,
+      title: '재인증 필요',
+      message: '보안을 위해 Google 계정으로 다시 확인해 주세요.',
+      hint: '회원 탈퇴 등 민감한 작업은 최근 로그인 확인이 필요합니다.',
+    };
+  }
+
+  if (code === 'auth/user-mismatch' || code === 'auth/invalid-credential') {
+    return {
+      code,
+      title: '계정 확인 실패',
+      message: '로그인한 계정과 다른 Google 계정입니다. 같은 계정으로 다시 확인해 주세요.',
+      hint: '',
+    };
+  }
+
   return {
     code: code || 'auth/unknown',
     title: '로그인 오류',

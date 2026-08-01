@@ -6,6 +6,7 @@ import {
   getRedirectResult,
   signInWithPopup,
   signInWithRedirect,
+  reauthenticateWithPopup,
   signOut as firebaseSignOut,
 } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import {
@@ -34,6 +35,14 @@ function isIosBrowser() {
 
 function shouldUseRedirectLogin() {
   return false;
+}
+
+function wrapReauthError(err, fallbackMessage) {
+  const code = String(err?.code || '');
+  const wrapped = new Error(fallbackMessage || err?.message || 'Google 재인증에 실패했습니다.');
+  wrapped.code = code || 'auth/unknown';
+  wrapped.cause = err;
+  return wrapped;
 }
 
 function notifyListeners(user) {
@@ -237,6 +246,88 @@ export const AuthService = {
     console.log('[AuthService] signOut');
     currentUser = null;
     await firebaseSignOut(auth);
+  },
+
+  /**
+   * 회원 탈퇴용 Google 재인증 — popup만 사용.
+   * 클릭 핸들러에서 첫 await로 호출해야 팝업 차단을 줄일 수 있다.
+   * redirect fallback은 탈퇴 오인 위험이 있어 사용하지 않는다.
+   *
+   * @param {{ expectedUid?: string, expectedEmail?: string|null }} [options]
+   * @returns {Promise<import('firebase/auth').User>}
+   */
+  async reauthenticateWithGoogleForAccountDelete(options = {}) {
+    const { auth: authInstance, googleProvider: provider } = assertAuthReady();
+    const user = authInstance.currentUser;
+    if (!user?.uid) {
+      throw wrapReauthError(
+        { code: 'AUTH_REQUIRED' },
+        '로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요.',
+      );
+    }
+
+    const expectedUid = String(options.expectedUid || user.uid).trim();
+    const expectedEmail = String(options.expectedEmail ?? user.email ?? '')
+      .trim()
+      .toLowerCase();
+
+    // 계정 선택 유도 (firebase.js 초기화와 동일)
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    console.log('[AuthService] reauthenticateWithPopup start (account delete)');
+
+    let result;
+    try {
+      // 사용자 제스처 직후 호출 — 사전 await/API/setTimeout 금지
+      result = await reauthenticateWithPopup(user, provider);
+    } catch (err) {
+      const code = String(err?.code || '');
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        throw wrapReauthError(err, 'Google 재인증이 취소되었습니다.');
+      }
+      if (code === 'auth/popup-blocked') {
+        throw wrapReauthError(
+          err,
+          '팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도해 주세요.',
+        );
+      }
+      if (code === 'auth/operation-not-supported-in-this-environment') {
+        throw wrapReauthError(
+          err,
+          '이 환경에서는 Google 팝업 재인증을 사용할 수 없습니다. 모바일 브라우저나 데스크톱에서 다시 시도해 주세요.',
+        );
+      }
+      if (code === 'auth/requires-recent-login') {
+        throw wrapReauthError(err, '보안을 위해 Google 계정으로 다시 확인해 주세요.');
+      }
+      logAuthError('reauthenticateWithGoogleForAccountDelete failed', err);
+      const formatted = formatAuthError(err);
+      const wrapped = wrapReauthError(err, formatted.message || 'Google 재인증에 실패했습니다.');
+      wrapped.authError = formatted;
+      throw wrapped;
+    }
+
+    const reauthUser = result?.user;
+    if (!reauthUser?.uid) {
+      throw wrapReauthError(
+        { code: 'AUTH_REQUIRED' },
+        '로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요.',
+      );
+    }
+
+    const reauthEmail = String(reauthUser.email || '').trim().toLowerCase();
+    if (reauthUser.uid !== expectedUid
+      || (expectedEmail && reauthEmail && reauthEmail !== expectedEmail)) {
+      throw wrapReauthError(
+        { code: 'AUTH_ACCOUNT_MISMATCH' },
+        '현재 로그인한 Google 계정으로 다시 인증해 주세요.',
+      );
+    }
+
+    currentUser = reauthUser;
+    notifyListeners(reauthUser);
+    console.log('[AuthService] reauthenticateWithPopup success:', reauthUser.email || reauthUser.uid);
+    return reauthUser;
   },
 
   subscribe(fn) {

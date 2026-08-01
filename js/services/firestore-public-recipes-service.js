@@ -63,18 +63,27 @@ function mapPublicRecipe(docSnap, { lite = false } = {}) {
     sourceUrl: data.sourceUrl || data.sourcePostUrl || null,
     sourcePostUrl: data.sourcePostUrl || data.sourceUrl || null,
     sourcePlatform: data.sourcePlatform || null,
-    authorId: data.authorId || data.userId || '',
-    userId: data.userId || data.authorId || '',
+    authorDeleted: data.authorDeleted === true,
+    authorId: data.authorDeleted === true
+      ? ''
+      : (data.authorId || data.userId || ''),
+    userId: data.authorDeleted === true
+      ? ''
+      : (data.userId || data.authorId || ''),
     // 레거시 fallback — 카드/상세는 authorId → publicProfiles 우선
-    authorName: data.authorName || data.nickname || data.displayName || '',
-    displayName: data.displayName || data.authorName || '',
-    nickname: data.nickname || '',
-    profileImage: data.profileImage || '',
-    authorGooglePhotoURL: data.authorGooglePhotoURL || '',
+    authorName: data.authorDeleted === true
+      ? '탈퇴한 사용자'
+      : (data.authorName || data.nickname || data.displayName || ''),
+    displayName: data.authorDeleted === true
+      ? '탈퇴한 사용자'
+      : (data.displayName || data.authorName || ''),
+    nickname: data.authorDeleted === true ? '' : (data.nickname || ''),
+    profileImage: data.authorDeleted === true ? '' : (data.profileImage || ''),
+    authorGooglePhotoURL: data.authorDeleted === true ? '' : (data.authorGooglePhotoURL || ''),
     visibility: 'public',
     source: data.source || 'user',
     isPublic: data.isPublic !== false,
-    myRecipeId: data.myRecipeId || docSnap.id,
+    myRecipeId: data.authorDeleted === true ? '' : (data.myRecipeId || docSnap.id),
     createdAt: timestampToIso(data.createdAt) || nowIso(),
     updatedAt: timestampToIso(data.updatedAt) || nowIso(),
     publishedAt: timestampToIso(data.publishedAt) || timestampToIso(data.createdAt) || nowIso(),

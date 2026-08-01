@@ -377,6 +377,24 @@ function getIngredientDisplayName(ingredient) {
   return '';
 }
 
+/**
+ * 장보기 자동 추가용 — 재료명만. 수량·단위·범위·괄호·×N 제거.
+ * 레시피 화면 표시(formatIngredientDisplay)와는 별개.
+ */
+function getGroceryAutoAddIngredientName(ingredient) {
+  const parsed = parseRecipeIngredient(ingredient);
+  let name = String(parsed.name || getIngredientDisplayName(ingredient) || '').trim();
+  if (!name) return '';
+  name = name
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s*\d+(?:\s*[./]\s*\d+)?\s*[~～\-–—]\s*\d+(?:\s*[./]\s*\d+)?\s*[^\s]*/gu, ' ')
+    .replace(/\s*[×xX]\s*\d+\s*$/u, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const stripped = extractIngredientNameFromLegacyString(name);
+  return (stripped || name).trim();
+}
+
 function getUniqueIngredientDisplayNames(ingredients) {
   const names = [];
   const seen = new Set();
@@ -393,6 +411,11 @@ function getUniqueIngredientDisplayNames(ingredients) {
 
 // ===== Ingredient Groups (추천 전용 — 보유 재료명은 원본 유지) =====
 // substituteScore: 0.9 = 같은 그룹, 0.75 = 대체 가능
+/**
+ * 양방향 대체 그룹 (명시적 멤버만 — 이름 includes로 묶지 않음).
+ * members: string | { name, aliases? }
+ * countsAsFresh: false면 신선식품 판정에서 제외 (식용유 등)
+ */
 const INGREDIENT_GROUP_DEFINITIONS = [
   { id: 'scallion', label: '파류', substituteScore: 0.9, members: ['대파', '쪽파', '실파'] },
   { id: 'mushroom', label: '버섯류', substituteScore: 0.9, members: ['표고버섯', '새송이버섯', '느타리버섯'] },
@@ -401,21 +424,94 @@ const INGREDIENT_GROUP_DEFINITIONS = [
   { id: 'onion', label: '양파류', substituteScore: 0.9, members: ['양파', '적양파', '샬롯'] },
   { id: 'potato', label: '감자/고구마류', substituteScore: 0.9, members: ['감자', '고구마'] },
   { id: 'leafy', label: '잎채소류', substituteScore: 0.9, members: ['상추', '깻잎', '청상추', '로메인'] },
+  {
+    id: 'cooking-oil',
+    label: '식용유',
+    substituteScore: 0.9,
+    countsAsFresh: false,
+    // 참기름·들기름·코코넛오일은 의도적으로 제외
+    members: [
+      { name: '식용유', aliases: ['식용오일', '식물성오일'] },
+      { name: '카놀라유', aliases: ['카놀라오일'] },
+      { name: '포도씨유', aliases: ['포도씨오일'] },
+      { name: '해바라기유', aliases: ['해바라기오일'] },
+      { name: '기름', aliases: ['일반기름', '조리유'] },
+    ],
+  },
 ];
+
+/**
+ * 일방향 대체: 보유(pantry) → 레시피 필요(replaces).
+ * 올리브유는 일반 볶음·부침용 식용유를 대체할 수 있으나, 식용유→올리브유는 허용하지 않음.
+ * 재료 ID/표시명은 병합하지 않고 추천 계산에서만 사용.
+ */
+const INGREDIENT_SUBSTITUTION_DIRECTED = [
+  {
+    id: 'olive-for-cooking-oil',
+    label: '조리유',
+    substituteScore: 0.9,
+    pantryMembers: [
+      { name: '올리브유', aliases: ['엑스트라버진올리브유', '엑스트라버진 올리브유'] },
+    ],
+    replacesGroupId: 'cooking-oil',
+  },
+];
+
+function expandIngredientMemberKeys(member) {
+  if (typeof member === 'string') return [member];
+  if (!member?.name) return [];
+  return [member.name, ...(member.aliases || [])];
+}
 
 const IngredientGroupService = {
   _memberIndex: new Map(),
+  _directedRules: null,
   _buildIndex() {
     if (this._memberIndex.size) return;
     for (const group of INGREDIENT_GROUP_DEFINITIONS) {
       for (const member of group.members) {
-        this._memberIndex.set(normalizeIngredient(member), {
-          groupId: group.id,
-          label: group.label,
-          substituteScore: group.substituteScore,
-        });
+        for (const key of expandIngredientMemberKeys(member)) {
+          this._memberIndex.set(normalizeIngredient(key), {
+            groupId: group.id,
+            label: group.label,
+            substituteScore: group.substituteScore,
+            countsAsFresh: group.countsAsFresh !== false,
+            canonicalName: typeof member === 'string' ? member : member.name,
+          });
+        }
       }
     }
+  },
+  _buildDirectedRules() {
+    if (this._directedRules) return;
+    this._buildIndex();
+    this._directedRules = INGREDIENT_SUBSTITUTION_DIRECTED.map((rule) => {
+      const pantryKeys = new Set();
+      for (const member of rule.pantryMembers || []) {
+        for (const key of expandIngredientMemberKeys(member)) {
+          pantryKeys.add(normalizeIngredient(key));
+        }
+      }
+      const replacesKeys = new Set();
+      if (rule.replacesGroupId) {
+        const group = INGREDIENT_GROUP_DEFINITIONS.find((g) => g.id === rule.replacesGroupId);
+        for (const member of group?.members || []) {
+          for (const key of expandIngredientMemberKeys(member)) {
+            replacesKeys.add(normalizeIngredient(key));
+          }
+        }
+      }
+      for (const key of rule.replaces || []) {
+        replacesKeys.add(normalizeIngredient(key));
+      }
+      return {
+        id: rule.id,
+        label: rule.label,
+        substituteScore: rule.substituteScore,
+        pantryKeys,
+        replacesKeys,
+      };
+    });
   },
   getMemberInfo(name) {
     this._buildIndex();
@@ -423,9 +519,32 @@ const IngredientGroupService = {
   },
   findSubstitute(recipeIngredient, pantryNames) {
     this._buildIndex();
+    this._buildDirectedRules();
+    const requiredNorm = ingredientComparisonKey(recipeIngredient);
+
+    // 1) 명시적 일방향 substitution (올리브유 → 식용유 등)
+    for (const rule of this._directedRules) {
+      if (!rule.replacesKeys.has(requiredNorm)) continue;
+      for (const owned of pantryNames) {
+        const ownedNorm = ingredientComparisonKey(owned);
+        if (ownedNorm === requiredNorm) continue;
+        if (rule.pantryKeys.has(ownedNorm)) {
+          return {
+            required: recipeIngredient,
+            owned,
+            groupLabel: rule.label,
+            substituteScore: rule.substituteScore,
+            tier: rule.substituteScore >= 0.9 ? 'group' : 'flexible',
+            directed: true,
+            substitutionId: rule.id,
+          };
+        }
+      }
+    }
+
+    // 2) 동일 그룹 양방향 대체
     const requiredInfo = this.getMemberInfo(recipeIngredient);
     if (!requiredInfo) return null;
-    const requiredNorm = ingredientComparisonKey(recipeIngredient);
     for (const owned of pantryNames) {
       if (ingredientComparisonKey(owned) === requiredNorm) continue;
       const ownedInfo = this.getMemberInfo(owned);
@@ -442,6 +561,7 @@ const IngredientGroupService = {
     return null;
   },
   getGroups() { return INGREDIENT_GROUP_DEFINITIONS; },
+  getDirectedSubstitutions() { return INGREDIENT_SUBSTITUTION_DIRECTED; },
 };
 
 const IngredientAliasService = {
@@ -1829,7 +1949,8 @@ const FreshFoodService = {
     if ([...NON_FRESH_KEYS].some((k) => k.length >= 2 && n.includes(k))) return false;
     if (/가루$|분말$/.test(raw)) return false;
     if (SEAFOOD_PATTERN.test(raw)) return false;
-    if (IngredientGroupService.getMemberInfo(raw)) return true;
+    const groupInfo = IngredientGroupService.getMemberInfo(raw);
+    if (groupInfo?.countsAsFresh) return true;
     if (FRESH_FOOD_KEYS.has(n)) return true;
     return FRESH_FOOD_PATTERNS.some((re) => re.test(raw));
   },
@@ -3009,12 +3130,16 @@ const GroceryRepository = {
     const name = String(raw?.name || '').trim();
     if (!name) return null;
     const id = raw?.id || StorageAdapter.createId('grocery-item');
+    const source = String(raw?.source || '').trim();
+    // 레시피 자동 추가분은 수량을 저장하지 않음
+    const isRecipeAuto = source === 'recipe-auto';
     return {
       id,
       name,
-      quantity: String(raw?.quantity || '').trim(),
-      unit: String(raw?.unit || '').trim(),
+      quantity: isRecipeAuto ? '' : String(raw?.quantity || '').trim(),
+      unit: isRecipeAuto ? '' : String(raw?.unit || '').trim(),
       price: raw?.price !== '' && raw?.price != null ? String(raw.price) : '',
+      source: isRecipeAuto ? 'recipe-auto' : (source || 'manual'),
       createdAt: raw?.createdAt || new Date().toISOString(),
     };
   },
@@ -3206,11 +3331,12 @@ const GroceryRepository = {
     if (item.manual && item.manualId) {
       const manual = this.getManualItems().find((entry) => entry.id === item.manualId);
       if (manual) {
-        name = manual.name || name;
-        quantity = [manual.quantity, manual.unit].filter(Boolean).join('');
+        name = getGroceryAutoAddIngredientName(manual.name) || manual.name || name;
+        // 사용자가 직접 입력한 수량만 보관. 레시피 자동/식단 집계 count는 수량으로 쓰지 않음.
+        if (manual.source !== 'recipe-auto') {
+          quantity = [manual.quantity, manual.unit].filter(Boolean).join('');
+        }
       }
-    } else if (item.count > 1) {
-      quantity = String(item.count);
     }
 
     this.upsertPurchasedLedgerEntry({
@@ -3281,11 +3407,26 @@ const GroceryListService = {
   },
   formatManualDisplay(item) {
     const name = String(item?.name || '').trim();
+    // 레시피 자동 추가: 재료명만 (수량·×N 미표시)
+    if (item?.source === 'recipe-auto') {
+      return getGroceryAutoAddIngredientName(name) || name;
+    }
     const quantity = String(item?.quantity || '').trim();
     const unit = String(item?.unit || '').trim();
     if (quantity && unit) return `${name} ${quantity}${unit}`;
     if (quantity) return `${name} ${quantity}`;
     return name;
+  },
+
+  /** 장보기 행 표시명 — 자동 항목은 수량/×count 없음, 직접 입력 수량만 표시 */
+  getListItemDisplayName(item) {
+    if (item?.manual && item.manualId) {
+      const manual = GroceryRepository.getManualItems().find((entry) => entry.id === item.manualId);
+      if (manual) return this.formatManualDisplay(manual);
+      return getGroceryAutoAddIngredientName(item.name) || String(item?.name || '').trim();
+    }
+    // 식단 집계 자동 항목: 재료명만 (×2 / ×3 미표시)
+    return getGroceryAutoAddIngredientName(item?.name) || String(item?.name || '').trim();
   },
   categorize(name) {
     const n = String(name || '');
@@ -3317,7 +3458,8 @@ const GroceryListService = {
         if (!recipe) continue;
         const { missing } = MatchService.analyze(pantryNames, recipe.ingredients);
         for (const raw of missing) {
-          const display = getIngredientDisplayName(raw);
+          // 식단→장보기 자동 집계: 재료명만 (수량·단위 미포함)
+          const display = getGroceryAutoAddIngredientName(raw);
           if (!display) continue;
           const key = this.itemKey(display);
           const prev = map.get(key) || { key, name: display, count: 0 };
@@ -3358,6 +3500,7 @@ const GroceryListService = {
         count: 1,
         manual: true,
         manualId: item.id,
+        source: item.source || 'manual',
       });
     }
     for (const cat of GROCERY_CATEGORIES) {
@@ -3393,17 +3536,18 @@ const GroceryListService = {
     let added = 0;
     const seen = new Set();
     for (const raw of missing) {
-      const item = parseRecipeIngredient(raw);
-      const name = getIngredientDisplayName(raw);
+      // 자동 추가: 재료명만 저장. 수량/단위/범위/괄호는 넣지 않음.
+      const name = getGroceryAutoAddIngredientName(raw);
       const normalized = MatchService.normalize(name);
       if (!name || seen.has(normalized)) continue;
       seen.add(normalized);
       if (this.isIngredientInGroceryList(name, grouped)) continue;
       const manual = GroceryRepository.addManualItem({
         name,
-        quantity: item.quantity || '',
-        unit: item.unit || '',
+        quantity: '',
+        unit: '',
         price: '',
+        source: 'recipe-auto',
       });
       if (!manual) continue;
       added += 1;
@@ -3414,6 +3558,7 @@ const GroceryListService = {
         count: 1,
         manual: true,
         manualId: manual.id,
+        source: 'recipe-auto',
       });
     }
     return { added, missingCount: missing.length };
@@ -4214,8 +4359,8 @@ const MatchService = {
     if (!missing.length && !substituted.length) return '모든 재료 준비 완료!';
     const parts = [];
     if (substituted.length) {
-      const hints = substituted.slice(0, 2).map((s) => `${s.required} → ${s.owned}`);
-      parts.push(`${hints.join(', ')}${substituted.length > 2 ? ` 외 ${substituted.length - 2}개` : ''}로 대체 가능`);
+      const hints = substituted.slice(0, 2).map((s) => formatOwnedSubstitutionLabel(s.owned));
+      parts.push(`${hints.filter(Boolean).join(', ')}${substituted.length > 2 ? ` 외 ${substituted.length - 2}개 대체 가능` : ''}`);
     }
     const missingNames = getUniqueIngredientDisplayNames(missing);
     if (missingNames.length) {
@@ -4235,7 +4380,12 @@ const MatchService = {
     }
     if (substituted.length) {
       html += `<div class="match-section"><h4 class="match-section__title">대체 가능</h4><ul class="ingredient-list">${
-        substituted.map((s) => `<li class="ingredient-list__item ingredient-list__item--substitute">↔ ${esc(s.required)} <span class="match-sub-hint">(${esc(s.owned)} 보유)</span></li>`).join('')
+        substituted.map((s) => {
+          const ownedLabel = shortIngredientLabel(s.owned) || s.owned;
+          const requiredLabel = shortIngredientLabel(s.required) || s.required;
+          const phrase = formatOwnedSubstitutionLabel(s.owned);
+          return `<li class="ingredient-list__item ingredient-list__item--substitute">↔ ${esc(requiredLabel)} <span class="match-sub-hint">(${esc(phrase || `보유한 ${ownedLabel}로 대체 가능`)})</span></li>`;
+        }).join('')
       }</ul></div>`;
     }
     if (missing.length) {
@@ -5099,6 +5249,14 @@ function getAuthorProfilesService() {
 
 function resolveAuthorCardInfo(recipe) {
   if (!recipe || !isPublicCommunityRecipe(recipe)) return null;
+  if (recipe.authorDeleted) {
+    return {
+      authorId: '',
+      displayName: String(recipe.authorName || '탈퇴한 사용자').trim() || '탈퇴한 사용자',
+      profileImageUrl: '',
+      authorDeleted: true,
+    };
+  }
   const authorId = String(recipe.authorId || '').trim();
   const svc = getAuthorProfilesService();
   const cached = authorId && svc?.peek ? svc.peek(authorId) : undefined;
@@ -5153,7 +5311,14 @@ function recipeAuthorRowHTML(recipe) {
   const avatar = info.profileImageUrl
     ? `<img class="recipe-card-author__avatar" src="${esc(info.profileImageUrl)}" alt="" loading="lazy" decoding="async" width="20" height="20">`
     : `<span class="recipe-card-author__avatar recipe-card-author__avatar--initial" aria-hidden="true">${esc(initial)}</span>`;
-  const authorAttr = info.authorId ? ` data-author-id="${esc(info.authorId)}"` : '';
+  if (info.authorDeleted || !info.authorId) {
+    return `
+    <div class="recipe-card-author recipe-card-author--static" aria-label="${esc(info.displayName)}">
+      ${avatar}
+      <span class="recipe-card-author__name">${esc(info.displayName)}</span>
+    </div>`;
+  }
+  const authorAttr = ` data-author-id="${esc(info.authorId)}"`;
   return `
     <button type="button" class="recipe-card-author"${authorAttr} aria-label="${esc(info.displayName)} 프로필 보기">
       ${avatar}
@@ -5191,7 +5356,7 @@ function authorSocialButtonsHTML(socialLinks = {}) {
 
 async function openAuthorProfile(authorId, { returnView = null } = {}) {
   const uid = String(authorId || '').trim();
-  if (!uid) return;
+  if (!uid || uid === 'deleted-user') return;
   state.authorProfileId = uid;
   state.authorProfileReturnView = returnView || (state.view === 'author-profile' ? state.authorProfileReturnView : state.view) || 'main';
   closeAllModals();
@@ -5748,6 +5913,22 @@ function shortIngredientLabel(text) {
   return getIngredientMatchName(text) || formatIngredientDisplay(text) || String(text || '').trim();
 }
 
+/** 한국어 도구격 조사 로/으로 (받침 유무) */
+function koreanInstrumentalParticle(word) {
+  const s = String(word || '').trim();
+  if (!s) return '로';
+  const code = s.charCodeAt(s.length - 1);
+  if (code < 0xAC00 || code > 0xD7A3) return '로';
+  return ((code - 0xAC00) % 28) ? '으로' : '로';
+}
+
+/** 예: 보유한 올리브유로 대체 가능 (정확 일치 시에는 호출하지 않음) */
+function formatOwnedSubstitutionLabel(owned) {
+  const label = shortIngredientLabel(owned);
+  if (!label) return '';
+  return `보유한 ${label}${koreanInstrumentalParticle(label)} 대체 가능`;
+}
+
 const HOME_CARD_CLOCK_ICON = `<svg class="recipe-card-home__icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.25V8l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 function homeCardDifficultyIcon(difficulty) {
@@ -5831,17 +6012,18 @@ function formatHomeReadyMessage(missing, { readyHtml = HOME_CARD_READY_HTML } = 
   };
 }
 
-/** 홈 카드 대체 문구 — 목업: 초록 교체 아이콘 + 초록 Bold "A → B" + 기본색 나머지 */
+/** 홈 카드 대체 문구 — 예: 보유한 올리브유로 대체 가능 */
 function formatHomeSubstitutionLine(substituted) {
   if (!isLoggedInAppUser() || !substituted?.length) return '';
   const first = substituted[0];
   const required = shortIngredientLabel(first.required);
   const owned = shortIngredientLabel(first.owned);
-  if (!required || !owned) return '';
+  if (!owned) return '';
+  const particle = koreanInstrumentalParticle(owned);
   return {
     required,
     owned,
-    html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-pair">${esc(required)} → ${esc(owned)}</span><span class="recipe-card-home__sub-rest">로 대체 가능</span>`,
+    html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-rest">보유한 </span><span class="recipe-card-home__sub-pair">${esc(owned)}</span><span class="recipe-card-home__sub-rest">${particle} 대체 가능</span>`,
   };
 }
 
@@ -5850,18 +6032,9 @@ function formatMyRecipeReadyMessage(missing) {
   return formatHomeReadyMessage(missing);
 }
 
-/** 내 레시피 대체 문구 — 초록 교체 아이콘 + 초록 "A → B" + 회색 "로 대체 가능" */
+/** 내 레시피 대체 문구 — 홈과 동일: 보유한 {재료}로 대체 가능 */
 function formatMyRecipeSubstitutionLine(substituted) {
-  if (!isLoggedInAppUser() || !substituted?.length) return '';
-  const first = substituted[0];
-  const required = shortIngredientLabel(first.required);
-  const owned = shortIngredientLabel(first.owned);
-  if (!required || !owned) return '';
-  return {
-    required,
-    owned,
-    html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-pair">${esc(required)} → ${esc(owned)}</span><span class="recipe-card-home__sub-rest">로 대체 가능</span>`,
-  };
+  return formatHomeSubstitutionLine(substituted);
 }
 
 function isMobileHomeCardMissingFitViewport() {
@@ -9315,23 +9488,25 @@ function renderGroceryList({ force = false } = {}) {
     });
     const rows = items.map((item) => {
       const meta = GroceryRepository.getMeta(item.key);
-      const qty = !item.manual && item.count > 1 ? ` ×${item.count}` : '';
-      const manualBadge = item.manual ? '<span class="grocery-item__badge">직접</span>' : '';
+      // 자동 추가: 재료명만. 사용자가 직접 입력한 수량만 표시. ×count 절대 붙이지 않음.
+      const displayName = GroceryListService.getListItemDisplayName(item);
+      const isUserManual = item.manual && item.source !== 'recipe-auto';
+      const manualBadge = isUserManual ? '<span class="grocery-item__badge">직접</span>' : '';
       const actualField = `
         <input type="text" class="grocery-item__actual" data-actual-key="${esc(item.key)}"
           inputmode="numeric" pattern="[0-9]*"
           placeholder="${esc(currencyAmountPlaceholder('item'))}"
           value="${meta.actualAmount !== '' && meta.actualAmount != null ? esc(formatGroceryAmountInput(meta.actualAmount)) : ''}"
-          aria-label="${esc(item.name)} 실금액">`;
+          aria-label="${esc(displayName)} 실금액">`;
       return `
         <div class="grocery-item${meta.checked ? ' grocery-item--checked' : ''}">
-          <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''} aria-label="${esc(item.name)} 구매 완료 표시">
-          <span class="grocery-item__name">${manualBadge}${esc(item.name)}${qty}</span>
+          <input type="checkbox" class="grocery-item__check" data-check-key="${esc(item.key)}"${meta.checked ? ' checked' : ''} aria-label="${esc(displayName)} 구매 완료 표시">
+          <span class="grocery-item__name">${manualBadge}${esc(displayName)}</span>
           ${actualField}
-          <button type="button" class="grocery-item__buy" data-grocery-buy-name="${esc(item.name)}" aria-label="${esc(item.name)} 쿠팡에서 구매">
+          <button type="button" class="grocery-item__buy" data-grocery-buy-name="${esc(displayName)}" aria-label="${esc(displayName)} 쿠팡에서 구매">
             <span class="material-symbols-outlined" aria-hidden="true">shopping_cart</span>
           </button>
-          <button type="button" class="grocery-item__remove" data-remove-key="${esc(item.key)}" aria-label="${esc(item.name)} 삭제">×</button>
+          <button type="button" class="grocery-item__remove" data-remove-key="${esc(item.key)}" aria-label="${esc(displayName)} 삭제">×</button>
         </div>`;
     }).join('');
     return `
@@ -9460,11 +9635,8 @@ async function handleGroceryPurchaseComplete() {
       checkedItems.push(item);
       amountByKey[item.key] = parseGroceryAmount(meta.actualAmount);
       if (amountByKey[item.key] > 0) shoppingCount += 1;
-      if (item.manual) {
-        names.push(item.name);
-        continue;
-      }
-      names.push(item.count > 1 ? `${item.name} ${item.count}개` : item.name);
+      // 냉장고 이관용 이름 — 수량/×count 없이 재료명만
+      names.push(GroceryListService.getListItemDisplayName(item));
     }
   }
   if (!checkedItems.length) {

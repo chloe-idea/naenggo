@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=173">
+  <link rel="stylesheet" href="style.css?v=175">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -1003,11 +1003,80 @@
           <p id="profile-menu-email" class="profile-menu__email"></p>
           <p id="profile-menu-sync" class="profile-menu__sync">데이터 동기화 완료</p>
           <button type="button" id="profile-logout-btn" class="btn btn--ghost btn--full profile-menu__logout">로그아웃</button>
+          <button type="button" id="profile-delete-account-btn" class="btn btn--danger btn--full profile-menu__delete-account">회원 탈퇴</button>
         </section>
       </div>
 
       <div class="profile-manage__footer">
         <button type="button" id="profile-save-btn" class="btn btn--primary btn--full">프로필 저장</button>
+      </div>
+    </div>
+
+    <div id="account-delete-modal" class="modal modal--center profile-menu-modal" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="account-delete"></div>
+      <div
+        class="modal__panel profile-menu account-delete-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="account-delete-title"
+        aria-describedby="account-delete-subtitle"
+      >
+        <button type="button" class="modal__close" data-close-modal="account-delete" aria-label="닫기">&times;</button>
+        <div class="account-delete-modal__header">
+          <div class="account-delete-modal__title-row">
+            <span class="material-symbols-outlined account-delete-modal__icon" aria-hidden="true">warning</span>
+            <h2 id="account-delete-title" class="account-delete-modal__title">회원 탈퇴</h2>
+          </div>
+          <p id="account-delete-subtitle" class="account-delete-modal__desc">
+            탈퇴하면 아래 데이터는 영구적으로 삭제되며 복구할 수 없습니다.
+          </p>
+        </div>
+
+        <div class="account-delete-modal__lists" aria-label="삭제 및 유지 데이터 안내">
+          <section class="account-delete-modal__group account-delete-modal__group--remove">
+            <h3 class="account-delete-modal__group-title">
+              <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+              삭제됩니다
+            </h3>
+            <ul class="account-delete-modal__list">
+              <li>프로필</li>
+              <li>내 냉장고</li>
+              <li>내 레시피</li>
+              <li>설정</li>
+            </ul>
+          </section>
+          <section class="account-delete-modal__group account-delete-modal__group--keep">
+            <h3 class="account-delete-modal__group-title">
+              <span class="material-symbols-outlined" aria-hidden="true">verified_user</span>
+              유지됩니다
+            </h3>
+            <ul class="account-delete-modal__list">
+              <li>가족 공유 데이터</li>
+              <li>다른 가족 구성원의 데이터</li>
+              <li>다른 사용자의 공개 레시피 및 데이터</li>
+            </ul>
+          </section>
+        </div>
+
+        <div class="account-delete-modal__confirm">
+          <label class="account-delete-modal__confirm-label" for="account-delete-confirm-input">
+            확인을 위해 <strong>탈퇴하기</strong>를 입력해 주세요.
+          </label>
+          <input
+            id="account-delete-confirm-input"
+            class="input account-delete-modal__confirm-input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="탈퇴하기"
+            aria-describedby="account-delete-error"
+          >
+        </div>
+        <p id="account-delete-error" class="profile-menu__error account-delete-modal__error" hidden role="alert"></p>
+        <div class="account-delete-modal__actions">
+          <button type="button" class="btn btn--ghost btn--full" data-close-modal="account-delete">취소</button>
+          <button type="button" id="account-delete-confirm-btn" class="btn btn--danger btn--full" disabled>회원 탈퇴</button>
+        </div>
       </div>
     </div>
 
@@ -1118,7 +1187,7 @@
     })();
   </script>
   <script src="js/ingredient-normalizer.js?v=3"></script>
-  <script type="module" src="js/firebase-bootstrap.js?v=74"></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=77"></script>
   <script src="js/video-extract-platform.js?v=55"></script>
   <script src="app-config.js?v=57"></script>
   <script src="nav-icons.js?v=47"></script>
@@ -1128,6 +1197,6 @@
   <script src="js/ingredient-emoji.js?v=1"></script>
   <script src="js/login-required-modal.js?v=67"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=212" defer></script>
+  <script src="script.js?v=215" defer></script>
 </body>
 </html>
