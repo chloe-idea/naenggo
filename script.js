@@ -2155,8 +2155,8 @@ const PantryRepository = {
     return {
       id: raw.id || raw.firestoreId || StorageAdapter.createId('pantry'),
       name: raw.name || '',
-      quantity: raw.quantity || '',
-      unit: raw.unit || '',
+      quantity: raw.quantity == null || raw.quantity === '' ? '' : String(raw.quantity),
+      unit: raw.unit == null || raw.unit === '' ? '' : String(raw.unit),
       expiryDate: raw.expiryDate || '',
       recipeId: raw.recipeId || null,
       recipeName: raw.recipeName || '',
@@ -2483,50 +2483,108 @@ const SavedRecipeRepository = {
     this._ids = [];
     this._entries = new Map();
   },
+  _currentUid() {
+    return window.FirebaseServices?.auth?.currentUser?.uid || null;
+  },
+  _isFamilyScope() {
+    return Boolean(window.FirebaseServices?.FamilySharingService?.isActive?.());
+  },
+  /** household savedByMembers 메타가 메모리에 남아 있는지 (해제 직후 레이스 대비) */
+  _hasMemberMetadata() {
+    for (const entry of this._entries.values()) {
+      if (Array.isArray(entry?.savedByMembers) && entry.savedByMembers.length) return true;
+    }
+    return false;
+  },
   replaceIds(ids) {
-    this._ids = Array.isArray(ids) ? [...ids] : [];
+    this._ids = Array.isArray(ids) ? [...new Set(ids.map(String).filter(Boolean))] : [];
     this._entries = new Map(this._ids.map((id) => [id, { recipeId: id, savedByMembers: [] }]));
   },
   replaceSavedRecipes(entries) {
     const normalized = Array.isArray(entries) ? entries : [];
+    const uid = this._currentUid();
+    // 개인 스코프에서는 현재 uid가 저장한 항목만 개인 ID 목록으로 투영한다.
+    // (가족 해제 후 household 문서 전체가 넘어와도 다른 구성원 저장분이 남지 않게)
+    if (!this._isFamilyScope()) {
+      const personalIds = [];
+      for (const entry of normalized) {
+        const recipeId = String(entry?.recipeId || entry?.id || '').trim();
+        if (!recipeId) continue;
+        const members = Array.isArray(entry?.savedByMembers) ? entry.savedByMembers : [];
+        if (!members.length || (uid && members.some((member) => member.uid === uid))) {
+          personalIds.push(recipeId);
+        }
+      }
+      this.replaceIds(personalIds);
+      return;
+    }
     this._ids = normalized.map((entry) => String(entry.recipeId || entry.id || '')).filter(Boolean);
     this._entries = new Map(normalized.map((entry) => [String(entry.recipeId || entry.id), entry]));
   },
   isSaved(id) {
-    if (!window.FirebaseServices?.FamilySharingService?.isActive?.()) return this._ids.includes(id);
-    const uid = window.FirebaseServices?.auth?.currentUser?.uid;
-    return Boolean(uid && this.getSavedByMembers(id).some((member) => member.uid === uid));
+    const uid = this._currentUid();
+    const members = this.getSavedByMembers(id);
+    // member 메타가 있으면 항상 현재 uid 기준으로 판정 (가족 활성 여부와 무관)
+    if (members.length) {
+      return Boolean(uid && members.some((member) => member.uid === uid));
+    }
+    if (this._isFamilyScope()) {
+      return Boolean(uid && members.some((member) => member.uid === uid));
+    }
+    return this._ids.includes(id);
   },
   toggle(id) {
     const wasSaved = this.isSaved(id);
-    const familyMode = window.FirebaseServices?.FamilySharingService?.isActive?.();
-    if (familyMode) {
-      const uid = window.FirebaseServices?.auth?.currentUser?.uid;
+    const uid = this._currentUid();
+    const familyMode = this._isFamilyScope();
+    const members = this.getSavedByMembers(id);
+    // 가족 모드이거나 household 메타가 남아 있으면 uid 단위로만 토글
+    if (uid && (familyMode || members.length || this._hasMemberMetadata())) {
       const entry = this._entries.get(id) || { recipeId: id, savedByMembers: [] };
-      const members = this.getSavedByMembers(id);
-      entry.savedByMembers = wasSaved
+      const nextMembers = wasSaved
         ? members.filter((member) => member.uid !== uid)
-        : [...members, { uid, name: window.FirebaseServices?.auth?.currentUser?.displayName || '냉장GO 사용자' }];
+        : [...members, {
+          uid,
+          name: window.FirebaseServices?.auth?.currentUser?.displayName || '냉장GO 사용자',
+        }];
+      entry.savedByMembers = nextMembers;
       this._entries.set(id, entry);
-      if (!this._ids.includes(id)) this._ids.push(id);
-      if (!entry.savedByMembers.length) this._ids = this._ids.filter((value) => value !== id);
-    } else if (wasSaved) this._ids = this._ids.filter((x) => x !== id);
-    else this._ids.push(id);
+      if (familyMode) {
+        if (!this._ids.includes(id)) this._ids.push(id);
+        if (!nextMembers.length) this._ids = this._ids.filter((value) => value !== id);
+      } else {
+        // 개인 스코프: 현재 uid 저장분만 남기고 household 멤버 참조 제거
+        const projected = [...this._entries.entries()]
+          .filter(([, e]) => (e.savedByMembers || []).some((m) => m.uid === uid))
+          .map(([recipeId]) => recipeId);
+        this.replaceIds(projected);
+      }
+    } else if (wasSaved) {
+      this._ids = this._ids.filter((x) => x !== id);
+      this._entries.delete(id);
+    } else {
+      this._ids.push(id);
+      this._entries.set(id, { recipeId: id, savedByMembers: [] });
+    }
     this.save();
     const nowSaved = this.isSaved(id);
     RecipeSaveCountRepository.onSaveToggle(id, wasSaved, nowSaved);
     return nowSaved;
   },
   getRecipes() {
-    return this._ids.map((id) => RecipeRepository.getById(id)).filter(Boolean);
+    // 저장 목록은 항상 현재 uid 기준 (가족 공유 중에도 "내 저장")
+    return this.getMySavedIds().map((rid) => RecipeRepository.getById(rid)).filter(Boolean);
   },
   getSavedByMembers(id) {
     return this._entries.get(String(id))?.savedByMembers || [];
   },
   getMySavedIds() {
-    if (!window.FirebaseServices?.FamilySharingService?.isActive?.()) return [...this._ids];
-    const uid = window.FirebaseServices?.auth?.currentUser?.uid;
-    return this._ids.filter((id) => this.getSavedByMembers(id).some((member) => member.uid === uid));
+    const uid = this._currentUid();
+    if (!uid) return [...this._ids];
+    if (this._isFamilyScope() || this._hasMemberMetadata()) {
+      return this._ids.filter((rid) => this.getSavedByMembers(rid).some((member) => member.uid === uid));
+    }
+    return [...this._ids];
   },
 };
 
@@ -3728,6 +3786,7 @@ function clearAllUserDataState() {
   MealPlanRepository.clearSession();
   GroceryRepository.clearSession();
   state.monthlyFoodBudget = 0;
+  state.budgetByMonth = {};
   mealPlanLocalMutatedAt = 0;
   groceryLocalMutatedAt = 0;
   resetGroceryFirestoreReady();
@@ -4092,14 +4151,52 @@ async function persistCurrencySetting() {
   await getFirestoreUserDataSync().settings.saveCurrency(state.currency);
 }
 
+function getCalendarMonthKey() {
+  const y = Number(state.calendarYear);
+  const m = Number(state.calendarMonth) + 1;
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return '';
+  return `${y}-${String(m).padStart(2, '0')}`;
+}
+
+function getMonthlyBudgetForMonthKey(monthKey) {
+  const key = String(monthKey || '').trim();
+  if (key && state.budgetByMonth && Object.prototype.hasOwnProperty.call(state.budgetByMonth, key)) {
+    const amount = Number(state.budgetByMonth[key]);
+    return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+  }
+  return 0;
+}
+
+/** 달력에 보이는 월의 예산을 state.monthlyFoodBudget에 반영 (기존 UI 경로 유지) */
+function syncMonthlyBudgetStateForCalendar() {
+  const key = getCalendarMonthKey();
+  state.monthlyFoodBudget = getMonthlyBudgetForMonthKey(key);
+  return state.monthlyFoodBudget;
+}
+
 async function persistMonthlyFoodBudget() {
   if (!isLoggedInAppUser()) return;
-  await getFirestoreUserDataSync().settings.saveMonthlyFoodBudget(state.monthlyFoodBudget);
+  const monthKey = getCalendarMonthKey();
+  const amount = Number(state.monthlyFoodBudget) || 0;
+  state.budgetByMonth = {
+    ...(state.budgetByMonth || {}),
+    [monthKey]: amount,
+  };
+  await getFirestoreUserDataSync().settings.saveMonthlyFoodBudget(amount, {
+    monthKey,
+    budgetByMonth: state.budgetByMonth,
+  });
 }
 
 async function persistSavedRecipeIds() {
   if (!isLoggedInAppUser()) {
     notifyGuestPersonalDataNotPersisted('저장한 레시피');
+    return;
+  }
+  // 가족 해제 직후: 서버 migrate 스냅샷 적용 전에는 개인 prefs를 쓰지 않음
+  // (메모리의 household 캡처분만으로 가입 전 개인 저장분을 덮어쓰는 것 방지)
+  if (window.__savedRecipesAwaitingPersonalHydration) {
+    console.info('[SavedRecipes] persist deferred until personal hydration');
     return;
   }
   (window.FirebaseServices?.ensureDeferredUserDataSync || window.__ensureDeferredUserDataSync)?.(['settings']);
@@ -4147,10 +4244,14 @@ async function createPantryItem(data, options = {}) {
       err.code = 'firebase/not-ready';
       throw err;
     }
+    const qtyRaw = data?.quantity;
+    const quantity = qtyRaw == null || String(qtyRaw).trim() === '' || String(qtyRaw).trim().toLowerCase() === 'nan'
+      ? ''
+      : String(qtyRaw).trim();
     await svc.addIngredient(
       {
         name: ingredientName,
-        quantity: String(data?.quantity ?? ''),
+        quantity,
         expiryDate: String(data?.expiryDate ?? ''),
       },
       { householdId },
@@ -4385,7 +4486,7 @@ const MatchService = {
     if (!missing.length && !substituted.length) return '모든 재료 준비 완료!';
     const parts = [];
     if (substituted.length) {
-      const hints = substituted.slice(0, 2).map((s) => formatOwnedSubstitutionLabel(s.owned));
+      const hints = substituted.slice(0, 2).map((s) => formatOwnedSubstitutionLabel(s.owned, s.required));
       parts.push(`${hints.filter(Boolean).join(', ')}${substituted.length > 2 ? ` 외 ${substituted.length - 2}개 대체 가능` : ''}`);
     }
     const missingNames = getUniqueIngredientDisplayNames(missing);
@@ -4409,8 +4510,11 @@ const MatchService = {
         substituted.map((s) => {
           const ownedLabel = shortIngredientLabel(s.owned) || s.owned;
           const requiredLabel = shortIngredientLabel(s.required) || s.required;
-          const phrase = formatOwnedSubstitutionLabel(s.owned);
-          return `<li class="ingredient-list__item ingredient-list__item--substitute">↔ ${esc(requiredLabel)} <span class="match-sub-hint">(${esc(phrase || `보유한 ${ownedLabel}로 대체 가능`)})</span></li>`;
+          const phrase = formatOwnedSubstitutionLabel(s.owned, s.required)
+            || (requiredLabel
+              ? `${requiredLabel} → 보유한 ${ownedLabel}${koreanInstrumentalParticle(ownedLabel)} 대체 가능`
+              : `보유한 ${ownedLabel}${koreanInstrumentalParticle(ownedLabel)} 대체 가능`);
+          return `<li class="ingredient-list__item ingredient-list__item--substitute">↔ ${esc(phrase)}</li>`;
         }).join('')
       }</ul></div>`;
     }
@@ -4793,6 +4897,8 @@ const state = {
     ? StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)
     : DEFAULT_CURRENCY,
   monthlyFoodBudget: 0,
+  /** @type {Record<string, number>} YYYY-MM → 월 예산 */
+  budgetByMonth: {},
   shoppingRecipePicker: null,
   pantryRecipePicker: null,
   recipeFormTab: 'manual',
@@ -5848,11 +5954,16 @@ function koreanInstrumentalParticle(word) {
   return ((code - 0xAC00) % 28) ? '으로' : '로';
 }
 
-/** 예: 보유한 올리브유로 대체 가능 (정확 일치 시에는 호출하지 않음) */
-function formatOwnedSubstitutionLabel(owned) {
-  const label = shortIngredientLabel(owned);
-  if (!label) return '';
-  return `보유한 ${label}${koreanInstrumentalParticle(label)} 대체 가능`;
+/** 예: 대파 → 보유한 쪽파로 대체 가능 (정확 일치 시에는 호출하지 않음) */
+function formatOwnedSubstitutionLabel(owned, required) {
+  const ownedLabel = shortIngredientLabel(owned);
+  if (!ownedLabel) return '';
+  const particle = koreanInstrumentalParticle(ownedLabel);
+  const requiredLabel = shortIngredientLabel(required);
+  if (requiredLabel) {
+    return `${requiredLabel} → 보유한 ${ownedLabel}${particle} 대체 가능`;
+  }
+  return `보유한 ${ownedLabel}${particle} 대체 가능`;
 }
 
 const HOME_CARD_CLOCK_ICON = `<svg class="recipe-card-home__icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.25V8l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -5938,7 +6049,7 @@ function formatHomeReadyMessage(missing, { readyHtml = HOME_CARD_READY_HTML } = 
   };
 }
 
-/** 홈 카드 대체 문구 — 예: 보유한 올리브유로 대체 가능 */
+/** 홈 카드 대체 문구 — 예: 대파 → 보유한 쪽파로 대체 가능 */
 function formatHomeSubstitutionLine(substituted) {
   if (!isLoggedInAppUser() || !substituted?.length) return '';
   const first = substituted[0];
@@ -5946,10 +6057,13 @@ function formatHomeSubstitutionLine(substituted) {
   const owned = shortIngredientLabel(first.owned);
   if (!owned) return '';
   const particle = koreanInstrumentalParticle(owned);
+  const requiredHtml = required
+    ? `<span class="recipe-card-home__sub-pair">${esc(required)}</span><span class="recipe-card-home__sub-rest"> → 보유한 </span>`
+    : `<span class="recipe-card-home__sub-rest">보유한 </span>`;
   return {
     required,
     owned,
-    html: `${HOME_CARD_SWAP_ICON}<span class="recipe-card-home__sub-rest">보유한 </span><span class="recipe-card-home__sub-pair">${esc(owned)}</span><span class="recipe-card-home__sub-rest">${particle} 대체 가능</span>`,
+    html: `${HOME_CARD_SWAP_ICON}${requiredHtml}<span class="recipe-card-home__sub-pair">${esc(owned)}</span><span class="recipe-card-home__sub-rest">${particle} 대체 가능</span>`,
   };
 }
 
@@ -5958,7 +6072,7 @@ function formatMyRecipeReadyMessage(missing) {
   return formatHomeReadyMessage(missing);
 }
 
-/** 내 레시피 대체 문구 — 홈과 동일: 보유한 {재료}로 대체 가능 */
+/** 내 레시피 대체 문구 — 홈과 동일: {필요} → 보유한 {보유}로 대체 가능 */
 function formatMyRecipeSubstitutionLine(substituted) {
   return formatHomeSubstitutionLine(substituted);
 }
@@ -7268,13 +7382,13 @@ function renderPantryManage() {
   dom.pantryList.innerHTML = items.map((item) => {
     const st = ExpiryService.status(item.expiryDate);
     const lbl = ExpiryService.label(item.expiryDate);
-    const qty = [item.quantity, item.unit].filter(Boolean).join(' ');
+    const qty = [item.quantity, item.unit].filter((part) => part != null && String(part).trim() !== '').join(' ');
     const statusClass = st !== 'none' && st !== 'ok' ? st : 'normal';
     return `
       <article class="pantry-card pantry-card--${statusClass}" role="listitem">
         <div class="pantry-card__body">
           <p class="pantry-card__name">${esc(item.name)}</p>
-          <p class="pantry-card__detail">${qty ? esc(qty) : '수량 미입력'}</p>
+          ${qty ? `<p class="pantry-card__detail">${esc(qty)}</p>` : ''}
           ${item.expiryDate ? `<p class="pantry-card__expiry">${esc(item.expiryDate)}</p>` : ''}
           ${item.recipeName ? `<p class="pantry-card__recipe">📖 ${esc(item.recipeName)}</p>` : ''}
           ${lbl ? `<span class="pantry-card__badge pantry-card__badge--${st}">${st === 'expired' ? '만료' : '임박'} · ${esc(lbl)}</span>` : ''}
@@ -7620,7 +7734,7 @@ function renderMealStats() {
   const year = state.calendarYear;
   const month = state.calendarMonth + 1;
   const { counts, primaryTotal, primaryCode } = getCalendarMonthStats(year, month);
-  const budget = Number(state.monthlyFoodBudget) || 0;
+  const budget = syncMonthlyBudgetStateForCalendar();
   const progressHTML = buildBudgetProgressHTML(primaryTotal, budget, primaryCode);
   const footerHTML = buildBudgetFooterHTML(primaryTotal, budget, primaryCode);
 
@@ -7652,7 +7766,13 @@ function renderMealStats() {
   });
   if (dom.monthlyFoodBudget) {
     dom.monthlyFoodBudget.onchange = () => {
-      state.monthlyFoodBudget = Number(dom.monthlyFoodBudget.value) || 0;
+      const amount = Number(dom.monthlyFoodBudget.value) || 0;
+      const monthKey = getCalendarMonthKey();
+      state.monthlyFoodBudget = amount;
+      state.budgetByMonth = {
+        ...(state.budgetByMonth || {}),
+        [monthKey]: amount,
+      };
       if (isGuestUser()) {
         renderMealStats();
         return;
@@ -10822,8 +10942,8 @@ function openPantryModal(id = null) {
     const item = getPantryItemsForUi().find((x) => x.id === id);
     if (!item) return;
     dom.pantryModalName.value = item.name;
-    dom.pantryModalQty.value = item.quantity;
-    dom.pantryModalUnit.value = item.unit;
+    dom.pantryModalQty.value = item.quantity == null ? '' : String(item.quantity);
+    dom.pantryModalUnit.value = item.unit == null ? '' : String(item.unit);
     dom.pantryModalExpiry.value = item.expiryDate;
     if (item.recipeId) {
       const recipe = RecipeRepository.getById(item.recipeId);
@@ -10841,10 +10961,12 @@ async function handlePantryModalSubmit(e) {
   const name = dom.pantryModalName.value.trim();
   if (!name) return;
   const resolved = RecipePickerService.resolve(dom.pantryRecipeInput, dom.pantryRecipeId);
+  const qtyRaw = dom.pantryModalQty.value.trim();
   const data = {
     name,
-    quantity: dom.pantryModalQty.value.trim(),
-    unit: dom.pantryModalUnit.value,
+    // 빈 입력은 미입력(''). '1'은 사용자가 입력한 경우에만 유지
+    quantity: qtyRaw,
+    unit: dom.pantryModalUnit.value || '',
     expiryDate: dom.pantryModalExpiry.value,
     recipeId: resolved?.id || null,
     recipeName: resolved?.name || dom.pantryRecipeInput.value.trim(),
@@ -11371,8 +11493,22 @@ function startApp() {
       if (dom.currencySelect) dom.currencySelect.value = settings.currency;
       syncCurrencyAmountPlaceholders();
     }
-    if (settings.monthlyFoodBudget != null) {
-      state.monthlyFoodBudget = Number(settings.monthlyFoodBudget) || 0;
+    if (settings.budgetByMonth && typeof settings.budgetByMonth === 'object') {
+      state.budgetByMonth = { ...settings.budgetByMonth };
+    }
+    // 달력 선택 월 기준으로 표시값 동기화 (레거시 monthlyFoodBudget는 마이그레이션 입력으로만 사용)
+    if (settings.budgetByMonth && Object.keys(settings.budgetByMonth).length) {
+      syncMonthlyBudgetStateForCalendar();
+    } else if (settings.monthlyFoodBudget != null) {
+      const legacy = Number(settings.monthlyFoodBudget) || 0;
+      const monthKey = getCalendarMonthKey() || (() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      })();
+      if (legacy > 0 && !Object.keys(state.budgetByMonth || {}).length) {
+        state.budgetByMonth = { [monthKey]: legacy };
+      }
+      syncMonthlyBudgetStateForCalendar();
     }
     if (settings.grocery) {
       const localGroceryEmpty = !GroceryRepository._byWeek
@@ -11393,8 +11529,22 @@ function startApp() {
       briefingGroceryStatus = 'ready';
       briefingGroceryScopeKey = currentBriefingGroceryScopeKey();
     }
-    if (Array.isArray(settings.savedRecipes)) SavedRecipeRepository.replaceSavedRecipes(settings.savedRecipes);
-    else if (Array.isArray(settings.savedRecipeIds)) SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
+    if (Array.isArray(settings.savedRecipes) || Array.isArray(settings.savedRecipeIds)) {
+      const familyActive = Boolean(window.FirebaseServices?.FamilySharingService?.isActive?.());
+      if (familyActive && Array.isArray(settings.savedRecipes)) {
+        SavedRecipeRepository.replaceSavedRecipes(settings.savedRecipes);
+      } else if (Array.isArray(settings.savedRecipeIds)) {
+        // 개인 스코프 단일 소스: preferences.savedRecipeIds (uid 기준 이관 결과)
+        SavedRecipeRepository.replaceIds(settings.savedRecipeIds);
+        window.__pendingPersonalSavedRecipeIds = null;
+        window.__savedRecipesAwaitingPersonalHydration = false;
+      } else {
+        // savedRecipes만 온 경우(레거시/중간 상태): 현재 uid 저장분만 투영
+        SavedRecipeRepository.replaceSavedRecipes(settings.savedRecipes);
+        window.__pendingPersonalSavedRecipeIds = null;
+        window.__savedRecipesAwaitingPersonalHydration = false;
+      }
+    }
     HomeBriefingService.invalidate();
     refreshAll();
   });

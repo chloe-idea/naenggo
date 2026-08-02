@@ -7,6 +7,11 @@ import {
   isFirebaseAdminConfigured,
   verifyFirebaseIdToken,
 } from './firebase-admin.js';
+import {
+  migrateUidSavedRecipesToPersonal,
+  purgeInactiveSavedRecipeMembers,
+  removeUidFromHouseholdSavedRecipes,
+} from './household-saved-recipes.js';
 
 const HOUSEHOLDS = 'households';
 const INVITES = 'householdInvites';
@@ -1268,6 +1273,151 @@ async function getCurrentHouseholdRecovery(db, user, userRef, timing, { userSnap
   };
 }
 
+/** 가족 UI(includeMembers) 조회 시 비활성 저장자 lazy cleanup — 실패해도 current 응답은 유지 */
+async function maybePurgeInactiveSavedRecipes(db, household, { includeMembers = false } = {}) {
+  const householdId = String(household?.householdId || '').trim();
+  if (!includeMembers || !householdId || household?.pendingSetup) return household;
+  try {
+    const purged = await purgeInactiveSavedRecipeMembers(db, householdId);
+    if (purged?.touched) {
+      console.info('[household] lazy savedRecipes purge on /current', {
+        householdId,
+        touched: purged.touched,
+        removedUids: purged.removedUids || [],
+      });
+    }
+  } catch (err) {
+    console.warn('[household] lazy savedRecipes purge failed', {
+      householdId,
+      message: err?.message || String(err),
+    });
+  }
+  return household;
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function emailLocalPart(email) {
+  const raw = String(email || '').trim();
+  if (!raw || !raw.includes('@')) return '';
+  return raw.split('@')[0].trim();
+}
+
+/**
+ * includeMembers 응답용 — publicProfiles/users에서 표시 필드만 보강.
+ * 이메일은 클라이언트에 노출하지 않으며, 필요 시 label fallback에만 사용한다.
+ */
+export function buildMemberPublicFields(publicData = {}, userData = {}) {
+  const profileId = firstNonEmptyString(
+    publicData.profileId,
+    userData.profileId,
+    publicData.username,
+    userData.username,
+    publicData.userId,
+    userData.userId,
+  );
+  const nickname = firstNonEmptyString(publicData.nickname, userData.nickname);
+  const displayName = firstNonEmptyString(publicData.displayName, userData.displayName);
+  const photoURL = firstNonEmptyString(
+    publicData.profileImageUrl,
+    publicData.profileImage,
+    userData.profileImageUrl,
+    userData.profileImage,
+    userData.photoURL,
+  );
+  // 이메일 원문은 반환하지 않음. @ 앞부분만 label 최후 fallback에 사용.
+  const label = firstNonEmptyString(
+    profileId,
+    nickname,
+    displayName,
+    emailLocalPart(userData.email),
+  );
+  return {
+    profileId: profileId || '',
+    username: firstNonEmptyString(publicData.username, userData.username),
+    nickname,
+    displayName,
+    photoURL,
+    label,
+  };
+}
+
+function hasPublicMemberIdentity(publicData = {}) {
+  return Boolean(firstNonEmptyString(
+    publicData.profileId,
+    publicData.username,
+    publicData.userId,
+    publicData.nickname,
+    publicData.displayName,
+  ));
+}
+
+async function enrichMembersWithPublicProfiles(db, members) {
+  const list = Array.isArray(members) ? members.filter((m) => m?.uid) : [];
+  if (!list.length) return Array.isArray(members) ? members : [];
+
+  try {
+    // 1) publicProfiles 먼저 조회
+    const publicRefs = list.map((member) => db.collection('publicProfiles').doc(member.uid));
+    const publicSnaps = await db.getAll(...publicRefs);
+
+    // 2) public 문서가 없거나 표시 가능한 아이디/이름이 없을 때만 users fallback
+    const fallbackIndexes = [];
+    publicSnaps.forEach((snap, index) => {
+      const publicData = snap?.exists ? (snap.data() || {}) : {};
+      if (!snap?.exists || !hasPublicMemberIdentity(publicData)) {
+        fallbackIndexes.push(index);
+      }
+    });
+
+    const userSnapByIndex = new Map();
+    if (fallbackIndexes.length) {
+      const userRefs = fallbackIndexes.map((index) => db.collection(USERS).doc(list[index].uid));
+      const userSnaps = await db.getAll(...userRefs);
+      fallbackIndexes.forEach((memberIndex, i) => {
+        userSnapByIndex.set(memberIndex, userSnaps[i]);
+      });
+    }
+
+    return list.map((member, index) => {
+      const publicSnap = publicSnaps[index];
+      const userSnap = userSnapByIndex.get(index);
+      const fields = buildMemberPublicFields(
+        publicSnap?.exists ? (publicSnap.data() || {}) : {},
+        userSnap?.exists ? (userSnap.data() || {}) : {},
+      );
+      return {
+        uid: member.uid,
+        role: member.role,
+        joinedAt: member.joinedAt,
+        ...fields,
+      };
+    });
+  } catch (err) {
+    console.warn('[household] member profile enrichment failed', {
+      message: err?.message || String(err),
+      memberCount: list.length,
+    });
+    // 조회 실패 시 기존 members 형태 유지 (uid/role) — UI fallback
+    return list;
+  }
+}
+
+async function finalizeCurrentHousehold(db, household, { includeMembers = false } = {}) {
+  let result = await maybePurgeInactiveSavedRecipes(db, household, { includeMembers });
+  if (!result || !includeMembers || !Array.isArray(result.members) || result.membersPartial) {
+    return result;
+  }
+  const members = await enrichMembersWithPublicProfiles(db, result.members);
+  return { ...result, members };
+}
+
 export async function getCurrentHousehold({ idToken, includeMembers = false } = {}) {
   const timing = createHouseholdTiming('GET /api/households/current');
   const user = await timing.step('verifyToken', () => requireHouseholdUser(idToken));
@@ -1287,7 +1437,7 @@ export async function getCurrentHousehold({ idToken, includeMembers = false } = 
       includeMembers: Boolean(includeMembers),
       membersPartial: Boolean(fast.household.membersPartial),
     });
-    return fast.household;
+    return finalizeCurrentHousehold(db, fast.household, { includeMembers });
   }
 
   console.info('[household] GET /current falling back to recovery', {
@@ -1305,7 +1455,7 @@ export async function getCurrentHousehold({ idToken, includeMembers = false } = 
     fastMissReason: fast.reason,
     includeMembers: Boolean(includeMembers),
   });
-  return household;
+  return finalizeCurrentHousehold(db, household, { includeMembers });
 }
 
 export async function issueInvite({ idToken, householdId, kind, expiresAt, maxUses, headers = {}, ip = '' }) {
@@ -1620,6 +1770,12 @@ async function copyHouseholdSharedDataToPersonal(db, { householdId, uid }) {
     const missingWeeks = Object.fromEntries(
       Object.entries(sharedByWeek).filter(([week]) => !(week in existingByWeek)),
     );
+    const existingBudgetByMonth = (existing.budgetByMonth && typeof existing.budgetByMonth === 'object')
+      ? existing.budgetByMonth
+      : {};
+    const groceryBudgetByMonth = (grocery.budgetByMonth && typeof grocery.budgetByMonth === 'object')
+      ? grocery.budgetByMonth
+      : {};
     await prefsRef.set({
       grocery: {
         ...(existing.grocery || {}),
@@ -1628,9 +1784,16 @@ async function copyHouseholdSharedDataToPersonal(db, { householdId, uid }) {
       },
       currency: existing.currency || grocery.currency || 'KRW',
       monthlyFoodBudget: existing.monthlyFoodBudget ?? grocery.monthlyFoodBudget ?? 0,
+      budgetByMonth: { ...groceryBudgetByMonth, ...existingBudgetByMonth },
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     copied.push(`${grocerySnap.ref.path}:merged`);
+  }
+
+  // 내가 저장한 레시피만 개인 savedRecipeIds로 이관 (다른 구성원 저장분은 제외)
+  const savedMigration = await migrateUidSavedRecipesToPersonal(db, id, targetUid);
+  if (savedMigration.migratedCount > 0) {
+    copied.push(`households/${id}/savedRecipes:uid=${targetUid}:count=${savedMigration.migratedCount}`);
   }
 
   console.info('[household] copy shared data to personal completed', {
@@ -1638,6 +1801,7 @@ async function copyHouseholdSharedDataToPersonal(db, { householdId, uid }) {
     householdId: id,
     copiedCount: copied.length,
     skippedCount: skipped.length,
+    savedRecipesMigrated: savedMigration.migratedCount,
   });
 
   return {
@@ -1647,6 +1811,7 @@ async function copyHouseholdSharedDataToPersonal(db, { householdId, uid }) {
     skipped,
     copiedCount: copied.length,
     skippedCount: skipped.length,
+    savedRecipesMigrated: savedMigration.migratedCount,
     ok: true,
   };
 }
@@ -1704,6 +1869,27 @@ async function deactivateHouseholdMember(db, {
       recoveryCompletedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
   });
+
+  // 나간/제거된 구성원의 저장 관계만 해제 (공개 레시피·타인 저장 유지). idempotent.
+  // soft-deactivate 이후이므로 실패해도 leave/remove 자체는 유지하고 lazy purge로 보정한다.
+  try {
+    const removed = await removeUidFromHouseholdSavedRecipes(db, id, targetUid);
+    const purged = await purgeInactiveSavedRecipeMembers(db, id);
+    console.info('[household] savedRecipes cleanup after member deactivate', {
+      householdId: id,
+      memberUid: targetUid,
+      removedReason: removedReason || 'removed',
+      removedTouches: removed?.touched || 0,
+      purgedTouches: purged?.touched || 0,
+      purgedUids: purged?.removedUids || [],
+    });
+  } catch (err) {
+    console.error('[household] savedRecipes cleanup failed (will retry via lazy purge)', {
+      householdId: id,
+      memberUid: targetUid,
+      error: err?.message || String(err),
+    });
+  }
 
   return recovery;
 }
@@ -1763,6 +1949,10 @@ export async function deleteLastOwnerHousehold({ idToken, householdId }) {
   const user = await requireHouseholdUser(idToken);
   const db = getFirestoreAdmin();
   const id = validateHouseholdId(householdId);
+
+  // soft-delete 전에 owner 본인 저장분만 개인 preferences로 이관
+  // (다른 구성원 저장 참조가 개인 savedRecipeIds에 섞이지 않도록 uid 필터)
+  await migrateUidSavedRecipesToPersonal(db, id, user.uid);
 
   await db.runTransaction(async (tx) => {
     await assertOwner(tx, db, id, user.uid);
@@ -1843,9 +2033,44 @@ function normalizedIngredientKey(data = {}) {
     || String(data.name || data.ingredientName || '').trim().toLocaleLowerCase();
 }
 
-function ingredientQuantity(data = {}) {
-  const parsed = Number.parseFloat(String(data.quantity ?? '').trim());
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
+/**
+ * 수량 파싱. 빈 문자열/null/undefined/NaN 은 미입력(null).
+ * 기본값 1을 넣지 않는다.
+ */
+function parseIngredientQuantity(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+  const raw = String(value).trim();
+  if (!raw || raw.toLowerCase() === 'nan') return null;
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeQuantityForStorage(value) {
+  const parsed = parseIngredientQuantity(value);
+  if (parsed != null) {
+    return Number.isInteger(parsed) ? String(parsed) : String(parsed);
+  }
+  if (value == null) return '';
+  const raw = String(value).trim();
+  if (!raw || raw.toLowerCase() === 'nan') return '';
+  return raw;
+}
+
+function mergeIngredientQuantities(existing = {}, incoming = {}) {
+  const numeric = [
+    parseIngredientQuantity(existing.quantity),
+    parseIngredientQuantity(incoming.quantity),
+  ].filter((n) => n != null);
+  if (numeric.length) {
+    const total = numeric.reduce((sum, n) => sum + n, 0);
+    return Number.isInteger(total) ? String(total) : String(total);
+  }
+  return normalizeQuantityForStorage(existing.quantity)
+    || normalizeQuantityForStorage(incoming.quantity)
+    || '';
 }
 
 function earliestExpiryDate(...items) {
@@ -1859,8 +2084,7 @@ function earliestExpiryDate(...items) {
 function mergeIngredientData(existing = {}, incoming = {}) {
   // 기존 household 필드를 우선해 메모·보관 위치 같은 정보가 사라지지 않게 한다.
   const merged = { ...incoming, ...existing };
-  const quantity = ingredientQuantity(existing) + ingredientQuantity(incoming);
-  merged.quantity = Number.isInteger(quantity) ? String(quantity) : String(quantity);
+  merged.quantity = mergeIngredientQuantities(existing, incoming);
   const expiryDate = earliestExpiryDate(existing, incoming);
   if (expiryDate) merged.expiryDate = expiryDate;
   else delete merged.expiryDate;
@@ -2045,7 +2269,9 @@ export async function copyPersonalDataToHousehold({ idToken, householdId, scopes
     const hasGroceryOrBudget = Boolean(
       preferences.grocery
       || preferences.currency
-      || Object.prototype.hasOwnProperty.call(preferences, 'monthlyFoodBudget'),
+      || Object.prototype.hasOwnProperty.call(preferences, 'monthlyFoodBudget')
+      || (preferences.budgetByMonth && typeof preferences.budgetByMonth === 'object'
+        && Object.keys(preferences.budgetByMonth).length),
     );
     if (!existing.exists && hasGroceryOrBudget) {
       await target.create({
@@ -2053,6 +2279,9 @@ export async function copyPersonalDataToHousehold({ idToken, householdId, scopes
         byWeek: preferences.grocery?.byWeek || {},
         currency: preferences.currency || 'KRW',
         monthlyFoodBudget: Number(preferences.monthlyFoodBudget) || 0,
+        budgetByMonth: (preferences.budgetByMonth && typeof preferences.budgetByMonth === 'object')
+          ? preferences.budgetByMonth
+          : {},
         updatedAt: FieldValue.serverTimestamp(),
       });
       copied.push(preferencesSnap.ref.path);

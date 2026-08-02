@@ -14,17 +14,34 @@ import { normalizeSocialLinks } from '../lib/social-url.js';
 import { FirestorePublicProfilesService } from './firestore-public-profiles-service.js';
 
 const USERS_COLLECTION = 'users';
-const AVATAR_TYPES = new Set(['initial', 'fridge', 'google']);
+/** letter(글자) | upload(사진 업로드) | google — legacy: initial→letter, fridge→letter */
+const AVATAR_TYPES = new Set(['letter', 'upload', 'google', 'initial', 'fridge']);
 
 function userDocRef(uid) {
   if (!db || !uid) return null;
   return doc(db, USERS_COLLECTION, uid);
 }
 
-function normalizeAvatarType(value, authUser) {
+export function normalizeAvatarType(value, authUser) {
   const type = String(value || '').trim();
-  if (AVATAR_TYPES.has(type)) return type;
-  return authUser?.photoURL ? 'google' : 'fridge';
+  if (type === 'initial' || type === 'fridge') return 'letter';
+  if (type === 'letter' || type === 'upload' || type === 'google') return type;
+  if (AVATAR_TYPES.has(type)) return type === 'fridge' || type === 'initial' ? 'letter' : type;
+  return authUser?.photoURL ? 'google' : 'letter';
+}
+
+/** 선택 타입에 따른 공개 표시용 이미지 URL (letter면 빈 문자열) */
+export function resolveEffectivePhotoURL(profile, authUser) {
+  const avatarType = normalizeAvatarType(profile?.avatarType ?? profile?.profileImageType, authUser);
+  const uploaded = String(profile?.uploadedPhotoURL || '').trim()
+    || String(profile?.profileImageUrl || profile?.profileImage || '').trim();
+  const google = String(profile?.googlePhotoURL || authUser?.photoURL || '').trim();
+
+  if (avatarType === 'letter') return '';
+  if (avatarType === 'upload') return String(profile?.uploadedPhotoURL || '').trim() || uploaded;
+  if (avatarType === 'google') return google;
+  // 타입이 모호할 때: 업로드 > Google > 글자
+  return String(profile?.uploadedPhotoURL || '').trim() || google || '';
 }
 
 export function resolveProfileAvatar(profile, authUser) {
@@ -32,19 +49,16 @@ export function resolveProfileAvatar(profile, authUser) {
     profile?.displayName || authUser?.displayName || authUser?.email?.split('@')[0] || '회원',
   ).trim();
   const initial = (displayName.charAt(0) || '냉').toUpperCase();
-  const avatarType = normalizeAvatarType(profile?.avatarType, authUser);
-  const customImage = String(profile?.profileImageUrl || profile?.profileImage || '').trim();
+  const avatarType = normalizeAvatarType(profile?.avatarType ?? profile?.profileImageType, authUser);
+  const photoURL = resolveEffectivePhotoURL(profile, authUser);
 
-  if (avatarType === 'google' && authUser?.photoURL) {
-    return { mode: 'image', src: authUser.photoURL, initial, displayName, avatarType };
+  if (avatarType === 'letter') {
+    return { mode: 'initial', initial, displayName, avatarType: 'letter', src: '' };
   }
-  if (customImage) {
-    return { mode: 'image', src: customImage, initial, displayName, avatarType: 'custom' };
+  if (photoURL) {
+    return { mode: 'image', src: photoURL, initial, displayName, avatarType };
   }
-  if (avatarType === 'fridge') {
-    return { mode: 'emoji', emoji: '🧊', initial, displayName, avatarType };
-  }
-  return { mode: 'initial', initial, displayName, avatarType: 'initial' };
+  return { mode: 'initial', initial, displayName, avatarType: 'letter', src: '' };
 }
 
 function emptySocialLinks() {
@@ -72,7 +86,9 @@ export const FirestoreUserService = {
     }
 
     const displayName = user.displayName || user.email?.split('@')[0] || '';
-    const profileImage = user.photoURL || '';
+    const googlePhotoURL = user.photoURL || '';
+    const avatarType = googlePhotoURL ? 'google' : 'letter';
+    const profileImageUrl = avatarType === 'google' ? googlePhotoURL : '';
     const normalized = normalizeWeeklyUsageRecord({}, FREE_ANALYSIS_LIMIT);
     const payload = {
       analysisQuotaWeekKey: normalized.currentWeekKey,
@@ -81,12 +97,16 @@ export const FirestoreUserService = {
       createdAt: serverTimestamp(),
       displayName,
       email: user.email || '',
-      profileImage,
-      profileImageUrl: profileImage,
+      profileImage: profileImageUrl,
+      profileImageUrl,
+      photoURL: profileImageUrl,
+      uploadedPhotoURL: '',
+      googlePhotoURL,
+      profileImageType: avatarType,
       bio: '',
       socialLinks: emptySocialLinks(),
       publicRecipeCount: 0,
-      avatarType: user.photoURL ? 'google' : 'fridge',
+      avatarType,
     };
     await setDoc(
       ref,
@@ -96,7 +116,7 @@ export const FirestoreUserService = {
     try {
       await FirestorePublicProfilesService.syncFromUserProfile(user.uid, {
         displayName,
-        profileImageUrl: profileImage,
+        profileImageUrl,
         bio: '',
         socialLinks: {},
       });
@@ -135,9 +155,21 @@ export const FirestoreUserService = {
       payload.profileImageUrl = updates.profileImageUrl.trim();
       payload.profileImage = payload.profileImageUrl;
     }
+    if (typeof updates.photoURL === 'string') payload.photoURL = updates.photoURL.trim();
+    if (typeof updates.uploadedPhotoURL === 'string') {
+      payload.uploadedPhotoURL = updates.uploadedPhotoURL.trim();
+    }
+    if (typeof updates.googlePhotoURL === 'string') {
+      payload.googlePhotoURL = updates.googlePhotoURL.trim();
+    }
     if (typeof updates.bio === 'string') payload.bio = updates.bio.trim().slice(0, 80);
-    if (typeof updates.avatarType === 'string' && AVATAR_TYPES.has(updates.avatarType)) {
-      payload.avatarType = updates.avatarType;
+    if (typeof updates.avatarType === 'string' || typeof updates.profileImageType === 'string') {
+      const nextType = normalizeAvatarType(
+        updates.avatarType ?? updates.profileImageType,
+        { photoURL: options.photoURL || updates.googlePhotoURL },
+      );
+      payload.avatarType = nextType;
+      payload.profileImageType = nextType;
     }
     if (typeof updates.email === 'string') payload.email = updates.email.trim();
 
@@ -161,14 +193,13 @@ export const FirestoreUserService = {
 
     if (options.syncPublic !== false) {
       try {
-        const photoURL = options.photoURL || '';
-        const avatarType = updated?.avatarType || payload.avatarType;
-        const profileImageUrl = avatarType === 'google' && photoURL
-          ? photoURL
-          : String(updated?.profileImageUrl || updated?.profileImage || '').trim();
+        const authLike = { photoURL: options.photoURL || updated?.googlePhotoURL || '' };
+        const effective = resolveEffectivePhotoURL(updated, authLike);
         await FirestorePublicProfilesService.syncFromUserProfile(uid, {
           ...(updated || payload),
-          profileImageUrl,
+          profileImageUrl: effective,
+          profileImage: effective,
+          photoURL: effective,
         });
       } catch (err) {
         console.warn('[FirestoreUserService] public profile sync failed:', err);

@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 프로필 아바타 — uid 고정 경로만 허용 (사용자 입력 파일명 사용 금지)
+    match /profile-images/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && fileName == 'avatar.webp'
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType == 'image/webp';
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

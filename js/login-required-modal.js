@@ -231,6 +231,12 @@
     bindEvents() {
       $('login-prompt-google-btn')?.addEventListener('click', () => this.handleGoogleLogin());
       $('login-prompt-dismiss-btn')?.addEventListener('click', () => this.dismiss());
+      // 법률 링크는 Google 로그인/모달 닫기와 분리
+      document.querySelectorAll('.login-prompt__legal-link').forEach((link) => {
+        link.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      });
       global.addEventListener('auth-gate-state', () => this.syncGoogleButton());
       global.addEventListener('auth-state-changed', (e) => {
         const user = e.detail?.user;

@@ -13,6 +13,7 @@ import {
   verifyFirebaseIdToken,
 } from './firebase-admin.js';
 import { deleteLastOwnerHousehold } from './household-service.js';
+import { removeUidFromHouseholdSavedRecipes } from './household-saved-recipes.js';
 
 const USERS = 'users';
 const HOUSEHOLDS = 'households';
@@ -163,52 +164,6 @@ async function anonymizeAuthoredPublicRecipes(db, uid) {
   return anonymized;
 }
 
-function normalizeSavedByMembers(data = {}) {
-  const members = Array.isArray(data.savedByMembers) ? data.savedByMembers : [];
-  const legacy = data.savedBy ? [{
-    uid: data.savedBy,
-    name: data.savedByName || '냉장GO 사용자',
-    savedAt: data.savedAt || null,
-  }] : [];
-  return [...members, ...legacy].reduce((result, member) => {
-    const memberUid = String(member?.uid || '').trim();
-    if (memberUid && !result.some((item) => item.uid === memberUid)) {
-      result.push({
-        uid: memberUid,
-        name: String(member.name || '냉장GO 사용자'),
-        savedAt: member.savedAt || null,
-      });
-    }
-    return result;
-  }, []);
-}
-
-async function removeUidFromHouseholdSavedRecipes(db, householdId, uid) {
-  const col = db.collection(HOUSEHOLDS).doc(householdId).collection('savedRecipes');
-  const snap = await col.get();
-  let updated = 0;
-  for (const docSnap of snap.docs) {
-    const data = docSnap.data() || {};
-    const members = normalizeSavedByMembers(data);
-    const hasUid = members.some((m) => m.uid === uid) || data.savedBy === uid;
-    if (!hasUid) continue;
-    const remaining = members.filter((m) => m.uid !== uid);
-    if (!remaining.length) {
-      await docSnap.ref.delete();
-    } else {
-      await docSnap.ref.set({
-        recipeId: docSnap.id,
-        savedByMembers: remaining,
-        savedBy: FieldValue.delete(),
-        savedByName: FieldValue.delete(),
-        savedAt: FieldValue.delete(),
-      }, { merge: true });
-    }
-    updated += 1;
-  }
-  return updated;
-}
-
 async function listMemberHouseholdIds(db, uid) {
   const ids = new Set();
   try {
@@ -353,6 +308,25 @@ async function deletePersonalDocuments(db, uid) {
   }
 }
 
+async function deleteProfileStorageFiles(uid) {
+  const targetUid = String(uid || '').trim();
+  if (!targetUid) return { deleted: false };
+  try {
+    const bucketName = process.env.FIREBASE_STORAGE_BUCKET
+      || 'naenggo.firebasestorage.app';
+    const bucket = getFirebaseAdmin().storage().bucket(bucketName);
+    await bucket.deleteFiles({ prefix: `profile-images/${targetUid}/` });
+    return { deleted: true };
+  } catch (err) {
+    // Storage 미사용/파일 없음은 탈퇴를 막지 않는다.
+    console.warn('[account-deletion] profile storage cleanup skipped', {
+      uid: targetUid,
+      message: err?.message || String(err),
+    });
+    return { deleted: false, error: err?.message || String(err) };
+  }
+}
+
 async function deleteAuthUser(uid) {
   try {
     await getFirebaseAdmin().auth().deleteUser(uid);
@@ -429,11 +403,15 @@ export async function deleteAccount({ idToken }) {
     await writeDeletionStatus(db, uid, { phase: 'saved_recipes' });
     let savedCleanup = 0;
     for (const householdId of householdIds) {
-      savedCleanup += await removeUidFromHouseholdSavedRecipes(db, householdId, uid);
+      const result = await removeUidFromHouseholdSavedRecipes(db, householdId, uid);
+      savedCleanup += Number(result?.touched) || 0;
     }
 
     await writeDeletionStatus(db, uid, { phase: 'personal_data' });
     await deletePersonalDocuments(db, uid);
+
+    await writeDeletionStatus(db, uid, { phase: 'profile_storage' });
+    await deleteProfileStorageFiles(uid);
 
     await writeDeletionStatus(db, uid, { phase: 'auth' });
     await deleteAuthUser(uid);

@@ -7,14 +7,31 @@ import { normalizeSocialLinks } from '../lib/social-url.js';
 const router = Router();
 const DEFAULT_DISPLAY_NAME = '냉장GO 사용자';
 
+const AVATAR_TYPES = new Set(['letter', 'upload', 'google', 'initial', 'fridge']);
+
+function normalizeAvatarType(value) {
+  const type = String(value || '').trim();
+  if (type === 'initial' || type === 'fridge') return 'letter';
+  if (type === 'letter' || type === 'upload' || type === 'google') return type;
+  return '';
+}
+
 function pickProfileFields(body = {}) {
+  const avatarRaw = typeof body.avatarType === 'string'
+    ? body.avatarType
+    : (typeof body.profileImageType === 'string' ? body.profileImageType : undefined);
   return {
     displayName: typeof body.displayName === 'string' ? body.displayName.trim().slice(0, 20) : undefined,
     bio: typeof body.bio === 'string' ? body.bio.trim().slice(0, 80) : undefined,
     profileImageUrl: typeof body.profileImageUrl === 'string'
       ? body.profileImageUrl.trim()
       : (typeof body.profileImage === 'string' ? body.profileImage.trim() : undefined),
-    avatarType: typeof body.avatarType === 'string' ? body.avatarType.trim() : undefined,
+    photoURL: typeof body.photoURL === 'string' ? body.photoURL.trim() : undefined,
+    uploadedPhotoURL: typeof body.uploadedPhotoURL === 'string' ? body.uploadedPhotoURL.trim() : undefined,
+    googlePhotoURL: typeof body.googlePhotoURL === 'string' ? body.googlePhotoURL.trim() : undefined,
+    avatarType: typeof avatarRaw === 'string' && AVATAR_TYPES.has(avatarRaw.trim())
+      ? normalizeAvatarType(avatarRaw)
+      : undefined,
     socialLinks: body.socialLinks && typeof body.socialLinks === 'object' ? body.socialLinks : undefined,
   };
 }
@@ -55,22 +72,38 @@ router.post('/user-profile', async (req, res) => {
       : String(existing.profileImageUrl || existing.profileImage || '').trim();
     const avatarType = fields.avatarType !== undefined
       ? fields.avatarType
-      : existing.avatarType;
+      : normalizeAvatarType(existing.avatarType || existing.profileImageType) || undefined;
+    const uploadedPhotoURL = fields.uploadedPhotoURL !== undefined
+      ? fields.uploadedPhotoURL
+      : String(existing.uploadedPhotoURL || '').trim();
+    const googlePhotoURL = fields.googlePhotoURL !== undefined
+      ? fields.googlePhotoURL
+      : String(existing.googlePhotoURL || decoded.picture || '').trim();
 
-    let resolvedImage = profileImageUrl;
-    if (avatarType === 'google' && decoded.picture) {
-      resolvedImage = decoded.picture;
+    let resolvedImage = profileImageUrl || existing.profileImageUrl || existing.profileImage || '';
+    if (avatarType === 'letter') {
+      resolvedImage = '';
+    } else if (avatarType === 'upload') {
+      resolvedImage = uploadedPhotoURL || resolvedImage;
+    } else if (avatarType === 'google') {
+      resolvedImage = googlePhotoURL || decoded.picture || resolvedImage;
     }
 
     const userPayload = {
       displayName: displayName || DEFAULT_DISPLAY_NAME,
       bio,
-      profileImage: profileImageUrl || existing.profileImage || '',
-      profileImageUrl: profileImageUrl || existing.profileImageUrl || existing.profileImage || '',
+      profileImage: resolvedImage || '',
+      profileImageUrl: resolvedImage || '',
+      photoURL: resolvedImage || '',
+      uploadedPhotoURL: uploadedPhotoURL || '',
+      googlePhotoURL: googlePhotoURL || '',
       socialLinks: linksResult.socialLinks,
       updatedAt: FieldValue.serverTimestamp(),
     };
-    if (avatarType) userPayload.avatarType = avatarType;
+    if (avatarType) {
+      userPayload.avatarType = avatarType;
+      userPayload.profileImageType = avatarType;
+    }
     if (!userSnap.exists) {
       userPayload.createdAt = FieldValue.serverTimestamp();
       userPayload.email = decoded.email || '';
@@ -99,9 +132,13 @@ router.post('/user-profile', async (req, res) => {
       profile: {
         displayName: userPayload.displayName,
         bio: userPayload.bio,
-        profileImageUrl,
-        profileImage: profileImageUrl,
+        profileImageUrl: resolvedImage || '',
+        profileImage: resolvedImage || '',
+        photoURL: resolvedImage || '',
+        uploadedPhotoURL: uploadedPhotoURL || '',
+        googlePhotoURL: googlePhotoURL || '',
         avatarType: userPayload.avatarType || null,
+        profileImageType: userPayload.profileImageType || userPayload.avatarType || null,
         socialLinks: linksResult.socialLinks,
       },
     });

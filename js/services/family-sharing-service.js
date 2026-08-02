@@ -45,6 +45,36 @@ function apiUrl(path = '') {
   return `/api/households${path}`;
 }
 
+/** 가족 해제 직전: 현재 uid가 저장한 레시피 ID만 확보 */
+function captureMySavedRecipeIds() {
+  try {
+    const ids = window.AppServices?.SavedRecipeRepository?.getMySavedIds?.();
+    return Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 개인 스코프 메모리만 내 저장분으로 정리.
+ * Firestore 이관은 서버(copy/migrate)가 existingPersonal ∪ householdMine 으로 수행하므로
+ * 여기서 preferences를 덮어쓰지 않는다 (가입 전 개인 저장분 유실 방지).
+ * syncUserData clear 이후 복구용으로 pending에 남긴다.
+ */
+async function adoptPersonalSavedRecipeIds(ids) {
+  const myIds = Array.isArray(ids) ? [...new Set(ids.map(String).filter(Boolean))] : [];
+  window.__pendingPersonalSavedRecipeIds = myIds;
+  // 서버 이관 스냅샷이 오기 전 persist가 불완전 목록으로 덮어쓰지 않도록
+  window.__savedRecipesAwaitingPersonalHydration = true;
+  try {
+    window.AppServices?.SavedRecipeRepository?.replaceIds?.(myIds);
+  } catch (error) {
+    console.warn('[FamilySharing] local savedRecipes reset skipped', {
+      message: error?.message || String(error),
+    });
+  }
+}
+
 function notify(source = 'user-action') {
   const family = activeFamily;
   listeners.forEach((listener) => {
@@ -413,23 +443,28 @@ export const FamilySharingService = {
 
   async leave() {
     const family = this.getActiveFamily();
+    // isActive()가 false가 되기 전에 내 저장분만 캡처 (전체 household _ids 오염 방지)
+    const mySavedIds = captureMySavedRecipeIds();
     invalidateSessionCache();
     await request('/leave', { method: 'POST', body: { householdId: family?.householdId } });
     activeFamily = null;
     sessionValidated = true;
     clearSessionHint();
     clearFamilySetupCache();
+    await adoptPersonalSavedRecipeIds(mySavedIds);
     notify('user-action');
   },
 
   async deleteFamily() {
     const family = this.getActiveFamily();
+    const mySavedIds = captureMySavedRecipeIds();
     invalidateSessionCache();
     await request(`/current?householdId=${encodeURIComponent(family?.householdId || '')}`, { method: 'DELETE' });
     activeFamily = null;
     sessionValidated = true;
     clearSessionHint();
     clearFamilySetupCache();
+    await adoptPersonalSavedRecipeIds(mySavedIds);
     notify('user-action');
   },
 

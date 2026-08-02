@@ -22,12 +22,28 @@ import { auth, db } from '../firebase.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { FamilySharingService } from './family-sharing-service.js';
 import { StartupPerf } from './startup-perf.js';
+import {
+  budgetForMonth,
+  currentMonthKey,
+  normalizeBudgetByMonth,
+  resolveBudgetByMonthFromSettings,
+  toMonthKey,
+} from '../lib/budget-by-month.js';
+
+export {
+  budgetForMonth,
+  currentMonthKey,
+  normalizeBudgetByMonth,
+  resolveBudgetByMonthFromSettings,
+  toMonthKey,
+};
 
 const SUBCOLLECTION = 'settings';
 const DOC_ID = 'preferences';
 
 let snapshotUnsubscribe = null;
 let familyBudgetHydrationAttempted = false;
+let budgetByMonthMigrationAttempted = false;
 
 function settingsDoc(uid) {
   if (!db || !uid) return null;
@@ -48,26 +64,52 @@ function isFamilyScope() {
 
 async function hydrateMissingFamilyBudget(uid, familyPreferenceData = {}) {
   if (familyBudgetHydrationAttempted || !isFamilyScope()) return;
-  if (Object.prototype.hasOwnProperty.call(familyPreferenceData, 'monthlyFoodBudget')) return;
+  const familyResolved = resolveBudgetByMonthFromSettings(familyPreferenceData);
+  const familyHasBudget = Object.keys(familyResolved.budgetByMonth).length > 0
+    || Number(familyPreferenceData.monthlyFoodBudget) > 0;
+  if (familyHasBudget) return;
   familyBudgetHydrationAttempted = true;
 
   try {
     const personalRef = doc(db, 'users', uid, SUBCOLLECTION, DOC_ID);
     const personalSnap = await getDocFromServer(personalRef).catch(() => getDoc(personalRef));
     const personalData = personalSnap.exists() ? personalSnap.data() || {} : {};
+    const personalResolved = resolveBudgetByMonthFromSettings(personalData);
     const personalBudget = Number(personalData.monthlyFoodBudget) || 0;
-    if (personalBudget <= 0 || !isFamilyScope()) return;
+    if (
+      (!Object.keys(personalResolved.budgetByMonth).length && personalBudget <= 0)
+      || !isFamilyScope()
+    ) return;
 
     await setDoc(settingsDoc(uid), sanitizeFirestorePayload({
       activeWeekKey: familyPreferenceData.activeWeekKey || '',
       byWeek: familyPreferenceData.byWeek || {},
       currency: familyPreferenceData.currency || personalData.currency || 'KRW',
       monthlyFoodBudget: personalBudget,
+      budgetByMonth: personalResolved.budgetByMonth,
       updatedAt: serverTimestamp(),
     }, 'FirestoreSettingsService.hydrateMissingFamilyBudget'), { merge: true });
   } catch (error) {
     console.warn('[FirestoreSettingsService] family budget hydration skipped', {
       uid,
+      code: error?.code || '',
+      message: error?.message || String(error),
+    });
+  }
+}
+
+async function persistMigratedBudgetByMonth(uid, budgetByMonth, legacyMonthly) {
+  if (budgetByMonthMigrationAttempted || !uid) return;
+  budgetByMonthMigrationAttempted = true;
+  try {
+    await setDoc(settingsDoc(uid), sanitizeFirestorePayload({
+      budgetByMonth,
+      // 레거시 필드는 유지(현재 월 값으로 맞춤)
+      monthlyFoodBudget: budgetForMonth(budgetByMonth, currentMonthKey()) || Number(legacyMonthly) || 0,
+      updatedAt: serverTimestamp(),
+    }, 'FirestoreSettingsService.migrateBudgetByMonth'), { merge: true });
+  } catch (error) {
+    console.warn('[FirestoreSettingsService] budgetByMonth migration write skipped', {
       code: error?.code || '',
       message: error?.message || String(error),
     });
@@ -95,6 +137,7 @@ function readSettingsData(data = {}) {
   return {
     currency: data.currency,
     monthlyFoodBudget: data.monthlyFoodBudget,
+    budgetByMonth: data.budgetByMonth,
     grocery: { activeWeekKey: data.activeWeekKey, byWeek: data.byWeek },
   };
 }
@@ -102,6 +145,7 @@ function readSettingsData(data = {}) {
 const DEFAULT_SETTINGS = {
   currency: 'KRW',
   monthlyFoodBudget: 0,
+  budgetByMonth: {},
   grocery: {
     activeWeekKey: '',
     byWeek: {},
@@ -392,6 +436,7 @@ export const FirestoreSettingsService = {
   startSync(onSettings, onError) {
     this.stopSync();
     familyBudgetHydrationAttempted = false;
+    budgetByMonthMigrationAttempted = false;
     const uid = auth?.currentUser?.uid;
     if (!uid || !db) {
       onSettings?.({
@@ -428,9 +473,18 @@ export const FirestoreSettingsService = {
         firestorePath: savedPath,
         startMs: savedStartMs,
       });
+      const resolved = resolveBudgetByMonthFromSettings(data);
+      if (resolved.migrated) {
+        void persistMigratedBudgetByMonth(uid, resolved.budgetByMonth, data.monthlyFoodBudget);
+      }
+      const todayKey = currentMonthKey();
       onSettings?.({
         currency: data.currency || DEFAULT_SETTINGS.currency,
-        monthlyFoodBudget: Number(data.monthlyFoodBudget) || 0,
+        budgetByMonth: resolved.budgetByMonth,
+        // 레거시 단일 필드는 "이번 달" 값으로 노출 (달력 UI는 budgetByMonth 우선)
+        monthlyFoodBudget: budgetForMonth(resolved.budgetByMonth, todayKey)
+          || Number(data.monthlyFoodBudget)
+          || 0,
         grocery,
         savedRecipeIds: savedRecipes.map((item) => item.recipeId),
         savedRecipes,
@@ -593,9 +647,29 @@ export const FirestoreSettingsService = {
     return this.saveSettings({ currency });
   },
 
-  async saveMonthlyFoodBudget(monthlyFoodBudget) {
-    return this.saveSettings({ monthlyFoodBudget: Number(monthlyFoodBudget) || 0 });
+  /**
+   * 월 예산 저장 — budgetByMonth[YYYY-MM]만 갱신.
+   * @param {number} monthlyFoodBudget
+   * @param {{ monthKey?: string, budgetByMonth?: Record<string, number> }} [options]
+   */
+  async saveMonthlyFoodBudget(monthlyFoodBudget, options = {}) {
+    const amount = Number(monthlyFoodBudget) || 0;
+    const monthKey = String(options.monthKey || currentMonthKey()).trim();
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) {
+      throw new Error('월 예산 저장에 올바른 YYYY-MM 키가 필요합니다.');
+    }
+    const nextMap = {
+      ...normalizeBudgetByMonth(options.budgetByMonth),
+      [monthKey]: amount,
+    };
+    const todayKey = currentMonthKey();
+    return this.saveSettings({
+      budgetByMonth: nextMap,
+      // 레거시 필드는 실제 이번 달 값만 반영 (다른 달 저장 시 덮어쓰지 않음)
+      monthlyFoodBudget: budgetForMonth(nextMap, todayKey),
+    });
   },
+
 
   async saveSavedRecipeIds(savedRecipeIds) {
     if (!isFamilyScope()) return this.saveSettings({ savedRecipeIds });

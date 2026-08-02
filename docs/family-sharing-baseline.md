@@ -42,6 +42,10 @@ UI는 「가족 구성원 초대하기」에서 **즉시 생성하지 않는다.
 | 활성화 | `POST /api/households/activate` | `activateHousehold` |
 | 현재 가족 조회 | `GET /api/households/current` | `getCurrentHousehold` |
 
+`includeMembers=1` 일 때 members 항목은 `{ uid, role, joinedAt }`에 더해  
+공개 표시용 `profileId` / `username` / `nickname` / `displayName` / `photoURL` / `label` 을  
+`publicProfiles`·`users`에서 보강할 수 있다. (이메일 원문은 반환하지 않음. household 문서 구조는 변경 없음.)
+
 **Rate limit (유지):** `create:user` 3회/60분, `create:ip` 10회/60분.  
 GET `/current`는 create bucket과 **공유하지 않는다.**
 
@@ -78,10 +82,16 @@ DELETE /api/households/members/:uid?householdId=...
 순서 (`deactivateHouseholdMember`):
 
 1. 대상이 active member인지 검증 (owner 본인/owner role 제거 불가)
-2. 공유 데이터 → 개인 경로로 **복사** (household 원본 유지, 개인 기존 문서는 skip)
+2. 공유 데이터 → 개인 경로로 **복사** (household 원본 유지, 개인 기존 문서는 skip).  
+   이때 `savedRecipes`는 **해당 uid가 저장한 recipeId만**  
+   `users/{uid}/settings/preferences.savedRecipeIds` 에 합친다  
+   (다른 구성원 저장분은 개인 목록에 넣지 않음).
 3. 대상 `activeHouseholdId`/`pendingHouseholdId`가 해당 household면 필드 삭제
 4. `members/{uid}`: `active: false`, `removedAt`, `removedBy`, `removedReason`
 5. **household 문서는 수정하지 않음** (status 유지 `active`)
+6. `households/{id}/savedRecipes` 에서 해당 uid의 `savedByMembers` 제거  
+   (남은 저장자 없으면 savedRecipes 문서만 삭제, 공개 레시피 원본 유지).  
+   이어서 비활성 member uid 잔여분 `purgeInactiveSavedRecipeMembers` (idempotent).
 
 ### 1.5 Leave household (일반 member)
 
@@ -107,6 +117,7 @@ DELETE /api/households/current?householdId=...
 조건: `members` 컬렉션 문서가 **정확히 1개**(본인).  
 동작:
 
+- soft-delete 전: owner가 저장한 `savedRecipes`만 개인 `savedRecipeIds`로 이관
 - 활성 invite revoke
 - `households/{id}.status = "deleted"`, `deletedAt`, `deletedBy`
 - owner `members/{uid}` **문서 삭제** (soft-deactivate가 아님)

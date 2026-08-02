@@ -2,7 +2,13 @@
  * Firebase 부트스트랩 — 게스트 우선 + 로그인 시 Firestore 동기화
  */
 import { AuthService } from './services/auth-service.js';
-import { FirestoreUserService, resolveProfileAvatar } from './services/firestore-user-service.js';
+import {
+  FirestoreUserService,
+  normalizeAvatarType,
+  resolveEffectivePhotoURL,
+  resolveProfileAvatar,
+} from './services/firestore-user-service.js';
+import { ProfileImageService } from './services/profile-image-service.js';
 import { FirestoreIngredientService } from './services/firestore-ingredient-service.js';
 import { migrateLegacyPantryToFirestore } from './services/pantry-local-migration.js';
 import { AnalysisQuotaService } from './services/analysis-quota-service.js';
@@ -289,16 +295,32 @@ function updateProfileMenuContent(authUser, profile = null) {
   }
 
   if (picker) {
-    const activeType = resolvedProfile?.avatarType || avatar.avatarType || 'fridge';
+    const activeType = normalizeAvatarType(
+      resolvedProfile?.avatarType || resolvedProfile?.profileImageType || avatar.avatarType,
+      authUser,
+    );
     picker.querySelectorAll('[data-avatar-type]').forEach((btn) => {
-      btn.classList.toggle('profile-avatar-picker__btn--active', btn.dataset.avatarType === activeType);
-      if (btn.dataset.avatarType === 'google') {
+      const type = btn.dataset.avatarType;
+      btn.classList.toggle('profile-avatar-picker__btn--active', type === activeType);
+      if (type === 'google') {
         btn.disabled = !authUser?.photoURL;
+      }
+      if (type === 'upload') {
+        btn.disabled = !ProfileImageService.isAvailable();
       }
     });
   }
 
   updateProfileMenuSyncStatus();
+}
+
+function setProfileAvatarStatus(message = '', { isError = false } = {}) {
+  const el = $('profile-avatar-status');
+  if (!el) return;
+  el.textContent = message || '';
+  el.hidden = !message;
+  el.classList.toggle('profile-menu__sync--loading', Boolean(message) && !isError);
+  el.style.color = isError ? '#c0392b' : '';
 }
 
 function syncProfilePreviewFromInputs() {
@@ -331,13 +353,12 @@ async function loadUserProfile(authUser) {
       const publicProfile = await FirestorePublicProfilesService.getById(authUser.uid);
       documentCount += 1;
       if (!publicProfile) {
-        const avatarType = cachedUserProfile.avatarType;
-        const profileImageUrl = avatarType === 'google' && authUser.photoURL
-          ? authUser.photoURL
-          : String(cachedUserProfile.profileImageUrl || cachedUserProfile.profileImage || '').trim();
+        const profileImageUrl = resolveEffectivePhotoURL(cachedUserProfile, authUser);
         await FirestorePublicProfilesService.syncFromUserProfile(authUser.uid, {
           ...cachedUserProfile,
           profileImageUrl,
+          profileImage: profileImageUrl,
+          photoURL: profileImageUrl,
         });
       }
     }
@@ -589,22 +610,72 @@ async function saveFullProfile() {
   }
 }
 
-async function saveProfileAvatarType(avatarType) {
+async function saveProfileAvatarType(avatarType, extra = {}) {
   const user = resolveAuthUser();
   if (!user?.uid || !avatarType) return;
 
+  const type = normalizeAvatarType(avatarType, user);
   try {
+    const googlePhotoURL = String(user.photoURL || cachedUserProfile?.googlePhotoURL || '').trim();
+    const uploadedPhotoURL = String(
+      extra.uploadedPhotoURL ?? cachedUserProfile?.uploadedPhotoURL ?? '',
+    ).trim();
+    const effective = type === 'letter'
+      ? ''
+      : (type === 'upload' ? uploadedPhotoURL : googlePhotoURL);
+
     cachedUserProfile = await FirestoreUserService.updateProfile(
       user.uid,
-      { avatarType },
-      { photoURL: user.photoURL || '' },
+      {
+        avatarType: type,
+        profileImageType: type,
+        uploadedPhotoURL,
+        googlePhotoURL,
+        profileImageUrl: effective,
+        profileImage: effective,
+        photoURL: effective,
+      },
+      { photoURL: googlePhotoURL },
     );
     renderAuthUi(user);
     updateProfileMenuContent(user, cachedUserProfile);
     window.dispatchEvent(new CustomEvent('public-profile-updated', { detail: { uid: user.uid } }));
+    // 업로드 파일은 교체 시에만 overwrite. letter/google 전환 시 Storage 파일은 보관.
   } catch (err) {
     console.error('[firebase-bootstrap] save avatarType failed:', err);
-    showAuthError({ message: '프로필 이미지 변경에 실패했어요.' });
+    showAuthError({ message: err?.message || '프로필 이미지 변경에 실패했어요.' });
+    throw err;
+  }
+}
+
+async function handleProfileAvatarUpload(file) {
+  const user = resolveAuthUser();
+  if (!user?.uid || !file) return;
+
+  setProfileAvatarStatus('사진을 준비하는 중…');
+  try {
+    const result = await ProfileImageService.uploadAvatar(file, {
+      onProgress: (phase) => {
+        if (phase === 'compressing') setProfileAvatarStatus('사진을 최적화하는 중…');
+        if (phase === 'uploading') setProfileAvatarStatus('업로드 중…');
+      },
+    });
+    // 미리보기 즉시 반영
+    const previewImg = $('profile-menu-avatar-img');
+    if (previewImg && result.downloadURL) {
+      previewImg.src = result.downloadURL;
+      previewImg.hidden = false;
+      const emojiEl = $('profile-menu-avatar-emoji');
+      const initialEl = $('profile-menu-avatar-initial');
+      if (emojiEl) emojiEl.hidden = true;
+      if (initialEl) initialEl.hidden = true;
+    }
+    await saveProfileAvatarType('upload', { uploadedPhotoURL: result.downloadURL });
+    setProfileAvatarStatus('프로필 사진을 저장했어요.');
+    if (typeof window.showToast === 'function') window.showToast('프로필 사진을 저장했어요');
+  } catch (err) {
+    console.error('[firebase-bootstrap] avatar upload failed:', err);
+    setProfileAvatarStatus(err?.message || '사진 업로드에 실패했어요.', { isError: true });
   }
 }
 
@@ -656,6 +727,20 @@ async function syncUserData(user, { force = false } = {}) {
 
   if (typeof window.clearAllUserDataState === 'function') {
     window.clearAllUserDataState();
+  }
+
+  // leave/deleteFamily 직후: clear로 지워진 내 저장 ID를 개인 스코프 메모리에 즉시 복구
+  // (서버 migrate + settings 스냅샷이 이어지기 전까지 다른 구성원 저장분이 다시 섞이지 않게)
+  const pendingSavedIds = window.__pendingPersonalSavedRecipeIds;
+  if (Array.isArray(pendingSavedIds)) {
+    window.__pendingPersonalSavedRecipeIds = null;
+    try {
+      window.AppServices?.SavedRecipeRepository?.replaceIds?.(pendingSavedIds);
+    } catch (error) {
+      console.warn('[firebase-bootstrap] pending personal savedRecipes restore skipped', {
+        message: error?.message || String(error),
+      });
+    }
   }
 
   try {
@@ -1255,6 +1340,33 @@ function setFamilyError(message = '') {
   el.hidden = !message;
 }
 
+function escapeFamilyHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** 구성원 표시명: 아이디 > 닉네임 > displayName > 서버 label > uid 축약 */
+function resolveFamilyMemberLabel(member = {}) {
+  const candidates = [
+    member.profileId,
+    member.username,
+    member.userId,
+    member.nickname,
+    member.displayName,
+    member.label,
+  ];
+  for (const value of candidates) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  const uid = String(member.uid || '').trim();
+  return uid ? uid.slice(0, 8) : '구성원';
+}
+
 function toggleFamilyPanel(id, visible) {
   const el = $(id);
   if (el) el.hidden = !visible;
@@ -1321,13 +1433,32 @@ function renderFamilySharing() {
   $('family-sharing-status').textContent = `3단계 · ${family.role === 'owner' ? '가족 관리자' : '가족 구성원'}`;
   $('family-name-input').value = family.name || '';
   const members = Array.isArray(family.members) ? family.members : [];
+  const selfUid = resolveAuthUser()?.uid;
   $('family-member-list').innerHTML = members.map((member) => {
     const role = member.role === 'owner' ? '관리자' : '구성원';
-    const controls = family.role === 'owner' && member.uid !== resolveAuthUser()?.uid
-      ? `<button type="button" class="btn btn--ghost" data-family-transfer="${member.uid}">관리자 이전</button>
-         <button type="button" class="btn btn--ghost" data-family-remove="${member.uid}">제거</button>`
+    const isSelf = member.uid === selfUid;
+    const label = resolveFamilyMemberLabel(member);
+    const roleLine = isSelf ? `나 · ${role}` : role;
+    const photoURL = String(member.photoURL || '').trim();
+    const avatar = photoURL
+      ? `<img class="family-member-card__avatar-img" src="${escapeFamilyHtml(photoURL)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+      : `<span class="family-member-card__avatar-fallback" aria-hidden="true">👤</span>`;
+    const controls = family.role === 'owner' && !isSelf
+      ? `<div class="family-member-card__actions">
+           <button type="button" class="btn btn--outline family-member-card__btn" data-family-transfer="${escapeFamilyHtml(member.uid)}">관리자 이전</button>
+           <button type="button" class="btn btn--danger family-member-card__btn" data-family-remove="${escapeFamilyHtml(member.uid)}">제거</button>
+         </div>`
       : '';
-    return `<div class="profile-menu__name-row"><span class="profile-menu__email">${member.uid === resolveAuthUser()?.uid ? '나' : esc(member.uid.slice(0, 8))} · ${role}</span>${controls}</div>`;
+    return `<div class="family-member-card">
+      <div class="family-member-card__main">
+        <span class="family-member-card__avatar">${avatar}</span>
+        <div class="family-member-card__text">
+          <span class="family-member-card__name">${escapeFamilyHtml(label)}</span>
+          <span class="family-member-card__role">${escapeFamilyHtml(roleLine)}</span>
+        </div>
+      </div>
+      ${controls}
+    </div>`;
   }).join('') || '<p class="profile-menu__sync">구성원을 불러오는 중이에요.</p>';
   $('family-create-new-invite-btn').hidden = setupPending || family.role !== 'owner';
   $('family-name-input').disabled = setupPending || family.role !== 'owner';
@@ -1605,7 +1736,24 @@ function bindAuthUi() {
   avatarPicker?.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-avatar-type]');
     if (!btn || btn.disabled) return;
-    saveProfileAvatarType(btn.dataset.avatarType);
+    const type = btn.dataset.avatarType;
+    if (type === 'upload') {
+      const fileInput = $('profile-avatar-file');
+      if (!ProfileImageService.isAvailable()) {
+        setProfileAvatarStatus('사진 업로드 저장소가 아직 준비되지 않았어요.', { isError: true });
+        return;
+      }
+      fileInput?.click();
+      return;
+    }
+    setProfileAvatarStatus('');
+    saveProfileAvatarType(type).catch(() => {});
+  });
+  $('profile-avatar-file')?.addEventListener('change', (event) => {
+    const file = event.target?.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    handleProfileAvatarUpload(file);
   });
   nameInput?.addEventListener('input', syncProfilePreviewFromInputs);
   bioInput?.addEventListener('input', syncProfilePreviewFromInputs);
@@ -1685,6 +1833,7 @@ async function bootstrap() {
     FirestoreUserDataSync,
     FirestoreSettingsService: FirestoreUserDataSync.settings,
     FamilySharingService,
+    ProfileImageService,
     AnalysisQuotaService,
     refreshHeaderQuota,
     ensureDeferredUserDataSync,

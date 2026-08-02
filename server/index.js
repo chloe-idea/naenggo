@@ -81,6 +81,14 @@ app.use(express.static(ROOT, {
   },
 }));
 
+// 법률 문서 — 로그인 없이 정적 HTML로 제공 (OAuth 동의 화면 URL용)
+app.get('/privacy', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'privacy.html'));
+});
+app.get('/terms', (_req, res) => {
+  res.sendFile(path.join(ROOT, 'terms.html'));
+});
+
 // 공유된 SPA 레시피 상세 URL도 앱 진입점으로 제공한다.
 app.get('/recipes/:recipeId', (_req, res) => {
   res.sendFile(path.join(ROOT, 'index.html'));

@@ -56,7 +56,7 @@ function mapFirestoreDoc(docSnap, uid) {
     firestoreId: docSnap.id,
     name: data.name || '',
     normalizedName: normalizeIngredientName(data.normalizedName || data.name),
-    quantity: data.quantity || '',
+    quantity: data.quantity == null || data.quantity === '' ? '' : String(data.quantity),
     unit: '',
     expiryDate: data.expiryDate || '',
     recipeId: null,
@@ -71,7 +71,7 @@ function buildFirestorePayload(data) {
   return {
     name: String(data?.name || '').trim(),
     normalizedName: normalizeIngredientName(String(data?.name || '').trim()),
-    quantity: String(data?.quantity ?? ''),
+    quantity: normalizeQuantityForStorage(data?.quantity),
     expiryDate: String(data?.expiryDate ?? ''),
   };
 }
@@ -83,9 +83,45 @@ function normalizedIngredientName(value) {
     : (typeof value === 'string' ? value.trim().toLocaleLowerCase().replace(/\s+/g, ' ') : '');
 }
 
-function ingredientQuantity(value) {
-  const quantity = Number.parseFloat(String(value ?? '').trim());
-  return Number.isFinite(quantity) && quantity >= 0 ? quantity : 1;
+/**
+ * 수량 파싱. 빈 문자열/null/undefined/NaN 은 미입력(null).
+ * 사용자가 입력한 0 이상은 그대로 반환 (1을 기본값으로 쓰지 않음).
+ */
+function parseIngredientQuantity(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+  const raw = String(value).trim();
+  if (!raw || raw.toLowerCase() === 'nan') return null;
+  const quantity = Number.parseFloat(raw);
+  return Number.isFinite(quantity) && quantity >= 0 ? quantity : null;
+}
+
+/** Firestore/앱 공통 미입력 표현: 빈 문자열 (undefined 저장 금지) */
+function normalizeQuantityForStorage(value) {
+  const parsed = parseIngredientQuantity(value);
+  if (parsed != null) {
+    return Number.isInteger(parsed) ? String(parsed) : String(parsed);
+  }
+  if (value == null) return '';
+  const raw = String(value).trim();
+  if (!raw || raw.toLowerCase() === 'nan') return '';
+  // 비숫자 자유 입력(예: 약간)은 사용자가 넣은 값으로 유지
+  return raw;
+}
+
+function mergeQuantityValues(...values) {
+  const numeric = values.map(parseIngredientQuantity).filter((n) => n != null);
+  if (numeric.length) {
+    const total = numeric.reduce((sum, n) => sum + n, 0);
+    return Number.isInteger(total) ? String(total) : String(total);
+  }
+  for (const value of values) {
+    const stored = normalizeQuantityForStorage(value);
+    if (stored) return stored;
+  }
+  return '';
 }
 
 function earlierExpiryDate(...values) {
@@ -101,9 +137,9 @@ function ingredientDocumentId(normalizedName) {
 
 function mergeHouseholdIngredientData(items, payload, normalizedName) {
   const existingItems = items.filter(Boolean);
-  const totalQuantity = existingItems.reduce(
-    (total, item) => total + ingredientQuantity(item.quantity),
-    ingredientQuantity(payload.quantity),
+  const quantity = mergeQuantityValues(
+    ...existingItems.map((item) => item.quantity),
+    payload.quantity,
   );
   const expiryDate = earlierExpiryDate(
     payload.expiryDate,
@@ -115,7 +151,7 @@ function mergeHouseholdIngredientData(items, payload, normalizedName) {
     ...payload,
     name: String(primary.name || payload.name).trim(),
     normalizedName,
-    quantity: String(totalQuantity),
+    quantity,
     expiryDate,
     createdAt: primary.createdAt || payload.createdAt || serverTimestamp(),
     updatedAt: serverTimestamp(),
