@@ -26,11 +26,11 @@ echo "============================================"
 echo "  냉장GO 개발 서버 (API + 정적)"
 echo "============================================"
 echo ""
-echo "  Mac:     http://localhost:${PORT}"
+echo "  Local:   http://localhost:${PORT}"
 if [ -n "$IP" ]; then
-  echo "  iPhone:  http://${IP}:${PORT}"
+  echo "  Network: http://${IP}:${PORT}"
 else
-  echo "  iPhone:  Wi-Fi IP를 찾지 못했습니다."
+  echo "  Network: Wi-Fi IP를 찾지 못했습니다."
   echo "           시스템 설정 → Wi-Fi → IP 주소 확인"
 fi
 echo ""

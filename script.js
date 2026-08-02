@@ -5494,9 +5494,11 @@ function switchView(view) {
 function navigate(view) {
   if (view === 'community') view = 'main';
   if (view !== 'author-profile') state.authorProfileId = null;
+  // 탭 전환 직전 검색 키보드 모드를 동기적으로 해제 (탭바 클릭 가로채기 방지)
+  setHomeSearchKeyboardActive(false);
   switchView(view);
   closeAllModals();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'auto' });
 }
 
 function openProfileManagePage() {
@@ -5556,8 +5558,8 @@ function renderCurrentView() {
 
 function refreshAll() {
   HomeBriefingService.invalidate();
+  // 현재 뷰만 다시 그린다. 숨겨진 홈을 매번 재계산하면 탭 전환이 점점 느려진다.
   renderCurrentView();
-  if (state.view !== 'main') renderHome();
 }
 
 // ===== Render: Pantry Chips =====
@@ -6984,6 +6986,7 @@ function initHomeSearchDock() {
   });
 
   document.addEventListener('pointerdown', (e) => {
+    if (e.target.closest?.('.tab-bar')) return;
     if (state.view !== 'main' || !homeSearchDockExpanded) return;
     if (dom.homeSearchFloat?.contains(e.target)) return;
     dom.menuSearchInput?.blur();
@@ -7022,7 +7025,10 @@ function renderHomeRecommendRail(homeRecipes) {
   return railResults;
 }
 
+let homeRenderGeneration = 0;
+
 function renderHome() {
+  const renderGen = ++homeRenderGeneration;
   renderHomeFilters();
   renderHomeBriefing();
   const names = RecommendationService.getPantryNames();
@@ -7031,8 +7037,6 @@ function renderHome() {
   const homeRecipes = RecipeRepository.getHomeRecipes();
 
   dom.emptyState.hidden = names.length > 0 || hasSearchMode || homeRecipes.length > 0;
-  dom.noResults.hidden = true;
-  dom.recipeList.innerHTML = '';
   if (dom.homeTodayHero) {
     dom.homeTodayHero.hidden = true;
     dom.homeTodayHero.innerHTML = '';
@@ -7060,16 +7064,17 @@ function renderHome() {
       documentCount: results.length,
     });
   }
+  if (renderGen !== homeRenderGeneration) return;
+  // 계산 완료 후에만 DOM을 교체 — 미리 비우면 탭 전환 시 빈 화면이 길어짐
   dom.noResults.hidden = results.length > 0;
   dom.resultsCount.textContent = results.length ? `${results.length}개` : '';
-
   dom.recipeList.innerHTML = results.map((r) => homeRecipeCardHTML(r)).join('');
   bindRecipeCards(dom.recipeList, results);
   updateHomeRecipesSubtitle();
   syncAuthGateUi();
 
   hydrateAuthorProfiles(results.map((r) => r.recipe)).then(() => {
-    if (state.view !== 'main') return;
+    if (renderGen !== homeRenderGeneration || state.view !== 'main') return;
     const cards = dom.recipeList?.querySelectorAll('.recipe-card');
     if (!cards?.length) return;
     results.forEach((r, i) => {
@@ -11161,7 +11166,31 @@ function init() {
   window.addEventListener('resize', scheduleFitMobileHomeCardMissingStatuses);
   window.addEventListener('resize', schedulePantryChipsRelayout);
 
-  dom.tabItems.forEach((tab) => { tab.onclick = () => navigate(tab.dataset.view); });
+  dom.tabItems.forEach((tab) => {
+    // 검색 input 포커스 중에는 첫 탭이 blur만 되고 click이 무시되는 경우가 있어
+    // pointerup에서 즉시 전환하고, 이어지는 click만 한 번 무시한다.
+    let ignoreNextClick = false;
+    const goTab = () => {
+      setHomeSearchKeyboardActive(false);
+      const active = document.activeElement;
+      if (active && active !== tab && typeof active.blur === 'function') active.blur();
+      navigate(tab.dataset.view);
+    };
+    tab.onclick = null;
+    tab.addEventListener('pointerup', (e) => {
+      if (e.button != null && e.button !== 0) return;
+      ignoreNextClick = true;
+      goTab();
+    });
+    tab.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (ignoreNextClick) {
+        ignoreNextClick = false;
+        return;
+      }
+      goTab();
+    });
+  });
   dom.authorProfileBack?.addEventListener('click', () => {
     navigate(state.authorProfileReturnView || 'main');
   });

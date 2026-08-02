@@ -1,4 +1,5 @@
 import express from 'express';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -21,6 +22,33 @@ dotenv.config({ path: path.join(ROOT, '.env') });
 
 const app = express();
 const PORT = Number(process.env.PORT) || 8765;
+/** 같은 Wi-Fi의 휴대폰 접속을 위해 모든 인터페이스에 바인딩 (localhost 전용 아님) */
+const HOST = '0.0.0.0';
+
+function getLanIPv4() {
+  try {
+    const nets = os.networkInterfaces();
+    for (const entries of Object.values(nets)) {
+      for (const net of entries || []) {
+        const family = net.family === 'IPv4' || net.family === 4;
+        if (!family || net.internal) continue;
+        const address = String(net.address || '');
+        if (/^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(address)) {
+          return address;
+        }
+      }
+    }
+    for (const entries of Object.values(nets)) {
+      for (const net of entries || []) {
+        const family = net.family === 'IPv4' || net.family === 4;
+        if (family && !net.internal && net.address) return net.address;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 app.use(express.json({ limit: '32kb' }));
 
@@ -58,7 +86,7 @@ app.get('/recipes/:recipeId', (_req, res) => {
   res.sendFile(path.join(ROOT, 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, HOST, () => {
   const openAiInfo = describeOpenAiKeyConfig();
   const firebaseStatus = getFirebaseAdminStatus();
   const firebaseLabel = {
@@ -68,11 +96,18 @@ app.listen(PORT, '0.0.0.0', () => {
     'invalid (base64)': '⚠️  Base64 형식 오류',
     'not set': '⚠️  FIREBASE_SERVICE_ACCOUNT_* 미설정',
   }[firebaseStatus] || firebaseStatus;
+  const lanIp = getLanIPv4();
   console.log('');
   console.log('============================================');
   console.log('  냉장GO 서버 (정적 + API)');
   console.log('============================================');
-  console.log(`  http://localhost:${PORT}`);
+  console.log(`  Local:   http://localhost:${PORT}`);
+  if (lanIp) {
+    console.log(`  Network: http://${lanIp}:${PORT}`);
+  } else {
+    console.log('  Network: (로컬 IP를 찾지 못했습니다 — Wi-Fi IP를 확인하세요)');
+  }
+  console.log(`  Listen:  ${HOST}:${PORT}`);
   console.log(`  API: POST /api/extract-video-recipe  (통합 — 권장)`);
   console.log(`       POST /api/extract-youtube-recipe (레거시 alias)`);
   console.log(`       POST /api/extract-instagram-recipe`);
