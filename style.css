@@ -1641,20 +1641,16 @@ body.home-search-keyboard-active .home-search-dock {
   margin-top: 0;
 }
 
-.home-tags--rail {
+/* .tags 의 flex-wrap:wrap 보다 우선 — 홈 보유 재료는 항상 1줄 */
+.tags.home-tags.home-tags--rail {
   display: flex;
   flex-wrap: nowrap;
-  gap: 0.5rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  gap: 0.5rem; /* 8px — 여유 있게, 한 줄 개수는 최대한 유지 */
+  overflow: hidden; /* 두 번째 줄·가로 스크롤 방지 */
   padding-bottom: 0.125rem;
   max-width: 100%;
-}
-
-.home-tags--rail::-webkit-scrollbar {
-  display: none;
+  width: 100%;
+  margin-top: 0;
 }
 
 .home-tags--rail .tag.tag--home-rail,
@@ -1662,14 +1658,17 @@ body.home-search-keyboard-active .home-search-dock {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  height: 2.375rem; /* 38px */
-  padding: 0 0.75rem;
+  gap: 0.375rem; /* 6px */
+  min-height: 2rem; /* 32px — 높이 유지 */
+  height: 2rem;
+  padding: 0 0.4375rem; /* 7px — was 5px, 좌우 +2px */
   border-radius: 9999px;
   border: 1px solid #ececec;
   background: #fff;
   font-size: 0.8125rem;
   white-space: nowrap;
+  /* .home-tags .tag 그림자보다 약하게 */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .home-tags--rail .tag.tag--home-rail .tag__emoji {
@@ -1794,7 +1793,7 @@ body.home-search-keyboard-active .home-search-dock {
   flex-direction: column;
   align-items: flex-start;
   gap: 0.25rem;
-  min-height: 7.75rem;
+  min-height: 6.5rem; /* 아이콘·제목 인라인으로 세로 공간 절약 */
   height: 100%;
   width: 100%;
   margin: 0;
@@ -1825,13 +1824,21 @@ body.home-search-keyboard-active .home-search-dock {
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
+.home-briefing__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
 .home-briefing__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 2.25rem;
   height: 2.25rem;
-  margin-bottom: 0.125rem;
   border-radius: 0.75rem;
   color: #5c6470;
   line-height: 1;
@@ -1864,6 +1871,8 @@ body.home-search-keyboard-active .home-search-dock {
 
 .home-briefing__title {
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.35;
@@ -1876,7 +1885,7 @@ body.home-search-keyboard-active .home-search-dock {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.2rem;
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
 }
 
 .home-briefing__value-num {
@@ -1973,7 +1982,7 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .home-briefing__card--empty {
-  min-height: 7.75rem;
+  min-height: 6.5rem;
 }
 
 .home-recommend {
@@ -2617,6 +2626,11 @@ body.home-search-keyboard-active .home-search-dock {
 
 #view-main .home-section-header {
   margin-bottom: 0.6875rem;
+}
+
+/* 보유 재료 제목 ↔ pill 목록만 +4px */
+#view-main .home-pantry-section .home-section-header {
+  margin-bottom: 0.9375rem; /* was 0.6875rem (11px) → 15px */
 }
 
 #view-main .home-briefing .section__header {
@@ -8722,7 +8736,7 @@ body.home-search-keyboard-active .home-search-dock {
 
 .grocery-item--checked {
   opacity: 0.45;
-  order: 1;
+  /* order 로 행을 아래로 보내지 않음 — 체크는 시각만 변경 */
 }
 
 .grocery-item__check {
