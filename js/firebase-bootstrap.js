@@ -1463,8 +1463,10 @@ function renderFamilySharing() {
   $('family-create-new-invite-btn').hidden = setupPending || family.role !== 'owner';
   $('family-name-input').disabled = setupPending || family.role !== 'owner';
   $('family-name-save-btn').hidden = setupPending || family.role !== 'owner';
-  $('family-leave-btn').hidden = setupPending;
-  $('family-delete-btn').hidden = setupPending || family.role !== 'owner' || members.length !== 1;
+  const soleOwner = family.role === 'owner' && members.length === 1;
+  // 마지막 관리자: 나가기 대신 삭제만 노출 (leave API도 삭제로 위임)
+  $('family-leave-btn').hidden = setupPending || soleOwner;
+  $('family-delete-btn').hidden = setupPending || !soleOwner;
 }
 
 async function openFamilySharing() {
@@ -1592,6 +1594,11 @@ function bindFamilySharingUi() {
   });
   $('family-leave-btn')?.addEventListener('click', async () => {
     try {
+      const family = FamilySharingService.getActiveFamily();
+      const members = Array.isArray(family?.members) ? family.members : [];
+      if (family?.role === 'owner' && members.length === 1) {
+        if (!window.confirm('혼자 남은 가족 공유를 삭제하고 개인 모드로 돌아갈까요? 개인 원본 데이터는 유지됩니다.')) return;
+      }
       await FamilySharingService.leave();
       clearPendingFamilyInviteCache();
       pendingFamilyMigration = false;
@@ -1604,8 +1611,16 @@ function bindFamilySharingUi() {
       await FamilySharingService.deleteFamily();
       clearPendingFamilyInviteCache();
       pendingFamilyMigration = false;
+      familyWizardStep = 'start';
       renderFamilySharing();
-    } catch (err) { setFamilyError(err.message); }
+    } catch (err) {
+      console.error('[FamilySharing] delete button failed', {
+        code: err?.code || '',
+        status: err?.status || 0,
+        message: err?.message || String(err),
+      });
+      setFamilyError(err.message);
+    }
   });
   $('family-copy-data-btn')?.addEventListener('click', async () => {
     if (familyMigrationInFlight) return;

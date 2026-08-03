@@ -99,9 +99,10 @@ DELETE /api/households/members/:uid?householdId=...
 POST /api/households/leave  { householdId }
 ```
 
-- owner는 leave 불가 → 소유권 이전 또는 가족 삭제
+- owner + 활성 구성원 2명 이상 → leave 불가 (소유권 이전 필요)
+- owner + 활성 구성원 1명(본인) → leave는 **가족 삭제**(`deleteLastOwnerHousehold`)로 위임
 - member는 remove와 동일하게 soft-deactivate (`removedReason: "left"`)
-- household는 **유지**
+- member leave 시 household는 **유지**
 
 ### 1.6 마지막 구성원 삭제 / household soft delete
 
@@ -114,7 +115,8 @@ DELETE /api/households/current?householdId=...
 → deleteLastOwnerHousehold
 ```
 
-조건: `members` 컬렉션 문서가 **정확히 1개**(본인).  
+조건: **활성** member(`active !== false`)가 **정확히 1명**(본인 owner).  
+leave/remove로 soft-deactivate된 비활성 member 문서가 남아 있어도 삭제 가능해야 한다.  
 동작:
 
 - soft-delete 전: owner가 저장한 `savedRecipes`만 개인 `savedRecipeIds`로 이관
@@ -123,7 +125,7 @@ DELETE /api/households/current?householdId=...
 - owner `members/{uid}` **문서 삭제** (soft-deactivate가 아님)
 - `users/{uid}` household setup 필드 clear (`activeHouseholdId` 등)
 
-> Invariant 문구의 “마지막 member leave → deleted”는 이 앱에서는 **마지막 owner의 가족 삭제(delete)** 경로로 구현되어 있다. owner는 leave API를 쓸 수 없다.
+> Invariant 문구의 “마지막 member leave → deleted”는 이 앱에서는 **마지막 owner의 가족 삭제(delete)** 경로로 구현되어 있다. 단독 owner의 leave API도 동일 삭제로 위임된다.
 
 ### 1.7 Soft delete (운영/중복 정리)
 

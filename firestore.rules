@@ -216,11 +216,12 @@ service cloud.firestore {
       match /grocery/preferences {
         allow read: if isHouseholdMember(householdId);
         allow create, update: if isHouseholdMember(householdId)
-          && request.resource.data.keys().hasOnly(['activeWeekKey', 'byWeek', 'currency', 'monthlyFoodBudget', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['activeWeekKey', 'byWeek', 'currency', 'monthlyFoodBudget', 'budgetByMonth', 'updatedAt'])
           && request.resource.data.activeWeekKey is string
           && request.resource.data.byWeek is map
           && (!('currency' in request.resource.data) || request.resource.data.currency is string)
           && (!('monthlyFoodBudget' in request.resource.data) || (request.resource.data.monthlyFoodBudget is number && request.resource.data.monthlyFoodBudget >= 0))
+          && (!('budgetByMonth' in request.resource.data) || request.resource.data.budgetByMonth is map)
           && request.resource.data.updatedAt is timestamp;
         allow delete: if isHouseholdOwner(householdId);
       }

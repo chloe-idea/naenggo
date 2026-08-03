@@ -1,5 +1,6 @@
 /** YYYY-MM 월 예산 헬퍼 (순수 함수 — 클라이언트/테스트 공유) */
 
+/** @param {number} year @param {number} monthIndex0 0=1월 … 11=12월 (Date#getMonth) */
 export function toMonthKey(year, monthIndex0) {
   const y = Number(year);
   const m = Number(monthIndex0) + 1;
@@ -7,8 +8,15 @@ export function toMonthKey(year, monthIndex0) {
   return `${y}-${String(m).padStart(2, '0')}`;
 }
 
-export function currentMonthKey(date = new Date()) {
+/** 로컬 달력 기준 YYYY-MM (UTC 변환 사용 금지) */
+export function getMonthKey(date = new Date()) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   return toMonthKey(date.getFullYear(), date.getMonth());
+}
+
+/** @deprecated 이름 호환 — getMonthKey와 동일 */
+export function currentMonthKey(date = new Date()) {
+  return getMonthKey(date);
 }
 
 export function normalizeBudgetByMonth(raw) {
@@ -27,27 +35,45 @@ export function normalizeBudgetByMonth(raw) {
 }
 
 /**
- * 레거시 monthlyFoodBudget → budgetByMonth[현재월] 1회 투영.
- * 기존 monthlyFoodBudget 필드는 삭제하지 않는다.
+ * 레거시 monthlyFoodBudget → 서버 마이그레이션용 페이로드만 계산.
+ * 클라이언트 state에 가짜 월 키를 주입하지 않는다 (migrated여도 budgetByMonth는 원본 map).
  */
-export function resolveBudgetByMonthFromSettings(data = {}, fallbackMonthKey = currentMonthKey()) {
+export function resolveBudgetByMonthFromSettings(data = {}, fallbackMonthKey = getMonthKey()) {
   const map = normalizeBudgetByMonth(data.budgetByMonth);
-  const hasMap = Object.keys(map).length > 0;
-  if (hasMap) {
-    return { budgetByMonth: map, migrated: false };
+  if (Object.keys(map).length > 0) {
+    return { budgetByMonth: map, migrated: false, migrationMap: null };
   }
   const legacy = Number(data.monthlyFoodBudget);
   if (Number.isFinite(legacy) && legacy > 0 && fallbackMonthKey) {
     return {
-      budgetByMonth: { [fallbackMonthKey]: legacy },
+      budgetByMonth: map,
       migrated: true,
+      migrationMap: { [fallbackMonthKey]: legacy },
     };
   }
-  return { budgetByMonth: map, migrated: false };
+  return { budgetByMonth: map, migrated: false, migrationMap: null };
 }
 
-export function budgetForMonth(budgetByMonth, monthKey) {
+/**
+ * @param {Record<string, number>} budgetByMonth
+ * @param {string} monthKey
+ * @param {{ legacyMonthly?: number, legacyOnlyForMonthKey?: string }} [options]
+ *   legacy는 legacyOnlyForMonthKey(기본: 오늘 월)에만 적용. 다른 달에 복사하지 않음.
+ */
+export function budgetForMonth(budgetByMonth, monthKey, options = {}) {
   if (!monthKey) return 0;
-  const amount = Number(budgetByMonth?.[monthKey]);
-  return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+  if (
+    budgetByMonth
+    && typeof budgetByMonth === 'object'
+    && Object.prototype.hasOwnProperty.call(budgetByMonth, monthKey)
+  ) {
+    const amount = Number(budgetByMonth[monthKey]);
+    return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+  }
+  const legacyMonth = options.legacyOnlyForMonthKey || getMonthKey();
+  const legacy = Number(options.legacyMonthly);
+  if (monthKey === legacyMonth && Number.isFinite(legacy) && legacy > 0) {
+    return legacy;
+  }
+  return 0;
 }

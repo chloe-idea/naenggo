@@ -1927,15 +1927,31 @@ export async function leaveHousehold({ idToken, householdId }) {
   const db = getFirestoreAdmin();
   const id = validateHouseholdId(householdId);
 
+  let soleOwnerDelete = false;
   await db.runTransaction(async (tx) => {
     const member = await tx.get(memberRef(db, id, user.uid));
     if (!member.exists || !isMemberActiveDoc(member.data())) {
       throw new HouseholdError('MEMBER_NOT_FOUND', '가족 구성원을 찾을 수 없습니다.', 404);
     }
     if (member.data()?.role === ROLE_OWNER) {
+      // 마지막 활성 관리자만 남은 경우 leave → 가족 삭제 플로우
+      const members = await tx.get(householdRef(db, id).collection('members'));
+      const activeMembers = members.docs.filter((doc) => isMemberActiveDoc(doc.data()));
+      if (activeMembers.length === 1 && activeMembers[0].id === user.uid) {
+        soleOwnerDelete = true;
+        return;
+      }
       throw new HouseholdError('OWNER_TRANSFER_REQUIRED', 'owner는 소유권을 이전한 후 탈퇴할 수 있습니다.', 409);
     }
   });
+
+  if (soleOwnerDelete) {
+    console.info('[household] leaveHousehold → deleteLastOwnerHousehold (sole active owner)', {
+      householdId: id,
+      uid: user.uid,
+    });
+    return deleteLastOwnerHousehold({ idToken, householdId: id });
+  }
 
   await deactivateHouseholdMember(db, {
     householdId: id,
@@ -1950,33 +1966,87 @@ export async function deleteLastOwnerHousehold({ idToken, householdId }) {
   const db = getFirestoreAdmin();
   const id = validateHouseholdId(householdId);
 
+  console.info('[household] deleteLastOwnerHousehold start', {
+    householdId: id,
+    uid: user.uid,
+  });
+
   // soft-delete 전에 owner 본인 저장분만 개인 preferences로 이관
   // (다른 구성원 저장 참조가 개인 savedRecipeIds에 섞이지 않도록 uid 필터)
-  await migrateUidSavedRecipesToPersonal(db, id, user.uid);
-
-  await db.runTransaction(async (tx) => {
-    await assertOwner(tx, db, id, user.uid);
-    const members = await tx.get(householdRef(db, id).collection('members'));
-    if (members.size !== 1) {
-      throw new HouseholdError('MEMBERS_REMAIN', '다른 멤버를 제거하거나 소유권을 이전해 주세요.', 409);
-    }
-    const activeInvites = await tx.get(db.collection(INVITES).where('householdId', '==', id).where('active', '==', true));
-    activeInvites.docs.forEach((doc) => tx.update(doc.ref, {
-      active: false,
-      revokedAt: FieldValue.serverTimestamp(),
-      revokedBy: user.uid,
-    }));
-    tx.update(householdRef(db, id), {
-      status: 'deleted',
-      deletedAt: FieldValue.serverTimestamp(),
-      deletedBy: user.uid,
-      updatedAt: FieldValue.serverTimestamp(),
+  try {
+    await migrateUidSavedRecipesToPersonal(db, id, user.uid);
+    console.info('[household] deleteLastOwnerHousehold stage=migrateSavedRecipes ok', {
+      householdId: id,
     });
-    tx.delete(memberRef(db, id, user.uid));
-    tx.set(db.collection(USERS).doc(user.uid), {
-      ...clearHouseholdSetupPayload(),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
+  } catch (error) {
+    console.error('[household] deleteLastOwnerHousehold stage=migrateSavedRecipes failed', {
+      householdId: id,
+      message: error?.message || String(error),
+      code: error?.code || '',
+    });
+    throw error;
+  }
+
+  try {
+    await db.runTransaction(async (tx) => {
+      await assertOwner(tx, db, id, user.uid);
+
+      const members = await tx.get(householdRef(db, id).collection('members'));
+      // leave/remove는 members 문서를 soft-deactivate만 하므로 size가 1보다 클 수 있다.
+      // 삭제 조건은 "활성 구성원 정확히 1명(본인 owner)"이어야 한다.
+      const activeMembers = members.docs.filter((doc) => isMemberActiveDoc(doc.data()));
+      console.info('[household] deleteLastOwnerHousehold stage=memberCheck', {
+        householdId: id,
+        totalMemberDocs: members.size,
+        activeMemberCount: activeMembers.length,
+        soleOwner: activeMembers.length === 1 && activeMembers[0]?.id === user.uid,
+      });
+      if (activeMembers.length !== 1 || activeMembers[0].id !== user.uid) {
+        throw new HouseholdError(
+          'MEMBERS_REMAIN',
+          '다른 활성 구성원이 남아 있습니다. 구성원을 제거하거나 소유권을 이전해 주세요.',
+          409,
+        );
+      }
+
+      const activeInvites = await tx.get(
+        db.collection(INVITES).where('householdId', '==', id).where('active', '==', true),
+      );
+      activeInvites.docs.forEach((doc) => tx.update(doc.ref, {
+        active: false,
+        revokedAt: FieldValue.serverTimestamp(),
+        revokedBy: user.uid,
+      }));
+      console.info('[household] deleteLastOwnerHousehold stage=revokeInvites', {
+        householdId: id,
+        revokedCount: activeInvites.size,
+      });
+
+      tx.update(householdRef(db, id), {
+        status: 'deleted',
+        deletedAt: FieldValue.serverTimestamp(),
+        deletedBy: user.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      tx.delete(memberRef(db, id, user.uid));
+      tx.set(db.collection(USERS).doc(user.uid), {
+        ...clearHouseholdSetupPayload(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+  } catch (error) {
+    console.error('[household] deleteLastOwnerHousehold stage=transaction failed', {
+      householdId: id,
+      message: error?.message || String(error),
+      code: error?.code || '',
+    });
+    throw error;
+  }
+
+  console.info('[household] deleteLastOwnerHousehold completed', {
+    householdId: id,
+    clearedUserPointers: true,
+    householdStatus: 'deleted',
   });
 }
 

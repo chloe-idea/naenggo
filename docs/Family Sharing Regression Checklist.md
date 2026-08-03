@@ -68,7 +68,9 @@
 - [ ] Owner만 남은 상태에서 Member leave 후 Owner current는 **정상** (같은 household).
 
 - [ ] **마지막 member leave / 가족 삭제**  
-  Owner는 leave 불가. 「가족 삭제」(`DELETE /api/households/current`)만 가능.  
+  활성 구성원이 owner 1명만일 때 「가족 삭제」(`DELETE /api/households/current`) 성공.  
+  (비활성 member 문서가 남아 있어도 삭제 가능해야 함.) 삭제 후 개인 모드·「가족 만들기」 UI.  
+  단독 owner가 leave를 호출해도 동일 삭제로 처리.  
   조건: 활성 멤버가 사실상 본인뿐(UI에서 삭제 버튼 노출).
 
 - [ ] **household deleted**  

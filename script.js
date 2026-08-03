@@ -2440,7 +2440,8 @@ function ensureDeferredUserDataForView(view) {
   if (view === 'planner') {
     ensure(['mealPlans', 'settings', 'shopping']);
   } else if (view === 'calendar') {
-    ensure(['mealCalendar', 'shopping']);
+    // 월 예산(budgetByMonth)은 settings/preferences — 달력에서도 settings 구독 필요
+    ensure(['mealCalendar', 'shopping', 'settings']);
   } else if (view === 'profile') {
     ensure(['settings']);
     (window.FirebaseServices?.ensureAdminSync || window.__ensureAdminSync)?.();
@@ -3786,7 +3787,10 @@ function clearAllUserDataState() {
   MealPlanRepository.clearSession();
   GroceryRepository.clearSession();
   state.monthlyFoodBudget = 0;
+  state.legacyMonthlyFoodBudget = 0;
   state.budgetByMonth = {};
+  budgetSettingsHydrated = false;
+  budgetLocalMutatedAt = 0;
   mealPlanLocalMutatedAt = 0;
   groceryLocalMutatedAt = 0;
   resetGroceryFirestoreReady();
@@ -4030,6 +4034,10 @@ function hasMealPlanLocalData() {
 /** 로컬 장보기 금액 입력 직후 Firestore snapshot이 덮어쓰거나 리스트가 리렌더되는 것을 방지 */
 let groceryLocalMutatedAt = 0;
 let groceryPersistTimer = null;
+/** 월 예산 로컬 수정 직후 원격 스냅샷이 이전 값으로 되돌리는 것 방지 */
+let budgetLocalMutatedAt = 0;
+/** settings 스냅샷을 한 번이라도 받은 뒤 true — 그 전엔 이전 달 값을 다음 달처럼 보여주지 않음 */
+let budgetSettingsHydrated = false;
 /** 로그인 사용자: settings 스냅샷을 한 번 적용하기 전에는 빈 state를 Firestore에 쓰지 않음 */
 let groceryFirestoreReady = false;
 /** Firestore에서 장보기를 복원한 시각 — 직후 빈 DOM flush/blur로 덮어쓰기 방지 */
@@ -4151,10 +4159,23 @@ async function persistCurrencySetting() {
   await getFirestoreUserDataSync().settings.saveCurrency(state.currency);
 }
 
+/** 로컬 기준 YYYY-MM — Date#getMonth는 0-based. UTC 변환 금지. */
+function getMonthKey(date = new Date()) {
+  if (date instanceof Date && !Number.isNaN(date.getTime())) {
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    return `${y}-${String(m).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+/** 식사달력에 보이는 연·월 → YYYY-MM (저장/조회 공통) */
 function getCalendarMonthKey() {
   const y = Number(state.calendarYear);
-  const m = Number(state.calendarMonth) + 1;
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return '';
+  const monthIndex0 = Number(state.calendarMonth);
+  if (!Number.isFinite(y) || !Number.isFinite(monthIndex0)) return '';
+  const m = monthIndex0 + 1;
+  if (m < 1 || m > 12) return '';
   return `${y}-${String(m).padStart(2, '0')}`;
 }
 
@@ -4164,6 +4185,10 @@ function getMonthlyBudgetForMonthKey(monthKey) {
     const amount = Number(state.budgetByMonth[key]);
     return Number.isFinite(amount) && amount >= 0 ? amount : 0;
   }
+  // 레거시는 "오늘 월"에만 — 달력으로 다른 달을 볼 때 옮기지 않음
+  const todayKey = getMonthKey();
+  const legacy = Number(state.legacyMonthlyFoodBudget) || 0;
+  if (key && key === todayKey && legacy > 0) return legacy;
   return 0;
 }
 
@@ -4174,18 +4199,23 @@ function syncMonthlyBudgetStateForCalendar() {
   return state.monthlyFoodBudget;
 }
 
-async function persistMonthlyFoodBudget() {
+/**
+ * @param {number} amount
+ * @param {string} monthKey 커밋 시점에 캡처한 YYYY-MM (이후 월 이동과 무관)
+ */
+async function persistMonthlyFoodBudget(amount, monthKey) {
   if (!isLoggedInAppUser()) return;
-  const monthKey = getCalendarMonthKey();
-  const amount = Number(state.monthlyFoodBudget) || 0;
-  state.budgetByMonth = {
-    ...(state.budgetByMonth || {}),
-    [monthKey]: amount,
-  };
-  await getFirestoreUserDataSync().settings.saveMonthlyFoodBudget(amount, {
-    monthKey,
-    budgetByMonth: state.budgetByMonth,
-  });
+  const key = String(monthKey || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(key)) {
+    throw new Error('월 예산 저장에 월 정보가 필요합니다.');
+  }
+  const value = Number(amount) || 0;
+  (window.FirebaseServices?.ensureDeferredUserDataSync || window.__ensureDeferredUserDataSync)?.(['settings']);
+  const settings = getFirestoreUserDataSync()?.settings;
+  if (!settings?.saveMonthlyFoodBudget) {
+    throw new Error('설정 저장 서비스를 사용할 수 없습니다.');
+  }
+  await settings.saveMonthlyFoodBudget(value, { monthKey: key });
 }
 
 async function persistSavedRecipeIds() {
@@ -4897,6 +4927,8 @@ const state = {
     ? StorageAdapter.get(CONFIG.STORAGE.CURRENCY, DEFAULT_CURRENCY)
     : DEFAULT_CURRENCY,
   monthlyFoodBudget: 0,
+  /** 서버 레거시 단일 월예산 — 오늘 월 UI에만 폴백 */
+  legacyMonthlyFoodBudget: 0,
   /** @type {Record<string, number>} YYYY-MM → 월 예산 */
   budgetByMonth: {},
   shoppingRecipePicker: null,
@@ -7702,10 +7734,11 @@ function buildBudgetProgressHTML(primaryTotal, budget, currencyCode) {
     </div>`;
 }
 
-function buildBudgetFooterHTML(primaryTotal, budget, currencyCode) {
-  const budgetValue = Number(budget) || 0;
+function buildBudgetFooterHTML(primaryTotal, budget, currencyCode, monthKey) {
+  const budgetLoading = isLoggedInAppUser() && !budgetSettingsHydrated;
+  const budgetValue = budgetLoading ? 0 : (Number(budget) || 0);
   let badgeHTML = '<span class="calendar-spend-card__footer-spacer" aria-hidden="true"></span>';
-  if (budgetValue > 0) {
+  if (!budgetLoading && budgetValue > 0) {
     const isOver = primaryTotal > budgetValue;
     const deltaAmount = isOver
       ? formatMoney(primaryTotal - budgetValue, currencyCode)
@@ -7717,6 +7750,12 @@ function buildBudgetFooterHTML(primaryTotal, budget, currencyCode) {
     badgeHTML = `<span class="calendar-spend-card__delta-text ${deltaClass}">${esc(deltaLabel)}</span>`;
   }
 
+  const monthAttr = monthKey ? ` data-month-key="${esc(monthKey)}"` : '';
+  const loadingAttr = budgetLoading ? ' disabled aria-busy="true"' : '';
+  const placeholder = budgetLoading
+    ? '불러오는 중…'
+    : currencyAmountPlaceholder('monthly', currencyCode);
+
   return `
     <div class="calendar-spend-card__footer">
       ${badgeHTML}
@@ -7724,8 +7763,9 @@ function buildBudgetFooterHTML(primaryTotal, budget, currencyCode) {
         <label for="monthly-food-budget" class="calendar-spend-card__budget-label">월 예산</label>
         <input type="number" id="monthly-food-budget" class="calendar-spend-card__budget-input"
           min="0" step="${esc(currencyAmountInputStep(currencyCode))}" inputmode="${CURRENCY_OPTIONS[currencyCode]?.fractionDigits > 0 ? 'decimal' : 'numeric'}"
-          placeholder="${esc(currencyAmountPlaceholder('monthly', currencyCode))}"
-          value="${budgetValue > 0 ? esc(String(budgetValue)) : ''}" aria-label="이번 달 식비 예산">
+          placeholder="${esc(placeholder)}"
+          value="${!budgetLoading && budgetValue > 0 ? esc(String(budgetValue)) : ''}"
+          aria-label="이번 달 식비 예산"${monthAttr}${loadingAttr}>
       </div>
     </div>`;
 }
@@ -7733,10 +7773,16 @@ function buildBudgetFooterHTML(primaryTotal, budget, currencyCode) {
 function renderMealStats() {
   const year = state.calendarYear;
   const month = state.calendarMonth + 1;
+  const monthKey = getCalendarMonthKey();
   const { counts, primaryTotal, primaryCode } = getCalendarMonthStats(year, month);
+  // 월 이동 직후: 이전 달 state.monthlyFoodBudget를 쓰지 않고 해당 monthKey만 조회
   const budget = syncMonthlyBudgetStateForCalendar();
-  const progressHTML = buildBudgetProgressHTML(primaryTotal, budget, primaryCode);
-  const footerHTML = buildBudgetFooterHTML(primaryTotal, budget, primaryCode);
+  const progressHTML = buildBudgetProgressHTML(
+    primaryTotal,
+    budgetSettingsHydrated || !isLoggedInAppUser() ? budget : 0,
+    primaryCode,
+  );
+  const footerHTML = buildBudgetFooterHTML(primaryTotal, budget, primaryCode, monthKey);
 
   dom.mealStats.innerHTML = `
     <div class="calendar-summary__spend calendar-spend-card">
@@ -7765,20 +7811,60 @@ function renderMealStats() {
     openCalendarExpenseSheet();
   });
   if (dom.monthlyFoodBudget) {
-    dom.monthlyFoodBudget.onchange = () => {
-      const amount = Number(dom.monthlyFoodBudget.value) || 0;
-      const monthKey = getCalendarMonthKey();
-      state.monthlyFoodBudget = amount;
+    // 핸들러가 이 input 인스턴스를 캡처 — 월 이동 후 dom 재할당/잔여 change가 다른 달에 쓰지 않도록
+    const budgetInputEl = dom.monthlyFoodBudget;
+    const commitMonthlyBudget = () => {
+      const capturedMonthKey = String(
+        budgetInputEl?.dataset?.monthKey || '',
+      ).trim();
+      const amount = Number(budgetInputEl.value) || 0;
+      if (!/^\d{4}-\d{2}$/.test(capturedMonthKey)) return;
+
+      const previousMap = { ...(state.budgetByMonth || {}) };
+      const previousAmount = Object.prototype.hasOwnProperty.call(previousMap, capturedMonthKey)
+        ? Number(previousMap[capturedMonthKey]) || 0
+        : getMonthlyBudgetForMonthKey(capturedMonthKey);
+
       state.budgetByMonth = {
-        ...(state.budgetByMonth || {}),
-        [monthKey]: amount,
+        ...previousMap,
+        [capturedMonthKey]: amount,
       };
+      if (capturedMonthKey === getCalendarMonthKey()) {
+        state.monthlyFoodBudget = amount;
+      }
+      budgetLocalMutatedAt = Date.now();
+
       if (isGuestUser()) {
         renderMealStats();
         return;
       }
-      persistMonthlyFoodBudget().catch(() => undefined);
+
       renderMealStats();
+      persistMonthlyFoodBudget(amount, capturedMonthKey)
+        .catch((err) => {
+          console.error('[monthlyBudget] persist failed', {
+            monthKey: capturedMonthKey,
+            code: err?.code || '',
+            message: err?.message || String(err),
+          });
+          state.budgetByMonth = previousMap;
+          if (capturedMonthKey === getCalendarMonthKey()) {
+            state.monthlyFoodBudget = previousAmount;
+          } else {
+            syncMonthlyBudgetStateForCalendar();
+          }
+          budgetLocalMutatedAt = 0;
+          renderMealStats();
+          showToast('예산 저장에 실패했습니다.');
+        });
+    };
+    // change(포커스 아웃) + Enter 즉시 저장
+    dom.monthlyFoodBudget.onchange = commitMonthlyBudget;
+    dom.monthlyFoodBudget.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        dom.monthlyFoodBudget.blur();
+      }
     };
   }
 }
@@ -8409,6 +8495,8 @@ function changeCalendarMonth(delta) {
   if (state.calendarMonth > 11) { state.calendarMonth = 0; state.calendarYear += 1; }
   else if (state.calendarMonth < 0) { state.calendarMonth = 11; state.calendarYear -= 1; }
   state.selectedCalendarDate = null;
+  // 이전 달 표시값을 즉시 비우고 새 monthKey로만 다시 채움 (잔상 방지)
+  state.monthlyFoodBudget = getMonthlyBudgetForMonthKey(getCalendarMonthKey());
   closeCalendarDaySheet();
   renderCalendar();
 }
@@ -11182,7 +11270,7 @@ async function registerServiceWorker() {
   };
 
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js?v=56');
+    const reg = await navigator.serviceWorker.register('./sw.js?v=57');
     reg.update();
     activateWaitingWorker(reg);
     reg.addEventListener('updatefound', () => {
@@ -11493,23 +11581,22 @@ function startApp() {
       if (dom.currencySelect) dom.currencySelect.value = settings.currency;
       syncCurrencyAmountPlaceholders();
     }
-    if (settings.budgetByMonth && typeof settings.budgetByMonth === 'object') {
-      state.budgetByMonth = { ...settings.budgetByMonth };
-    }
-    // 달력 선택 월 기준으로 표시값 동기화 (레거시 monthlyFoodBudget는 마이그레이션 입력으로만 사용)
-    if (settings.budgetByMonth && Object.keys(settings.budgetByMonth).length) {
-      syncMonthlyBudgetStateForCalendar();
-    } else if (settings.monthlyFoodBudget != null) {
-      const legacy = Number(settings.monthlyFoodBudget) || 0;
-      const monthKey = getCalendarMonthKey() || (() => {
-        const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      })();
-      if (legacy > 0 && !Object.keys(state.budgetByMonth || {}).length) {
-        state.budgetByMonth = { [monthKey]: legacy };
-      }
+    // 로컬에서 방금 수정한 월 예산은 짧은 구간 원격 스냅샷으로 되돌리지 않음
+    const allowRemoteBudget = Date.now() - budgetLocalMutatedAt >= 2500;
+    if (allowRemoteBudget) {
+      const remoteMap = (settings.budgetByMonth && typeof settings.budgetByMonth === 'object')
+        ? { ...settings.budgetByMonth }
+        : {};
+      state.budgetByMonth = remoteMap;
+      // 레거시는 오늘 월 폴백용으로만 보관 — 보고 있는 달력 월 키로 map에 넣지 않음
+      state.legacyMonthlyFoodBudget = Number(
+        settings.legacyMonthlyFoodBudget != null
+          ? settings.legacyMonthlyFoodBudget
+          : settings.monthlyFoodBudget,
+      ) || 0;
       syncMonthlyBudgetStateForCalendar();
     }
+    budgetSettingsHydrated = true;
     if (settings.grocery) {
       const localGroceryEmpty = !GroceryRepository._byWeek
         || !Object.keys(GroceryRepository._byWeek).length

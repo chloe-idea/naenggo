@@ -238,6 +238,7 @@ async function runRefresh({
   }
 
   const previousKey = JSON.stringify(activeFamily);
+  const hadHintOrFamily = Boolean(activeFamily?.householdId || readSessionHint()?.householdId);
   try {
     const data = await fetchCurrentHousehold({ includeMembers: needFullMembers });
     activeFamily = data.household || null;
@@ -246,12 +247,23 @@ async function runRefresh({
     }
     sessionValidated = true;
     writeSessionHint(activeFamily);
+    // 서버가 deleted/stale pointer를 정리해 null을 준 경우 → 개인 모드 복구
+    if (!activeFamily && hadHintOrFamily) {
+      clearSessionHint();
+      clearFamilySetupCache();
+      console.info('[FamilySharing] stale household cleared → personal mode', {
+        reason,
+        hadHintOrFamily: true,
+        resolutionPath: data?.resolutionPath || null,
+      });
+    }
   } catch (err) {
     if (err.status === 404) {
       activeFamily = null;
       sessionValidated = true;
       clearSessionHint();
       clearFamilySetupCache();
+      console.info('[FamilySharing] household 404 → personal mode', { reason });
     } else {
       throw err;
     }
@@ -443,6 +455,11 @@ export const FamilySharingService = {
 
   async leave() {
     const family = this.getActiveFamily();
+    const members = Array.isArray(family?.members) ? family.members : [];
+    // 마지막 활성 관리자 → 서버 leave도 삭제로 위임하지만, UI 경로를 명시적으로 맞춤
+    if (family?.role === 'owner' && members.length === 1) {
+      return this.deleteFamily();
+    }
     // isActive()가 false가 되기 전에 내 저장분만 캡처 (전체 household _ids 오염 방지)
     const mySavedIds = captureMySavedRecipeIds();
     invalidateSessionCache();
@@ -457,14 +474,33 @@ export const FamilySharingService = {
 
   async deleteFamily() {
     const family = this.getActiveFamily();
+    const householdId = family?.householdId || '';
     const mySavedIds = captureMySavedRecipeIds();
     invalidateSessionCache();
-    await request(`/current?householdId=${encodeURIComponent(family?.householdId || '')}`, { method: 'DELETE' });
+    console.info('[FamilySharing] deleteFamily start', {
+      householdIdPresent: Boolean(householdId),
+      role: family?.role || null,
+      memberCount: Array.isArray(family?.members) ? family.members.length : null,
+    });
+    try {
+      await request(`/current?householdId=${encodeURIComponent(householdId)}`, { method: 'DELETE' });
+    } catch (error) {
+      console.error('[FamilySharing] deleteFamily API failed', {
+        code: error?.code || '',
+        status: error?.status || 0,
+        message: error?.message || String(error),
+      });
+      throw error;
+    }
     activeFamily = null;
     sessionValidated = true;
     clearSessionHint();
     clearFamilySetupCache();
     await adoptPersonalSavedRecipeIds(mySavedIds);
+    console.info('[FamilySharing] deleteFamily local clear done', {
+      activeFamilyCleared: true,
+      sessionHintCleared: true,
+    });
     notify('user-action');
   },
 
