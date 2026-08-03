@@ -2,7 +2,7 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v234';
+const CACHE_NAME = 'naengjanggo-v236';
 
 const RECIPE_IMAGE_SLUGS = [
   'sweet-potato-fries', 'potato-fries', 'sweet-potato-sticks', 'egg-white-omelet', 'potato-pancake', 'potato-cheese-bake', 'egg-in-hell',
@@ -24,7 +24,7 @@ const ASSETS = [
   'js/lib/budget-by-month.js',
   'js/firebase.js',
   'js/firebase-config.js',
-  'js/firebase-bootstrap.js?v=83',
+  'js/firebase-bootstrap.js?v=85',
   'js/services/profile-image-service.js',
   'js/ingredient-normalizer.js?v=3',
   'public/data/ingredient-aliases.json?v=1',

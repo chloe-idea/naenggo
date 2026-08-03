@@ -35,11 +35,38 @@ export function normalizeBudgetByMonth(raw) {
 }
 
 /**
+ * setDoc(merge)에 `budgetByMonth.YYYY-MM` 점 표기 키를 넣으면
+ * nested map이 아니라 리터럴 필드명으로 저장된다.
+ * 문서 전체에서 올바른 map + 잘못된 dotted 필드를 합쳐 복구한다.
+ */
+export function coerceBudgetByMonthFromDoc(data = {}) {
+  const map = normalizeBudgetByMonth(data?.budgetByMonth);
+  if (!data || typeof data !== 'object') return map;
+  Object.entries(data).forEach(([key, value]) => {
+    const match = /^budgetByMonth\.(\d{4}-\d{2})$/.exec(key);
+    if (!match) return;
+    const monthKey = match[1];
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount < 0) return;
+    if (!Object.prototype.hasOwnProperty.call(map, monthKey)) {
+      map[monthKey] = amount;
+    }
+  });
+  return map;
+}
+
+/** 문서에 남은 잘못된 dotted 필드명 목록 */
+export function listDottedBudgetFieldKeys(data = {}) {
+  if (!data || typeof data !== 'object') return [];
+  return Object.keys(data).filter((key) => /^budgetByMonth\.\d{4}-\d{2}$/.test(key));
+}
+
+/**
  * 레거시 monthlyFoodBudget → 서버 마이그레이션용 페이로드만 계산.
  * 클라이언트 state에 가짜 월 키를 주입하지 않는다 (migrated여도 budgetByMonth는 원본 map).
  */
 export function resolveBudgetByMonthFromSettings(data = {}, fallbackMonthKey = getMonthKey()) {
-  const map = normalizeBudgetByMonth(data.budgetByMonth);
+  const map = coerceBudgetByMonthFromDoc(data);
   if (Object.keys(map).length > 0) {
     return { budgetByMonth: map, migrated: false, migrationMap: null };
   }

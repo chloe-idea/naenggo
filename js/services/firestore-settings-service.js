@@ -24,8 +24,10 @@ import { FamilySharingService } from './family-sharing-service.js';
 import { StartupPerf } from './startup-perf.js';
 import {
   budgetForMonth,
+  coerceBudgetByMonthFromDoc,
   currentMonthKey,
   getMonthKey,
+  listDottedBudgetFieldKeys,
   normalizeBudgetByMonth,
   resolveBudgetByMonthFromSettings,
   toMonthKey,
@@ -33,8 +35,10 @@ import {
 
 export {
   budgetForMonth,
+  coerceBudgetByMonthFromDoc,
   currentMonthKey,
   getMonthKey,
+  listDottedBudgetFieldKeys,
   normalizeBudgetByMonth,
   resolveBudgetByMonthFromSettings,
   toMonthKey,
@@ -497,6 +501,17 @@ export const FirestoreSettingsService = {
       }
       const todayKey = getMonthKey();
       const legacyMonthly = Number(data.monthlyFoodBudget) || 0;
+      if (!isFamilyScope()) {
+        console.log('[monthlyBudget][personal] load result', {
+          path: settingsDoc(uid)?.path || `users/${uid}/settings/preferences`,
+          exists: Boolean(preferenceData && Object.keys(preferenceData).length),
+          monthKey: todayKey,
+          budgetByMonth: resolved.budgetByMonth,
+          dottedFieldKeys: listDottedBudgetFieldKeys(preferenceData),
+          loadedValue: resolved.budgetByMonth?.[todayKey],
+          monthlyFoodBudget: legacyMonthly,
+        });
+      }
       onSettings?.({
         currency: data.currency || DEFAULT_SETTINGS.currency,
         budgetByMonth: resolved.budgetByMonth,
@@ -675,9 +690,8 @@ export const FirestoreSettingsService = {
    */
   async saveMonthlyFoodBudget(monthlyFoodBudget, options = {}) {
     const user = auth?.currentUser;
-    const hasAuth = Boolean(user?.uid);
     const householdId = FamilySharingService.getActiveHouseholdId();
-    const firestorePath = settingsFirestorePathLabel(user?.uid);
+    const familyScope = Boolean(householdId);
     const amount = Number(monthlyFoodBudget) || 0;
     // 호출 시점의 monthKey를 캡처 — 비동기 중 달력 월 변경과 무관
     const monthKey = String(options.monthKey || getMonthKey()).trim();
@@ -688,30 +702,139 @@ export const FirestoreSettingsService = {
     const ref = settingsDoc(user.uid);
     if (!ref) throw new Error('설정 저장 경로를 만들 수 없습니다.');
     const todayKey = getMonthKey();
-    const payload = {
-      [`budgetByMonth.${monthKey}`]: amount,
-      updatedAt: serverTimestamp(),
-    };
-    // 레거시 단일 필드는 "오늘 월"을 저장할 때만 맞춤 (다른 달 저장 시 덮어쓰지 않음)
-    if (monthKey === todayKey) {
-      payload.monthlyFoodBudget = amount;
-    }
-    try {
-      await setDoc(
-        ref,
-        sanitizeFirestorePayload(payload, 'FirestoreSettingsService.saveMonthlyFoodBudget'),
-        { merge: true },
-      );
-    } catch (error) {
-      console.error('[monthlyBudget] Firestore write failed', {
-        operation: 'setDoc',
-        firestorePath,
+
+    // 개인: nested budgetByMonth map + merge.
+    // 주의: setDoc는 `budgetByMonth.YYYY-MM` 점 표기를 field path로 해석하지 않고
+    // 리터럴 필드명으로 저장한다 → updateDoc 점 표기 또는 nested map 사용 필수.
+    if (!familyScope) {
+      let existing = null;
+      try {
+        const snap = await getDocFromServer(ref).catch(() => getDoc(ref));
+        existing = snap.exists() ? (snap.data() || {}) : null;
+      } catch {
+        existing = null;
+      }
+      const existingBudgetByMonth = coerceBudgetByMonthFromDoc(existing || {});
+      const nextBudgetByMonth = {
+        ...existingBudgetByMonth,
+        [monthKey]: amount,
+      };
+      const payload = {
+        budgetByMonth: nextBudgetByMonth,
+        updatedAt: serverTimestamp(),
+      };
+      if (monthKey === todayKey) payload.monthlyFoodBudget = amount;
+      // 과거에 잘못 저장된 dotted 리터럴 필드 제거
+      listDottedBudgetFieldKeys(existing || {}).forEach((key) => {
+        payload[key] = deleteField();
+      });
+
+      console.log('[monthlyBudget][personal] save attempt', {
+        uid: user.uid,
+        path: ref.path,
         monthKey,
-        hasAuth,
-        uidPresent: Boolean(user?.uid),
-        activeHouseholdIdPresent: Boolean(householdId),
-        errorCode: error?.code || '',
-        errorMessage: error?.message || String(error),
+        inputValue: monthlyFoodBudget,
+        numericValue: amount,
+        existingBudgetByMonth,
+        dottedFieldKeys: listDottedBudgetFieldKeys(existing || {}),
+        payload: {
+          budgetByMonth: nextBudgetByMonth,
+          monthlyFoodBudget: payload.monthlyFoodBudget,
+          updatedAt: '[serverTimestamp]',
+          deleteDottedFields: listDottedBudgetFieldKeys(existing || {}),
+        },
+      });
+
+      try {
+        await setDoc(
+          ref,
+          sanitizeFirestorePayload(payload, 'FirestoreSettingsService.saveMonthlyFoodBudget'),
+          { merge: true },
+        );
+        console.log('[monthlyBudget][personal] save success', {
+          path: ref.path,
+          monthKey,
+          numericValue: amount,
+        });
+      } catch (error) {
+        console.error('[monthlyBudget][personal] save failed', {
+          error,
+          code: error?.code || '',
+          message: error?.message || String(error),
+          uid: user.uid,
+          path: ref.path,
+          monthKey,
+          payload: {
+            budgetByMonth: nextBudgetByMonth,
+            monthlyFoodBudget: payload.monthlyFoodBudget,
+            updatedAt: '[serverTimestamp]',
+          },
+        });
+        throw error;
+      }
+      return;
+    }
+
+    // 가족: grocery/preferences Rules hasOnly + activeWeekKey/byWeek 필수.
+    // 문서에 허용 외 필드가 남아 있으면 merge만으로는 계속 permission-denied가 난다.
+    // → 트랜잭션으로 서버 값을 읽어 허용 필드만 재작성(장보기 byWeek·다른 달 예산 유지).
+    try {
+      let loggedExistingKeys = [];
+      let loggedPayload = null;
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        const existing = snap.exists() ? (snap.data() || {}) : null;
+        loggedExistingKeys = existing ? Object.keys(existing) : [];
+        const existingByWeek = (existing?.byWeek && typeof existing.byWeek === 'object' && !Array.isArray(existing.byWeek))
+          ? existing.byWeek
+          : {};
+        const nextBudgetByMonth = {
+          ...normalizeBudgetByMonth(existing?.budgetByMonth),
+          [monthKey]: amount,
+        };
+        const legacyMonthly = Number(existing?.monthlyFoodBudget);
+        const payload = {
+          activeWeekKey: typeof existing?.activeWeekKey === 'string' ? existing.activeWeekKey : '',
+          byWeek: existingByWeek,
+          currency: typeof existing?.currency === 'string' ? existing.currency : 'KRW',
+          monthlyFoodBudget: monthKey === todayKey
+            ? amount
+            : (Number.isFinite(legacyMonthly) && legacyMonthly >= 0 ? legacyMonthly : 0),
+          budgetByMonth: nextBudgetByMonth,
+          updatedAt: serverTimestamp(),
+        };
+        loggedPayload = {
+          ...payload,
+          byWeek: `{keys:${Object.keys(payload.byWeek).length}}`,
+          budgetByMonth: nextBudgetByMonth,
+          updatedAt: '[serverTimestamp]',
+        };
+        console.log('[monthlyBudget][household] save attempt', {
+          uid: user.uid,
+          householdId,
+          path: ref.path,
+          monthKey,
+          value: amount,
+          docExists: Boolean(existing),
+          existingKeys: loggedExistingKeys,
+          payload: loggedPayload,
+        });
+        tx.set(
+          ref,
+          sanitizeFirestorePayload(payload, 'FirestoreSettingsService.saveMonthlyFoodBudget'),
+        );
+      });
+    } catch (error) {
+      console.error('[monthlyBudget][household] save failed', {
+        error,
+        code: error?.code || '',
+        message: error?.message || String(error),
+        uid: user.uid,
+        householdId,
+        path: ref.path,
+        monthKey,
+        inputValue: monthlyFoodBudget,
+        numericValue: amount,
       });
       throw error;
     }

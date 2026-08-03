@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   budgetForMonth,
+  coerceBudgetByMonthFromDoc,
   getMonthKey,
   normalizeBudgetByMonth,
   resolveBudgetByMonthFromSettings,
@@ -56,5 +57,18 @@ describe('budgetByMonth helpers', () => {
       budgetForMonth({}, '2026-07', { legacyMonthly: 300000, legacyOnlyForMonthKey: '2026-08' }),
       0,
     );
+  });
+
+  it('recovers mistaken setDoc dotted literal fields into budgetByMonth map', () => {
+    const map = coerceBudgetByMonthFromDoc({
+      'budgetByMonth.2026-07': 300000,
+      monthlyFoodBudget: 1,
+    });
+    assert.deepEqual(map, { '2026-07': 300000 });
+    const resolved = resolveBudgetByMonthFromSettings({
+      'budgetByMonth.2026-08': 100000,
+    }, '2026-08');
+    assert.equal(resolved.migrated, false);
+    assert.equal(budgetForMonth(resolved.budgetByMonth, '2026-08'), 100000);
   });
 });
