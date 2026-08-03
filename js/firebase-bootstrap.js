@@ -19,6 +19,7 @@ import { FirestorePublicProfilesService } from './services/firestore-public-prof
 import { FirestorePublicRecipesService } from './services/firestore-public-recipes-service.js';
 import { FamilySharingService } from './services/family-sharing-service.js';
 import { normalizeSocialLinks } from './lib/social-url.js';
+import { getDisplayName } from './lib/display-name.js';
 import { formatAuthError } from './services/auth-errors.js';
 import { StartupPerf } from './services/startup-perf.js';
 import { auth, db, isFirebaseConfigured } from './firebase.js';
@@ -266,13 +267,21 @@ function updateProfileMenuContent(authUser, profile = null) {
   const errorEl = $('profile-menu-error');
   const social = resolvedProfile?.socialLinks || {};
 
-  const displayName = resolvedProfile?.displayName || avatar.displayName || '프로필';
+  const displayName = getDisplayName({
+    userProfile: resolvedProfile,
+    authUser,
+    fallback: '프로필',
+  });
   const bio = resolvedProfile?.bio || '';
   if (previewNameEl) previewNameEl.textContent = displayName;
   if (previewBioEl) previewBioEl.textContent = bio;
   if (emailEl) emailEl.textContent = authUser?.email || '—';
   if (nameInput && document.activeElement !== nameInput) {
-    nameInput.value = resolvedProfile?.displayName || avatar.displayName || '';
+    nameInput.value = getDisplayName({
+      userProfile: resolvedProfile,
+      authUser,
+      fallback: '',
+    });
   }
   if (bioInput && document.activeElement !== bioInput) {
     bioInput.value = bio;
@@ -352,7 +361,12 @@ async function loadUserProfile(authUser) {
       StartupPerf.markRead('publicProfiles/{uid}');
       const publicProfile = await FirestorePublicProfilesService.getById(authUser.uid);
       documentCount += 1;
-      if (!publicProfile) {
+      const needsPublicSync = !publicProfile
+        || (
+          !String(publicProfile.nickname || '').trim()
+          && String(cachedUserProfile.nickname || cachedUserProfile.displayName || '').trim()
+        );
+      if (needsPublicSync) {
         const profileImageUrl = resolveEffectivePhotoURL(cachedUserProfile, authUser);
         await FirestorePublicProfilesService.syncFromUserProfile(authUser.uid, {
           ...cachedUserProfile,
@@ -545,6 +559,7 @@ async function saveFullProfile() {
   }
 
   const updates = {
+    nickname: displayName,
     displayName,
     bio: (bioInput?.value || '').trim().slice(0, 80),
     socialLinks: linksResult.socialLinks,
@@ -593,11 +608,46 @@ async function saveFullProfile() {
       cachedUserProfile = await FirestoreUserService.updateProfile(user.uid, updates, {
         photoURL: user.photoURL || '',
       });
+    } else {
+      // 서버 저장 후 publicProfiles 캐시에 최신 닉네임 즉시 반영
+      try {
+        await FirestorePublicProfilesService.syncFromUserProfile(user.uid, {
+          ...(cachedUserProfile || {}),
+          ...updates,
+        });
+      } catch (syncErr) {
+        console.warn('[firebase-bootstrap] public profile cache sync after server save:', syncErr);
+        FirestorePublicProfilesService.clearCache(user.uid);
+      }
     }
+
+    // 가족 구성원 목록의 내 표시명 즉시 패치
+    const family = FamilySharingService.getActiveFamily();
+    const siteName = getDisplayName({
+      userProfile: cachedUserProfile,
+      authUser: user,
+      fallback: '사용자',
+    });
+    if (family && Array.isArray(family.members)) {
+      family.members = family.members.map((member) => (
+        member.uid === user.uid
+          ? {
+            ...member,
+            nickname: siteName,
+            displayName: siteName,
+            label: siteName,
+          }
+          : member
+      ));
+    }
+    const familyModal = $('family-sharing-modal');
+    if (familyModal && !familyModal.hidden) renderFamilySharing();
 
     renderAuthUi(user);
     updateProfileMenuContent(user, cachedUserProfile);
-    window.dispatchEvent(new CustomEvent('public-profile-updated', { detail: { uid: user.uid } }));
+    window.dispatchEvent(new CustomEvent('public-profile-updated', {
+      detail: { uid: user.uid, nickname: siteName },
+    }));
     if (typeof window.showToast === 'function') window.showToast('프로필을 저장했어요');
   } catch (err) {
     console.error('[firebase-bootstrap] save profile failed:', err);
@@ -1349,20 +1399,15 @@ function escapeFamilyHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-/** 구성원 표시명: 아이디 > 닉네임 > displayName > 서버 label > uid 축약 */
+/** 구성원 표시명: nickname → displayName → label → uid 축약 */
 function resolveFamilyMemberLabel(member = {}) {
-  const candidates = [
-    member.profileId,
-    member.username,
-    member.userId,
-    member.nickname,
-    member.displayName,
-    member.label,
-  ];
-  for (const value of candidates) {
-    const text = String(value ?? '').trim();
-    if (text) return text;
-  }
+  const name = getDisplayName({
+    userProfile: member,
+    publicProfile: member,
+    storedName: member.label || '',
+    fallback: '',
+  });
+  if (name) return name;
   const uid = String(member.uid || '').trim();
   return uid ? uid.slice(0, 8) : '구성원';
 }
@@ -1850,6 +1895,8 @@ async function bootstrap() {
     FamilySharingService,
     ProfileImageService,
     AnalysisQuotaService,
+    getDisplayName,
+    getCachedUserProfile: () => cachedUserProfile,
     refreshHeaderQuota,
     ensureDeferredUserDataSync,
     ensureAdminSync,

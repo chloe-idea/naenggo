@@ -24,6 +24,8 @@ import {
   logFirestorePermissionDenied,
 } from './firestore-debug.js';
 import { StartupPerf } from './startup-perf.js';
+import { getDisplayName } from '../lib/display-name.js';
+import { FirestoreUserService } from './firestore-user-service.js';
 
 const SUBCOLLECTION = 'myRecipes';
 
@@ -122,7 +124,7 @@ async function findDuplicateVideoRecipe(uid, normalizedVideoId, excludeRecipeId 
   return null;
 }
 
-function buildPayload(recipe, uid, authUser) {
+function buildPayload(recipe, uid, authUser, userProfile = null) {
   return {
     name: recipe.name,
     ingredients: recipe.ingredients || [],
@@ -153,7 +155,11 @@ function buildPayload(recipe, uid, authUser) {
     isCustomVersion: recipe.isCustomVersion === true,
     ownerId: recipe.ownerId || uid,
     authorId: uid,
-    authorName: recipe.authorName || authUser?.displayName || '나',
+    authorName: getDisplayName({
+      userProfile,
+      authUser,
+      fallback: '나',
+    }),
     visibility: recipe.visibility === 'public' ? 'public' : 'private',
     publicRecipeId: recipe.visibility === 'public' ? (recipe.firestoreId || recipe.id) : null,
     updatedAt: serverTimestamp(),
@@ -249,7 +255,11 @@ export const FirestoreMyRecipesService = {
     const targetId = recipe.firestoreId || recipe.id || doc(col).id;
     const ref = recipeDoc(user.uid, targetId);
     const savePath = userSubcollectionPath(user.uid, SUBCOLLECTION, targetId);
-    const payload = buildPayload(recipe, user.uid, user);
+    let userProfile = null;
+    try {
+      userProfile = await FirestoreUserService.getUserDocument(user.uid);
+    } catch (_) { /* ignore */ }
+    const payload = buildPayload(recipe, user.uid, user, userProfile);
 
     const normalizedVideoId = recipe.normalizedVideoId
       || resolveRecipeNormalizedVideoId(recipe);

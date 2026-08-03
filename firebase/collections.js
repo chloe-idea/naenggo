@@ -35,6 +35,7 @@ export const Collection = {
 /** users/{uid} 프로필 필드 */
 export const UserFields = {
   EMAIL: 'email',
+  NICKNAME: 'nickname',
   DISPLAY_NAME: 'displayName',
   PHOTO_URL: 'photoURL',
   PROFILE_IMAGE: 'profileImage',
@@ -56,6 +57,7 @@ export const UserFields = {
 
 /** publicProfiles/{uid} 공개 프로필 필드 */
 export const PublicProfileFields = {
+  NICKNAME: 'nickname',
   DISPLAY_NAME: 'displayName',
   PROFILE_IMAGE_URL: 'profileImageUrl',
   BIO: 'bio',

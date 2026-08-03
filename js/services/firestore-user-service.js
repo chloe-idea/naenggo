@@ -11,6 +11,11 @@ import { FREE_ANALYSIS_LIMIT, db } from '../firebase.js';
 import { buildUsageDisplay, normalizeWeeklyUsageRecord } from '../lib/analysis-quota-core.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { normalizeSocialLinks } from '../lib/social-url.js';
+import {
+  getDisplayName,
+  nicknameDualWriteFields,
+  normalizeSiteNickname,
+} from '../lib/display-name.js';
 import { FirestorePublicProfilesService } from './firestore-public-profiles-service.js';
 
 const USERS_COLLECTION = 'users';
@@ -45,9 +50,11 @@ export function resolveEffectivePhotoURL(profile, authUser) {
 }
 
 export function resolveProfileAvatar(profile, authUser) {
-  const displayName = String(
-    profile?.displayName || authUser?.displayName || authUser?.email?.split('@')[0] || '회원',
-  ).trim();
+  const displayName = getDisplayName({
+    userProfile: profile,
+    authUser,
+    fallback: '사용자',
+  });
   const initial = (displayName.charAt(0) || '냉').toUpperCase();
   const avatarType = normalizeAvatarType(profile?.avatarType ?? profile?.profileImageType, authUser);
   const photoURL = resolveEffectivePhotoURL(profile, authUser);
@@ -74,18 +81,28 @@ export const FirestoreUserService = {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const existing = snap.data();
-      if (!existing.email && user.email) {
+      const patch = {};
+      if (!existing.email && user.email) patch.email = user.email;
+      // 레거시: displayName만 있는 문서에 nickname dual-write
+      if (!String(existing.nickname || '').trim() && String(existing.displayName || '').trim()) {
+        Object.assign(patch, nicknameDualWriteFields(existing.displayName.trim().slice(0, 20)));
+      }
+      if (Object.keys(patch).length) {
         await setDoc(
           ref,
-          sanitizeFirestorePayload({ email: user.email }, 'FirestoreUserService.ensureUserDocument'),
+          sanitizeFirestorePayload(patch, 'FirestoreUserService.ensureUserDocument'),
           { merge: true },
         );
-        return { ...existing, email: user.email };
+        return { ...existing, ...patch };
       }
       return existing;
     }
 
-    const displayName = user.displayName || user.email?.split('@')[0] || '';
+    const siteName = normalizeSiteNickname(
+      user.displayName || user.email?.split('@')[0] || '',
+      { fallback: '사용자' },
+    );
+    const nameFields = nicknameDualWriteFields(siteName);
     const googlePhotoURL = user.photoURL || '';
     const avatarType = googlePhotoURL ? 'google' : 'letter';
     const profileImageUrl = avatarType === 'google' ? googlePhotoURL : '';
@@ -95,7 +112,7 @@ export const FirestoreUserService = {
       analysisQuotaUsed: normalized.weeklyUsageCount,
       freeAnalysisRemaining: normalized.remaining,
       createdAt: serverTimestamp(),
-      displayName,
+      ...nameFields,
       email: user.email || '',
       profileImage: profileImageUrl,
       profileImageUrl,
@@ -115,7 +132,7 @@ export const FirestoreUserService = {
 
     try {
       await FirestorePublicProfilesService.syncFromUserProfile(user.uid, {
-        displayName,
+        ...nameFields,
         profileImageUrl,
         bio: '',
         socialLinks: {},
@@ -146,7 +163,12 @@ export const FirestoreUserService = {
     if (!ref) return null;
 
     const payload = { updatedAt: serverTimestamp() };
-    if (typeof updates.displayName === 'string') payload.displayName = updates.displayName.trim().slice(0, 20);
+    if (typeof updates.nickname === 'string' || typeof updates.displayName === 'string') {
+      const siteName = normalizeSiteNickname(
+        updates.nickname ?? updates.displayName,
+      );
+      if (siteName) Object.assign(payload, nicknameDualWriteFields(siteName));
+    }
     if (typeof updates.profileImage === 'string') {
       payload.profileImage = updates.profileImage.trim();
       payload.profileImageUrl = payload.profileImage;

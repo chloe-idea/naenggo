@@ -23,6 +23,7 @@ import {
   publicRecipePath,
 } from './firestore-debug.js';
 import { StartupPerf } from './startup-perf.js';
+import { getDisplayName } from '../lib/display-name.js';
 
 const COLLECTION = 'publicRecipes';
 
@@ -139,9 +140,11 @@ export const FirestorePublicRecipesService = {
     const ref = publicRecipeDoc(recipeId);
     const savePath = publicRecipePath(recipeId);
     const profile = await FirestoreUserService.getUserDocument(authUser.uid);
-    const nickname = String(profile?.displayName || '').trim();
-    const displayName = String(authUser.displayName || authUser.email?.split('@')[0] || '').trim();
-    const authorLabel = nickname || displayName || '냉장GO 사용자';
+    const authorLabel = getDisplayName({
+      userProfile: profile,
+      authUser,
+      fallback: '냉장GO 사용자',
+    });
     const sourcePostUrl = recipe.sourcePostUrl || recipe.sourceUrl || null;
     const payload = {
       name: recipe.name,

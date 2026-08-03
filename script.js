@@ -2546,7 +2546,11 @@ const SavedRecipeRepository = {
         ? members.filter((member) => member.uid !== uid)
         : [...members, {
           uid,
-          name: window.FirebaseServices?.auth?.currentUser?.displayName || '냉장GO 사용자',
+          name: resolveSiteDisplayName({
+            userProfile: window.FirebaseServices?.getCachedUserProfile?.(),
+            authUser: window.FirebaseServices?.auth?.currentUser,
+            fallback: '냉장GO 사용자',
+          }),
         }];
       entry.savedByMembers = nextMembers;
       this._entries.set(id, entry);
@@ -4573,8 +4577,8 @@ const MatchService = {
           const requiredLabel = shortIngredientLabel(s.required) || s.required;
           const phrase = formatOwnedSubstitutionLabel(s.owned, s.required)
             || (requiredLabel
-              ? `${requiredLabel} → 보유한 ${ownedLabel}${koreanInstrumentalParticle(ownedLabel)} 대체 가능`
-              : `보유한 ${ownedLabel}${koreanInstrumentalParticle(ownedLabel)} 대체 가능`);
+              ? `${requiredLabel} → ${ownedLabel}${koreanInstrumentalParticle(ownedLabel)} 대체 가능`
+              : `${ownedLabel}${koreanInstrumentalParticle(ownedLabel)} 대체 가능`);
           return `<li class="ingredient-list__item ingredient-list__item--substitute">↔ ${esc(phrase)}</li>`;
         }).join('')
       }</ul></div>`;
@@ -5137,7 +5141,6 @@ const dom = {
   loginPromptModal: $('#login-prompt-modal'),
   profileMenuModal: null,
   loginPromptGoogleBtn: $('#login-prompt-google-btn'),
-  loginPromptDismissBtn: $('#login-prompt-dismiss-btn'),
   loginPromptQuota: $('#login-prompt-quota'),
   loginPromptError: $('#login-prompt-error'),
   videoAiUsage: $('#video-ai-usage'),
@@ -5446,6 +5449,46 @@ function getAuthorProfilesService() {
   return window.FirebaseServices?.FirestorePublicProfilesService || null;
 }
 
+function resolveSiteDisplayName(opts = {}) {
+  const fn = window.FirebaseServices?.getDisplayName;
+  if (typeof fn === 'function') return fn(opts);
+  const profile = opts.userProfile || opts.publicProfile || {};
+  return String(
+    profile.nickname
+    || profile.displayName
+    || opts.storedName
+    || opts.authUser?.displayName
+    || (opts.email || opts.authUser?.email || '').split('@')[0]
+    || opts.fallback
+    || '사용자',
+  ).trim() || (opts.fallback || '사용자');
+}
+
+/** authorId 기준 최신 nickname, 없으면 authorName 스냅샷 */
+function resolveRecipeAuthorLabel(recipe, { fallback = '냉장GO 사용자' } = {}) {
+  if (!recipe) return fallback;
+  if (recipe.authorDeleted) {
+    return String(recipe.authorName || '탈퇴한 사용자').trim() || '탈퇴한 사용자';
+  }
+  const authorId = String(recipe.authorId || recipe.createdByUid || '').trim();
+  const storedName = String(
+    recipe.authorName || recipe.nickname || recipe.displayName || '',
+  ).trim();
+  if (!authorId) return storedName || fallback;
+
+  const selfUid = window.FirebaseServices?.auth?.currentUser?.uid;
+  const selfProfile = authorId && authorId === selfUid
+    ? window.FirebaseServices?.getCachedUserProfile?.()
+    : null;
+  const peeked = getAuthorProfilesService()?.peek?.(authorId);
+  return resolveSiteDisplayName({
+    userProfile: selfProfile,
+    publicProfile: peeked || null,
+    storedName,
+    fallback,
+  });
+}
+
 function resolveAuthorCardInfo(recipe) {
   if (!recipe || !isPublicCommunityRecipe(recipe)) return null;
   if (recipe.authorDeleted) {
@@ -5456,7 +5499,7 @@ function resolveAuthorCardInfo(recipe) {
       authorDeleted: true,
     };
   }
-  const authorId = String(recipe.authorId || '').trim();
+  const authorId = String(recipe.authorId || recipe.createdByUid || '').trim();
   const svc = getAuthorProfilesService();
   const cached = authorId && svc?.peek ? svc.peek(authorId) : undefined;
   const fallbackName = String(
@@ -5466,38 +5509,37 @@ function resolveAuthorCardInfo(recipe) {
     recipe.profileImage || recipe.profileImageUrl || recipe.authorGooglePhotoURL || '',
   ).trim();
 
-  if (cached) {
+  if (!authorId) {
     return {
-      authorId,
-      displayName: cached.displayName || fallbackName || '냉장GO 사용자',
-      profileImageUrl: cached.profileImageUrl || fallbackImage,
-    };
-  }
-  if (cached === null) {
-    return {
-      authorId,
+      authorId: '',
       displayName: fallbackName || '냉장GO 사용자',
       profileImageUrl: fallbackImage,
     };
   }
+
   return {
     authorId,
-    displayName: fallbackName || '냉장GO 사용자',
-    profileImageUrl: fallbackImage,
+    displayName: resolveRecipeAuthorLabel(recipe, { fallback: '냉장GO 사용자' }),
+    profileImageUrl: (cached && cached.profileImageUrl) || fallbackImage,
   };
 }
 
 async function hydrateAuthorProfiles(recipes = []) {
   const svc = getAuthorProfilesService();
   if (!svc?.getMany) return;
-  const ids = [...new Set(
-    (recipes || [])
-      .filter((r) => isPublicCommunityRecipe(r) && r.authorId)
-      .map((r) => String(r.authorId)),
-  )];
-  if (!ids.length) return;
+  const ids = new Set();
+  (recipes || []).forEach((r) => {
+    if (isPublicCommunityRecipe(r) && r.authorId) ids.add(String(r.authorId));
+    const authorId = String(r?.authorId || r?.createdByUid || '').trim();
+    if (authorId) ids.add(authorId);
+    SavedRecipeRepository.getSavedByMembers(r?.id).forEach((member) => {
+      const uid = String(member?.uid || '').trim();
+      if (uid) ids.add(uid);
+    });
+  });
+  if (!ids.size) return;
   try {
-    await svc.getMany(ids);
+    await svc.getMany([...ids]);
   } catch (err) {
     console.warn('[hydrateAuthorProfiles]', err);
   }
@@ -5591,10 +5633,11 @@ async function renderAuthorProfile() {
   }
 
   const fallbackRecipe = PublicRecipeRepository.getAll().find((r) => r.authorId === authorId);
-  const displayName = profile?.displayName
-    || fallbackRecipe?.authorName
-    || fallbackRecipe?.nickname
-    || '냉장GO 사용자';
+  const displayName = resolveSiteDisplayName({
+    publicProfile: profile,
+    storedName: fallbackRecipe?.authorName || fallbackRecipe?.nickname || '',
+    fallback: '냉장GO 사용자',
+  });
   const imageUrl = profile?.profileImageUrl
     || fallbackRecipe?.profileImage
     || '';
@@ -6021,16 +6064,16 @@ function koreanInstrumentalParticle(word) {
   return ((code - 0xAC00) % 28) ? '으로' : '로';
 }
 
-/** 예: 대파 → 보유한 쪽파로 대체 가능 (정확 일치 시에는 호출하지 않음) */
+/** 예: 대파 → 쪽파로 대체 가능 (정확 일치 시에는 호출하지 않음) */
 function formatOwnedSubstitutionLabel(owned, required) {
   const ownedLabel = shortIngredientLabel(owned);
   if (!ownedLabel) return '';
   const particle = koreanInstrumentalParticle(ownedLabel);
   const requiredLabel = shortIngredientLabel(required);
   if (requiredLabel) {
-    return `${requiredLabel} → 보유한 ${ownedLabel}${particle} 대체 가능`;
+    return `${requiredLabel} → ${ownedLabel}${particle} 대체 가능`;
   }
-  return `보유한 ${ownedLabel}${particle} 대체 가능`;
+  return `${ownedLabel}${particle} 대체 가능`;
 }
 
 const HOME_CARD_CLOCK_ICON = `<svg class="recipe-card-home__icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="8" r="5.25" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.25V8l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -6116,7 +6159,7 @@ function formatHomeReadyMessage(missing, { readyHtml = HOME_CARD_READY_HTML } = 
   };
 }
 
-/** 홈 카드 대체 문구 — 예: 대파 → 보유한 쪽파로 대체 가능 */
+/** 홈 카드 대체 문구 — 예: 대파 → 쪽파로 대체 가능 */
 function formatHomeSubstitutionLine(substituted) {
   if (!isLoggedInAppUser() || !substituted?.length) return '';
   const first = substituted[0];
@@ -6125,8 +6168,8 @@ function formatHomeSubstitutionLine(substituted) {
   if (!owned) return '';
   const particle = koreanInstrumentalParticle(owned);
   const requiredHtml = required
-    ? `<span class="recipe-card-home__sub-pair">${esc(required)}</span><span class="recipe-card-home__sub-rest"> → 보유한 </span>`
-    : `<span class="recipe-card-home__sub-rest">보유한 </span>`;
+    ? `<span class="recipe-card-home__sub-pair">${esc(required)}</span><span class="recipe-card-home__sub-rest"> → </span>`
+    : '';
   return {
     required,
     owned,
@@ -6139,7 +6182,7 @@ function formatMyRecipeReadyMessage(missing) {
   return formatHomeReadyMessage(missing);
 }
 
-/** 내 레시피 대체 문구 — 홈과 동일: {필요} → 보유한 {보유}로 대체 가능 */
+/** 내 레시피 대체 문구 — 홈과 동일: {필요} → {보유}로 대체 가능 */
 function formatMyRecipeSubstitutionLine(substituted) {
   return formatHomeSubstitutionLine(substituted);
 }
@@ -6339,13 +6382,21 @@ function homeRecipeCardHTML(result, options = {}) {
 
 const HOME_CARD_SAVED_BY_ICON = `<span class="material-symbols-outlined recipe-card-home__saved-by-icon" aria-hidden="true">person</span>`;
 
-/** 저장자 아바타 정보 — member / public profile 캐시에서 확장 가능 */
+/** 저장자 아바타 정보 — uid 기준 최신 nickname 우선 */
 function resolveSavedByAvatar(member = {}) {
   const uid = String(member?.uid || '').trim();
-  const name = String(member?.name || '').trim() || '냉장GO 사용자';
   const peeked = uid
     ? window.FirebaseServices?.FirestorePublicProfilesService?.peek?.(uid)
     : null;
+  const selfProfile = uid && uid === window.FirebaseServices?.auth?.currentUser?.uid
+    ? window.FirebaseServices?.getCachedUserProfile?.()
+    : null;
+  const name = resolveSiteDisplayName({
+    userProfile: selfProfile,
+    publicProfile: peeked || null,
+    storedName: member?.name || '',
+    fallback: '냉장GO 사용자',
+  });
   const profileImageUrl = String(
     member?.profileImageUrl
     || member?.profileImage
@@ -6368,11 +6419,14 @@ function savedByAvatarHTML(member) {
 /** 가족 저장자 표시 — 아바타(이미지/이니셜) + 이름 */
 function savedByMembersHTML(members) {
   const list = (members || [])
-    .map((member) => ({
-      uid: String(member?.uid || '').trim(),
-      name: String(member?.name || '').trim(),
-      profileImageUrl: String(member?.profileImageUrl || member?.profileImage || '').trim(),
-    }))
+    .map((member) => {
+      const avatar = resolveSavedByAvatar(member);
+      return {
+        uid: avatar.uid,
+        name: avatar.name,
+        profileImageUrl: avatar.profileImageUrl,
+      };
+    })
     .filter((member) => member.name);
   const unique = [];
   list.forEach((member) => {
@@ -6427,7 +6481,7 @@ function recipeCardHTML({ recipe, matchPercent, missing, matched, matchedPantryN
         <div class="recipe-card__meta">
           <span>⏱ ${recipe.cookTime}분</span>
           <span>📊 ${recipe.difficulty}</span>
-          ${showAuthor ? `<span>👤 ${esc(recipe.authorName)}</span>` : ''}
+          ${showAuthor ? `<span>👤 ${esc(resolveRecipeAuthorLabel(recipe))}</span>` : ''}
           ${showVisibility ? `<span>${recipeVisibilityLabelHTML(recipe.visibility)}</span>` : ''}
           ${showSaveCount ? `<span class="recipe-card__save-count">⭐ ${saveCount}명 저장</span>` : ''}
         </div>
@@ -7193,22 +7247,27 @@ function renderHome() {
       const card = cards[i];
       if (!card || !idEq(card.dataset.rid, r.recipe.id)) return;
       const meta = card.querySelector('.recipe-card-home__meta');
-      if (!meta) return;
-      let authorEl = card.querySelector('.recipe-card-author');
-      const html = recipeAuthorRowHTML(r.recipe);
-      if (!html) {
-        authorEl?.remove();
-        return;
+      if (meta) {
+        let authorEl = card.querySelector('.recipe-card-author');
+        const html = recipeAuthorRowHTML(r.recipe);
+        if (!html) {
+          authorEl?.remove();
+        } else if (authorEl) {
+          authorEl.outerHTML = html;
+        } else {
+          meta.insertAdjacentHTML('afterend', html);
+        }
+        card.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openAuthorProfile(e.currentTarget.dataset.authorId);
+        });
       }
-      if (authorEl) {
-        authorEl.outerHTML = html;
-      } else {
-        meta.insertAdjacentHTML('afterend', html);
+      const savedByEl = card.querySelector('.recipe-card-home__saved-by');
+      if (savedByEl) {
+        const members = SavedRecipeRepository.getSavedByMembers(r.recipe.id);
+        const next = savedByMembersHTML(members);
+        if (next) savedByEl.innerHTML = next;
       }
-      card.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openAuthorProfile(e.currentTarget.dataset.authorId);
-      });
     });
   });
 }
@@ -9947,7 +10006,7 @@ function recipeDetailContentHTML(recipe, analysis) {
         <div class="recipe-detail__tags">
           ${(recipe.tags || []).map((t) => `<span class="recipe-detail__tag">${esc(t)}</span>`).join('')}
           <span class="recipe-detail__tag">${recipeVisibilityLabelHTML(recipe.visibility)}</span>
-          ${isPublicCommunityRecipe(recipe) ? '' : `<span class="recipe-detail__tag">${esc(recipe.authorName || '냉장GO')}</span>`}
+          ${isPublicCommunityRecipe(recipe) ? '' : `<span class="recipe-detail__tag">${esc(resolveRecipeAuthorLabel(recipe, { fallback: '냉장GO' }))}</span>`}
         </div>
         ${isPublicCommunityRecipe(recipe) ? `<div class="recipe-detail__author-wrap">${recipeAuthorRowHTML(recipe)}</div>` : ''}
         <div class="recipe-detail__stats">
@@ -11384,11 +11443,20 @@ function init() {
   dom.profileManageBack?.addEventListener('click', () => {
     closeProfileManagePage();
   });
-  window.addEventListener('public-profile-updated', () => {
-    getAuthorProfilesService()?.clearCache?.();
+  window.addEventListener('public-profile-updated', async (event) => {
+    const uid = String(event?.detail?.uid || '').trim();
+    const svc = getAuthorProfilesService();
+    if (uid) svc?.clearCache?.(uid);
+    else svc?.clearCache?.();
+    if (uid && svc?.getById) {
+      try {
+        await svc.getById(uid, { force: true });
+      } catch (_) { /* ignore */ }
+    }
     if (state.view === 'author-profile') renderAuthorProfile();
     else if (state.view === 'main') renderHome();
     else if (state.view === 'my-recipes') renderMyRecipes();
+    else if (state.view === 'recipe-detail' && state.detailRecipeId) renderRecipeDetailPage();
   });
   dom.openPantryManageBtn.onclick = () => navigate('pantry');
   dom.quickForm.addEventListener('submit', handleQuickAdd);

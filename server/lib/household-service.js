@@ -12,6 +12,7 @@ import {
   purgeInactiveSavedRecipeMembers,
   removeUidFromHouseholdSavedRecipes,
 } from './household-saved-recipes.js';
+import { getDisplayName, emailLocalPart as displayEmailLocalPart } from './display-name.js';
 
 const HOUSEHOLDS = 'households';
 const INVITES = 'householdInvites';
@@ -1304,14 +1305,13 @@ function firstNonEmptyString(...values) {
 }
 
 function emailLocalPart(email) {
-  const raw = String(email || '').trim();
-  if (!raw || !raw.includes('@')) return '';
-  return raw.split('@')[0].trim();
+  return displayEmailLocalPart(email);
 }
 
 /**
  * includeMembers 응답용 — publicProfiles/users에서 표시 필드만 보강.
  * 이메일은 클라이언트에 노출하지 않으며, 필요 시 label fallback에만 사용한다.
+ * label 우선순위: nickname → displayName → profileId/username → email local
  */
 export function buildMemberPublicFields(publicData = {}, userData = {}) {
   const profileId = firstNonEmptyString(
@@ -1322,8 +1322,14 @@ export function buildMemberPublicFields(publicData = {}, userData = {}) {
     publicData.userId,
     userData.userId,
   );
-  const nickname = firstNonEmptyString(publicData.nickname, userData.nickname);
-  const displayName = firstNonEmptyString(publicData.displayName, userData.displayName);
+  // 사이트 기준: users.nickname → publicProfiles.nickname → 레거시 displayName
+  const nickname = firstNonEmptyString(
+    userData.nickname,
+    publicData.nickname,
+    userData.displayName,
+    publicData.displayName,
+  );
+  const displayName = firstNonEmptyString(userData.displayName, publicData.displayName, nickname);
   const photoURL = firstNonEmptyString(
     publicData.profileImageUrl,
     publicData.profileImage,
@@ -1333,9 +1339,9 @@ export function buildMemberPublicFields(publicData = {}, userData = {}) {
   );
   // 이메일 원문은 반환하지 않음. @ 앞부분만 label 최후 fallback에 사용.
   const label = firstNonEmptyString(
-    profileId,
     nickname,
     displayName,
+    profileId,
     emailLocalPart(userData.email),
   );
   return {
@@ -1348,46 +1354,22 @@ export function buildMemberPublicFields(publicData = {}, userData = {}) {
   };
 }
 
-function hasPublicMemberIdentity(publicData = {}) {
-  return Boolean(firstNonEmptyString(
-    publicData.profileId,
-    publicData.username,
-    publicData.userId,
-    publicData.nickname,
-    publicData.displayName,
-  ));
-}
-
 async function enrichMembersWithPublicProfiles(db, members) {
   const list = Array.isArray(members) ? members.filter((m) => m?.uid) : [];
   if (!list.length) return Array.isArray(members) ? members : [];
 
   try {
-    // 1) publicProfiles 먼저 조회
+    // users + publicProfiles 모두 조회해 최신 nickname 반영
     const publicRefs = list.map((member) => db.collection('publicProfiles').doc(member.uid));
-    const publicSnaps = await db.getAll(...publicRefs);
-
-    // 2) public 문서가 없거나 표시 가능한 아이디/이름이 없을 때만 users fallback
-    const fallbackIndexes = [];
-    publicSnaps.forEach((snap, index) => {
-      const publicData = snap?.exists ? (snap.data() || {}) : {};
-      if (!snap?.exists || !hasPublicMemberIdentity(publicData)) {
-        fallbackIndexes.push(index);
-      }
-    });
-
-    const userSnapByIndex = new Map();
-    if (fallbackIndexes.length) {
-      const userRefs = fallbackIndexes.map((index) => db.collection(USERS).doc(list[index].uid));
-      const userSnaps = await db.getAll(...userRefs);
-      fallbackIndexes.forEach((memberIndex, i) => {
-        userSnapByIndex.set(memberIndex, userSnaps[i]);
-      });
-    }
+    const userRefs = list.map((member) => db.collection(USERS).doc(member.uid));
+    const [publicSnaps, userSnaps] = await Promise.all([
+      db.getAll(...publicRefs),
+      db.getAll(...userRefs),
+    ]);
 
     return list.map((member, index) => {
       const publicSnap = publicSnaps[index];
-      const userSnap = userSnapByIndex.get(index);
+      const userSnap = userSnaps[index];
       const fields = buildMemberPublicFields(
         publicSnap?.exists ? (publicSnap.data() || {}) : {},
         userSnap?.exists ? (userSnap.data() || {}) : {},
@@ -2073,9 +2055,16 @@ function extractedRecipePayload(data = {}) {
 }
 
 function savedMember(user) {
+  const name = getDisplayName({
+    userProfile: user,
+    authUser: user,
+    storedName: user.name || '',
+    email: user.email || '',
+    fallback: '냉장GO 사용자',
+  }).slice(0, 40);
   return {
     uid: user.uid,
-    name: String(user.name || user.displayName || user.email || '냉장GO 사용자').slice(0, 40),
+    name,
     savedAt: Timestamp.now(),
   };
 }
@@ -2281,9 +2270,17 @@ export async function copyPersonalDataToHousehold({ idToken, householdId, scopes
   const userRoot = db.collection(USERS).doc(user.uid);
   const householdRoot = householdRef(db, id);
   const userProfileSnap = await userRoot.get();
+  const userProfile = userProfileSnap.exists ? (userProfileSnap.data() || {}) : {};
   const migrationUser = {
     ...user,
-    name: userProfileSnap.data()?.displayName || user.name || user.email,
+    ...userProfile,
+    name: getDisplayName({
+      userProfile,
+      authUser: user,
+      storedName: user.name || '',
+      email: user.email || userProfile.email || '',
+      fallback: '냉장GO 사용자',
+    }),
   };
   if (selected.has('ingredients')) {
     await mergeIngredientCollectionDocs({

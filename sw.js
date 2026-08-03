@@ -2,7 +2,7 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v239';
+const CACHE_NAME = 'naengjanggo-v249';
 
 const RECIPE_IMAGE_SLUGS = [
   'sweet-potato-fries', 'potato-fries', 'sweet-potato-sticks', 'egg-white-omelet', 'potato-pancake', 'potato-cheese-bake', 'egg-in-hell',
@@ -15,16 +15,17 @@ const ASSETS = [
   'index.html',
   'privacy.html',
   'terms.html',
-  'legal/privacy-content.js?v=1',
-  'legal/terms-content.js?v=1',
-  'js/legal-page.js?v=1',
+  'legal/privacy-content.js?v=2',
+  'legal/terms-content.js?v=2',
+  'js/legal-page.js?v=2',
   'app-config.js?v=57',
-  'style.css?v=187',
-  'script.js?v=230',
+  'style.css?v=195',
+  'script.js?v=232',
   'js/lib/budget-by-month.js',
+  'js/lib/display-name.js',
   'js/firebase.js',
   'js/firebase-config.js',
-  'js/firebase-bootstrap.js?v=85',
+  'js/firebase-bootstrap.js?v=86',
   'js/services/profile-image-service.js',
   'js/ingredient-normalizer.js?v=3',
   'public/data/ingredient-aliases.json?v=1',
@@ -36,7 +37,7 @@ const ASSETS = [
   'js/services/pantry-local-migration.js',
   'js/services/auth-gate-controller.js',
   'js/ingredient-emoji.js?v=1',
-  'js/login-required-modal.js?v=68',
+  'js/login-required-modal.js?v=73',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
   'recipe-images.js?v=50',

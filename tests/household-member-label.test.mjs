@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { buildMemberPublicFields } from '../server/lib/household-service.js';
 
 describe('buildMemberPublicFields', () => {
-  it('prefers profileId/username over nickname and displayName', () => {
+  it('prefers nickname over profileId/username for label', () => {
     const fields = buildMemberPublicFields(
       { username: 'chloe123', nickname: 'Chloe', displayName: 'Display' },
       {},
@@ -12,16 +12,25 @@ describe('buildMemberPublicFields', () => {
     assert.equal(fields.username, 'chloe123');
     assert.equal(fields.nickname, 'Chloe');
     assert.equal(fields.displayName, 'Display');
-    assert.equal(fields.label, 'chloe123');
+    assert.equal(fields.label, 'Chloe');
   });
 
-  it('falls back to nickname then displayName', () => {
+  it('falls back to displayName as nickname when nickname missing', () => {
     const fields = buildMemberPublicFields(
       { displayName: '닉네임유저' },
+      {},
+    );
+    assert.equal(fields.nickname, '닉네임유저');
+    assert.equal(fields.displayName, '닉네임유저');
+    assert.equal(fields.label, '닉네임유저');
+  });
+
+  it('prefers users.nickname over publicProfiles fields', () => {
+    const fields = buildMemberPublicFields(
+      { nickname: '공개닉', displayName: '공개이름' },
       { nickname: '별명' },
     );
     assert.equal(fields.nickname, '별명');
-    assert.equal(fields.displayName, '닉네임유저');
     assert.equal(fields.label, '별명');
   });
 

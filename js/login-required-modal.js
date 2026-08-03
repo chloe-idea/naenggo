@@ -5,21 +5,21 @@
 (function initLoginRequiredModal(global) {
   const PRESETS = {
     default: {
-      title: '🍳 로그인하고 냉장GO를 시작해보세요',
+      title: '로그인하고 냉장GO를 시작해보세요',
     },
     videoRecipe: {
-      title: '🔍 로그인하고 냉장GO를 시작해보세요',
+      title: '로그인하고 냉장GO를 시작해보세요',
     },
     aiFeature: {
-      title: '🔍 로그인하고 냉장GO를 시작해보세요',
+      title: '로그인하고 냉장GO를 시작해보세요',
     },
     account: {
-      title: '👤 계정',
+      title: '계정',
     },
   };
 
   const COPY = {
-    quotaGuest: '로그인하면 매주 무료 AI 분석 5회를 제공합니다.',
+    quotaGuest: '✨ 매주 무료 AI 레시피 분석 5회',
     quotaChecking: '무료 분석 횟수를 확인하고 있어요…',
   };
 
@@ -130,11 +130,9 @@
         quotaEl.textContent = COPY.quotaGuest;
       }
       const googleBtn = $('login-prompt-google-btn');
-      const dismissBtn = $('login-prompt-dismiss-btn');
       const benefits = document.querySelector('.login-prompt__benefits');
       const desc = document.querySelector('.login-prompt__desc');
       if (googleBtn) googleBtn.hidden = false;
-      if (dismissBtn) dismissBtn.hidden = false;
       if (benefits) benefits.hidden = false;
       if (desc) desc.hidden = false;
       this.syncGoogleButton();
@@ -230,7 +228,6 @@
 
     bindEvents() {
       $('login-prompt-google-btn')?.addEventListener('click', () => this.handleGoogleLogin());
-      $('login-prompt-dismiss-btn')?.addEventListener('click', () => this.dismiss());
       // 법률 링크는 Google 로그인/모달 닫기와 분리
       document.querySelectorAll('.login-prompt__legal-link').forEach((link) => {
         link.addEventListener('click', (e) => {

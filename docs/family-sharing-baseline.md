@@ -44,7 +44,9 @@ UI는 「가족 구성원 초대하기」에서 **즉시 생성하지 않는다.
 
 `includeMembers=1` 일 때 members 항목은 `{ uid, role, joinedAt }`에 더해  
 공개 표시용 `profileId` / `username` / `nickname` / `displayName` / `photoURL` / `label` 을  
-`publicProfiles`·`users`에서 보강할 수 있다. (이메일 원문은 반환하지 않음. household 문서 구조는 변경 없음.)
+`users`·`publicProfiles`에서 보강할 수 있다.  
+`label` 우선순위는 `nickname` → `displayName` → `profileId`/`username` → email local.  
+(이메일 원문은 반환하지 않음. household 문서 구조는 변경 없음.)
 
 **Rate limit (유지):** `create:user` 3회/60분, `create:ip` 10회/60분.  
 GET `/current`는 create bucket과 **공유하지 않는다.**

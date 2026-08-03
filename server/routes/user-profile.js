@@ -3,6 +3,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { verifyFirebaseIdToken, getFirestoreAdmin, isFirebaseAdminConfigured } from '../lib/firebase-admin.js';
 import { resolveIdTokenFromRequest } from '../lib/analysis-quota.js';
 import { normalizeSocialLinks } from '../lib/social-url.js';
+import {
+  getDisplayName,
+  nicknameDualWriteFields,
+  normalizeSiteNickname,
+} from '../lib/display-name.js';
 
 const router = Router();
 const DEFAULT_DISPLAY_NAME = '냉장GO 사용자';
@@ -21,6 +26,7 @@ function pickProfileFields(body = {}) {
     ? body.avatarType
     : (typeof body.profileImageType === 'string' ? body.profileImageType : undefined);
   return {
+    nickname: typeof body.nickname === 'string' ? body.nickname.trim().slice(0, 20) : undefined,
     displayName: typeof body.displayName === 'string' ? body.displayName.trim().slice(0, 20) : undefined,
     bio: typeof body.bio === 'string' ? body.bio.trim().slice(0, 80) : undefined,
     profileImageUrl: typeof body.profileImageUrl === 'string'
@@ -61,9 +67,12 @@ router.post('/user-profile', async (req, res) => {
     const userSnap = await userRef.get();
     const existing = userSnap.exists ? userSnap.data() : {};
 
-    const displayName = fields.displayName !== undefined
-      ? fields.displayName
-      : String(existing.displayName || '').trim();
+    const siteName = normalizeSiteNickname(
+      fields.nickname ?? fields.displayName
+        ?? existing.nickname ?? existing.displayName,
+      { fallback: DEFAULT_DISPLAY_NAME },
+    );
+    const nameFields = nicknameDualWriteFields(siteName);
     const bio = fields.bio !== undefined
       ? fields.bio
       : String(existing.bio || '').trim();
@@ -90,7 +99,7 @@ router.post('/user-profile', async (req, res) => {
     }
 
     const userPayload = {
-      displayName: displayName || DEFAULT_DISPLAY_NAME,
+      ...nameFields,
       bio,
       profileImage: resolvedImage || '',
       profileImageUrl: resolvedImage || '',
@@ -111,7 +120,7 @@ router.post('/user-profile', async (req, res) => {
 
     const publicSnap = await publicRef.get();
     const publicPayload = {
-      displayName: displayName || DEFAULT_DISPLAY_NAME,
+      ...nameFields,
       profileImageUrl: resolvedImage || '',
       bio,
       socialLinks: linksResult.socialLinks,
@@ -127,10 +136,17 @@ router.post('/user-profile', async (req, res) => {
     batch.set(publicRef, publicPayload, { merge: true });
     await batch.commit();
 
+    const resolvedName = getDisplayName({
+      userProfile: userPayload,
+      publicProfile: publicPayload,
+      fallback: DEFAULT_DISPLAY_NAME,
+    });
+
     return res.json({
       ok: true,
       profile: {
-        displayName: userPayload.displayName,
+        nickname: userPayload.nickname || resolvedName,
+        displayName: userPayload.displayName || resolvedName,
         bio: userPayload.bio,
         profileImageUrl: resolvedImage || '',
         profileImage: resolvedImage || '',

@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=187">
+  <link rel="stylesheet" href="style.css?v=195">
 </head>
 <body class="body-app">
   <div id="app-shell" class="app app-shell--visible">
@@ -800,31 +800,49 @@
       <div class="modal__backdrop" data-close-modal="login"></div>
       <div class="modal__panel login-prompt" role="dialog" aria-modal="true" aria-labelledby="login-prompt-title">
         <button type="button" class="modal__close" data-close-modal="login" aria-label="닫기">&times;</button>
-        <h2 id="login-prompt-title" class="login-prompt__title">🍳 로그인하고 냉장GO를 시작해보세요</h2>
-        <p class="login-prompt__desc">
-          로그인하면 내 레시피와 냉장고 정보를 안전하게 저장하고,
-          AI 레시피 추출과 식단 관리 기능을 이용할 수 있습니다.
-        </p>
+        <h2 id="login-prompt-title" class="login-prompt__title">로그인하고 냉장GO를 시작해보세요</h2>
+        <p class="login-prompt__desc">로그인하면 내 레시피와 냉장고 정보를 안전하게 저장하고, AI 레시피 추출과 식단 관리 기능을 이용할 수 있어요.</p>
         <ul class="login-prompt__benefits" aria-label="로그인 혜택">
-          <li>✅ 내 레시피 자동 저장</li>
-          <li>✅ AI 영상 레시피 추출</li>
-          <li>✅ 식단 캘린더</li>
-          <li>✅ 장보기 목록</li>
-          <li>✅ 여러 기기 자동 동기화</li>
+          <li>
+            <span class="material-symbols-outlined login-prompt__benefit-icon" aria-hidden="true">check_circle_outline</span>
+            <span class="login-prompt__benefit-text">내 레시피 자동 저장</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined login-prompt__benefit-icon" aria-hidden="true">check_circle_outline</span>
+            <span class="login-prompt__benefit-text">AI 영상 레시피 추출</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined login-prompt__benefit-icon" aria-hidden="true">check_circle_outline</span>
+            <span class="login-prompt__benefit-text">식단 캘린더</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined login-prompt__benefit-icon" aria-hidden="true">check_circle_outline</span>
+            <span class="login-prompt__benefit-text">장보기 목록</span>
+          </li>
+          <li>
+            <span class="material-symbols-outlined login-prompt__benefit-icon" aria-hidden="true">check_circle_outline</span>
+            <span class="login-prompt__benefit-text">여러 기기 자동 동기화</span>
+          </li>
         </ul>
-        <p id="login-prompt-quota" class="login-prompt__quota">로그인하면 매주 무료 AI 분석 5회를 제공합니다.</p>
+        <p id="login-prompt-quota" class="login-prompt__quota">✨ 매주 무료 AI 레시피 분석 5회</p>
         <p id="login-prompt-error" class="login-prompt__error" hidden role="alert"></p>
         <button type="button" id="login-prompt-google-btn" class="btn btn--primary btn--full login-prompt__google">
+          <span class="login-prompt__google-badge" aria-hidden="true">
+            <svg class="login-prompt__google-icon" width="16" height="16" viewBox="0 0 18 18" focusable="false">
+              <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"/>
+              <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"/>
+              <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z"/>
+            </svg>
+          </span>
           Google로 계속하기
         </button>
         <p class="login-prompt__legal">
-          Google로 계속하면
+          계속하면
           <a class="login-prompt__legal-link" href="/privacy" target="_blank" rel="noopener noreferrer">개인정보처리방침</a>
           및
-          <a class="login-prompt__legal-link" href="/terms" target="_blank" rel="noopener noreferrer">이용약관</a>
-          에 동의한 것으로 간주됩니다.
+          <a class="login-prompt__legal-link" href="/terms" target="_blank" rel="noopener noreferrer">이용약관</a>에 동의하게 됩니다.
         </p>
-        <button type="button" id="login-prompt-dismiss-btn" class="btn btn--ghost btn--full login-prompt__dismiss">나중에 하기</button>
       </div>
     </div>
 
@@ -1004,6 +1022,18 @@
           <h2 id="profile-section-family" class="profile-manage__section-title">가족 공유</h2>
           <p class="profile-menu__sync">가족과 냉장고 재료, 장보기, 식단을 함께 관리할 수 있습니다.</p>
           <button type="button" id="profile-family-sharing-btn" class="btn btn--ghost btn--full">👨‍👩‍👧‍👦 가족 공유</button>
+        </section>
+
+        <section class="profile-manage__card" aria-labelledby="profile-section-legal">
+          <h2 id="profile-section-legal" class="profile-manage__section-title">약관 및 정책</h2>
+          <a class="profile-manage__link-row" href="/privacy" target="_blank" rel="noopener noreferrer">
+            <span>개인정보처리방침</span>
+            <span class="profile-manage__link-chevron" aria-hidden="true">›</span>
+          </a>
+          <a class="profile-manage__link-row" href="/terms" target="_blank" rel="noopener noreferrer">
+            <span>이용약관</span>
+            <span class="profile-manage__link-chevron" aria-hidden="true">›</span>
+          </a>
         </section>
 
         <section class="profile-manage__card profile-manage__card--account" aria-labelledby="profile-section-account">
@@ -1196,7 +1226,7 @@
     })();
   </script>
   <script src="js/ingredient-normalizer.js?v=3"></script>
-  <script type="module" src="js/firebase-bootstrap.js?v=85"></script>
+  <script type="module" src="js/firebase-bootstrap.js?v=86"></script>
   <script src="js/video-extract-platform.js?v=55"></script>
   <script src="app-config.js?v=57"></script>
   <script src="nav-icons.js?v=47"></script>
@@ -1204,8 +1234,8 @@
   <script src="recipe-images.js?v=50"></script>
   <script src="js/data/builtin-recipes.js?v=1"></script>
   <script src="js/ingredient-emoji.js?v=1"></script>
-  <script src="js/login-required-modal.js?v=68"></script>
+  <script src="js/login-required-modal.js?v=73"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
-  <script src="script.js?v=230" defer></script>
+  <script src="script.js?v=232" defer></script>
 </body>
 </html>

@@ -18,6 +18,11 @@ import { db } from '../firebase.js';
 import { timestampToIso, nowIso } from './firestore-timestamp.js';
 import { sanitizeFirestorePayload } from './firestore-payload.js';
 import { normalizeSocialLinks } from '../lib/social-url.js';
+import {
+  getDisplayName,
+  nicknameDualWriteFields,
+  normalizeSiteNickname,
+} from '../lib/display-name.js';
 
 const COLLECTION = 'publicProfiles';
 const DEFAULT_DISPLAY_NAME = '냉장GO 사용자';
@@ -41,9 +46,13 @@ function mapPublicProfile(uid, data = {}) {
     }
     : {};
 
+  const nickname = String(data.nickname || '').trim();
+  const displayName = String(data.displayName || '').trim();
+  const siteName = nickname || displayName || DEFAULT_DISPLAY_NAME;
   return {
     id: uid,
-    displayName: String(data.displayName || '').trim() || DEFAULT_DISPLAY_NAME,
+    nickname: nickname || displayName,
+    displayName: siteName,
     profileImageUrl: String(data.profileImageUrl || data.profileImage || '').trim(),
     bio: String(data.bio || '').trim().slice(0, 80),
     socialLinks,
@@ -69,13 +78,11 @@ function cacheSet(uid, profile) {
 
 /** 카드용 경량 정보만 */
 export function toAuthorCardInfo(profile, fallback = {}) {
-  const displayName = String(
-    profile?.displayName
-    || fallback.authorName
-    || fallback.nickname
-    || fallback.displayName
-    || '',
-  ).trim() || DEFAULT_DISPLAY_NAME;
+  const displayName = getDisplayName({
+    publicProfile: profile,
+    storedName: fallback.authorName || fallback.nickname || fallback.displayName || '',
+    fallback: DEFAULT_DISPLAY_NAME,
+  });
 
   const profileImageUrl = String(
     profile?.profileImageUrl
@@ -114,6 +121,7 @@ export const FirestorePublicProfilesService = {
         if (!includeSocial && cached) {
           return {
             id: cached.id,
+            nickname: cached.nickname,
             displayName: cached.displayName,
             profileImageUrl: cached.profileImageUrl,
             publicRecipeCount: cached.publicRecipeCount,
@@ -131,6 +139,7 @@ export const FirestorePublicProfilesService = {
     if (!includeSocial && profile) {
       return {
         id: profile.id,
+        nickname: profile.nickname,
         displayName: profile.displayName,
         profileImageUrl: profile.profileImageUrl,
         publicRecipeCount: profile.publicRecipeCount,
@@ -210,7 +219,11 @@ export const FirestorePublicProfilesService = {
       throw err;
     }
 
-    const displayName = String(userDoc.displayName || '').trim().slice(0, 20);
+    const siteName = normalizeSiteNickname(
+      userDoc.nickname ?? userDoc.displayName,
+      { fallback: DEFAULT_DISPLAY_NAME },
+    );
+    const nameFields = nicknameDualWriteFields(siteName);
     const profileImageUrl = String(
       userDoc.profileImageUrl || userDoc.profileImage || '',
     ).trim();
@@ -218,7 +231,7 @@ export const FirestorePublicProfilesService = {
 
     const existing = await getDoc(ref);
     const payload = {
-      displayName: displayName || DEFAULT_DISPLAY_NAME,
+      ...nameFields,
       profileImageUrl,
       bio,
       socialLinks: linksResult.socialLinks,
