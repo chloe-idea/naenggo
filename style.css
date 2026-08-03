@@ -1241,6 +1241,10 @@ body.view--profile .main {
 }
 
 /* ===== Family sharing modal layout ===== */
+#family-sharing-empty #family-open-join-btn {
+  margin-top: 0.875rem; /* ~14px between stacked start actions */
+}
+
 .family-sharing-active .family-sharing__name-input {
   display: block;
   width: 100%;

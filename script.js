@@ -2573,12 +2573,14 @@ const SavedRecipeRepository = {
     return nowSaved;
   },
   getRecipes() {
-    // 저장 목록은 항상 현재 uid 기준 (가족 공유 중에도 "내 저장")
-    return this.getMySavedIds().map((rid) => RecipeRepository.getById(rid)).filter(Boolean);
+    // 가족 공유 중: household 전체 저장분(나 + 구성원). 개인/탈퇴 후: 내 저장만.
+    const ids = this._isFamilyScope() ? [...this._ids] : this.getMySavedIds();
+    return ids.map((rid) => RecipeRepository.getById(rid)).filter(Boolean);
   },
   getSavedByMembers(id) {
     return this._entries.get(String(id))?.savedByMembers || [];
   },
+  /** 현재 uid가 저장한 recipeId만 — persist·leave/delete cleanup용 (목록 표시와 분리) */
   getMySavedIds() {
     const uid = this._currentUid();
     if (!uid) return [...this._ids];
