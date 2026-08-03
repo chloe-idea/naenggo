@@ -3722,8 +3722,34 @@ function resetBriefingGroceryLoadState() {
   briefingGroceryInFlight = null;
 }
 
+/** 홈 브리핑 전용 — 항상 오늘이 속한 주 (식단 selectedWeek/plannerWeekKey와 독립) */
+function getHomeBriefingWeekKey() {
+  return getWeekKeyFromDateStr(todayStr());
+}
+
+function getHomeBriefingWeekStart() {
+  return getHomeBriefingWeekKey();
+}
+
+/**
+ * 브리핑 계산 시에만 grocery active week를 오늘 주로 맞추고,
+ * 끝나면 식단 탭이 보던 주로 복원한다.
+ */
+function withHomeBriefingGroceryWeek(fn) {
+  const briefingWeekKey = getHomeBriefingWeekKey();
+  const previousWeekKey = GroceryRepository._activeWeekKey || '';
+  GroceryRepository.setActiveWeek(briefingWeekKey);
+  try {
+    return fn(briefingWeekKey);
+  } finally {
+    if (previousWeekKey && previousWeekKey !== briefingWeekKey) {
+      GroceryRepository.setActiveWeek(previousWeekKey);
+    }
+  }
+}
+
 function currentBriefingGroceryScopeKey() {
-  const weekKey = state.plannerWeekKey || getWeekKeyFromDateStr(todayStr());
+  const weekKey = getHomeBriefingWeekKey();
   const householdId = window.FirebaseServices?.FamilySharingService?.getActiveHouseholdId?.() || '';
   return `${weekKey}|${householdId || 'personal'}`;
 }
@@ -3735,7 +3761,7 @@ async function ensureHomeBriefingGroceryLoaded() {
     return;
   }
 
-  const weekKey = state.plannerWeekKey || getWeekKeyFromDateStr(todayStr());
+  const weekKey = getHomeBriefingWeekKey();
   const scopeKey = currentBriefingGroceryScopeKey();
   const sync = window.FirebaseServices?.FirestoreUserDataSync;
   // 식단 탭 등으로 settings 실시간 구독이 이미 켜졌으면 그 스냅샷이 소스
@@ -3755,8 +3781,11 @@ async function ensureHomeBriefingGroceryLoaded() {
     try {
       const result = await sync?.fetchBriefingGroceryWeek?.(weekKey);
       if (result?.ok && result.grocery) {
+        const previousWeekKey = GroceryRepository._activeWeekKey || '';
         GroceryRepository.replaceState(result.grocery, { strategy: 'merge' });
-        GroceryRepository.setActiveWeek(weekKey);
+        // 브리핑용 주 데이터만 병합 — 식단 탭 active week를 덮어쓰지 않음
+        if (previousWeekKey) GroceryRepository.setActiveWeek(previousWeekKey);
+        else GroceryRepository.setActiveWeek(weekKey);
         markGroceryFirestoreReady();
       }
       if (result?.currency && CURRENCY_OPTIONS[result.currency]) {
@@ -4814,24 +4843,26 @@ const HomeBriefingService = {
         return `${recipe.id}\0${ings}`;
       })
       .join('\n');
-    if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
-    const budgetRaw = GroceryRepository.getBudget();
-    const groceryState = GroceryRepository._state || {};
-    const itemsKey = Object.entries(groceryState.items || {})
-      .map(([key, meta]) => `${key}:${meta?.actualAmount ?? ''}:${meta?.checked ? 1 : 0}`)
-      .join('|');
-    const ledgerKey = GroceryRepository.getPurchasedLedger()
-      .map((entry) => `${entry.id || entry.key}\0${entry.actualPrice ?? entry.actualAmount ?? ''}`)
-      .join('|');
-    return [
-      pantryKey,
-      recipesKey,
-      String(budgetRaw),
-      state.plannerWeekKey || '',
-      itemsKey,
-      ledgerKey,
-      briefingGroceryStatus,
-    ].join('\n@@\n');
+    const briefingWeekKey = getHomeBriefingWeekKey();
+    return withHomeBriefingGroceryWeek(() => {
+      const budgetRaw = GroceryRepository.getBudget();
+      const groceryState = GroceryRepository._state || {};
+      const itemsKey = Object.entries(groceryState.items || {})
+        .map(([key, meta]) => `${key}:${meta?.actualAmount ?? ''}:${meta?.checked ? 1 : 0}`)
+        .join('|');
+      const ledgerKey = GroceryRepository.getPurchasedLedger()
+        .map((entry) => `${entry.id || entry.key}\0${entry.actualPrice ?? entry.actualAmount ?? ''}`)
+        .join('|');
+      return [
+        pantryKey,
+        recipesKey,
+        String(budgetRaw),
+        briefingWeekKey,
+        itemsKey,
+        ledgerKey,
+        briefingGroceryStatus,
+      ].join('\n@@\n');
+    });
   },
 
   _countDueIngredients() {
@@ -4856,37 +4887,39 @@ const HomeBriefingService = {
         used: 0,
       };
     }
-    if (state.plannerWeekKey) GroceryRepository.setActiveWeek(state.plannerWeekKey);
-    const raw = GroceryRepository.getBudget();
-    if (raw === '' || raw == null) {
+    return withHomeBriefingGroceryWeek(() => {
+      const raw = GroceryRepository.getBudget();
+      if (raw === '' || raw == null) {
+        return {
+          hasBudget: false,
+          budgetLoading: false,
+          remaining: null,
+          budget: null,
+          used: 0,
+        };
+      }
+      const budget = Number(raw);
+      if (!Number.isFinite(budget) || budget < 0) {
+        return {
+          hasBudget: false,
+          budgetLoading: false,
+          remaining: null,
+          budget: null,
+          used: 0,
+        };
+      }
+      // 식단 탭 selectedWeek가 아니라 오늘이 속한 주만 사용
+      const dates = GroceryListService.getPlannerDates(getHomeBriefingWeekStart());
+      const grouped = GroceryListService.computeMissing(dates);
+      const used = computeGroceryActualTotal(grouped);
       return {
-        hasBudget: false,
+        hasBudget: true,
         budgetLoading: false,
-        remaining: null,
-        budget: null,
-        used: 0,
+        budget,
+        used,
+        remaining: budget - used,
       };
-    }
-    const budget = Number(raw);
-    if (!Number.isFinite(budget) || budget < 0) {
-      return {
-        hasBudget: false,
-        budgetLoading: false,
-        remaining: null,
-        budget: null,
-        used: 0,
-      };
-    }
-    const dates = GroceryListService.getPlannerDates(state.plannerWeekStart);
-    const grouped = GroceryListService.computeMissing(dates);
-    const used = computeGroceryActualTotal(grouped);
-    return {
-      hasBudget: true,
-      budgetLoading: false,
-      budget,
-      used,
-      remaining: budget - used,
-    };
+    });
   },
 
   _compute() {
