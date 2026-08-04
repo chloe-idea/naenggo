@@ -104,6 +104,33 @@ export const FirestoreUserDataSync = {
     FirestoreIngredientService.startSync(activeHandlers.onIngredients, activeHandlers.onError);
   },
 
+  /**
+   * scope(개인↔가족) 변경 시 ingredients + 이미 켜진 deferred 구독을 모두 재시작한다.
+   * 늦은 개인 경로 snapshot 이 가족 state 를 덮지 않도록 이전 listener 를 끊는다.
+   * myRecipes는 users/{uid} 고정이라 유지한다.
+   */
+  restartScopedSync(handlers = {}) {
+    if (handlers && Object.keys(handlers).length) {
+      activeHandlers = { ...(activeHandlers || {}), ...handlers };
+    }
+    if (!activeHandlers) return;
+    const deferredKeys = [...startedDeferred];
+    FirestoreIngredientService.stopSync();
+    FirestoreMealCalendarService.stopSync();
+    FirestoreMealPlansService.stopSync();
+    FirestoreShoppingService.stopSync();
+    FirestoreSettingsService.stopSync();
+    startedDeferred.clear();
+    FirestoreIngredientService.startSync(activeHandlers.onIngredients, activeHandlers.onError);
+    for (const key of deferredKeys) {
+      startDeferredKey(key);
+    }
+    console.log('[FirestoreUserDataSync] scoped sync restarted', {
+      deferredKeys,
+      householdId: handlers?.householdId ?? null,
+    });
+  },
+
   /** @param {string|string[]} keys */
   ensureDeferredSync(keys) {
     const list = Array.isArray(keys) ? keys : [keys];

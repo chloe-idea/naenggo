@@ -4313,11 +4313,23 @@ async function createPantryItem(data, options = {}) {
     const quantity = qtyRaw == null || String(qtyRaw).trim() === '' || String(qtyRaw).trim().toLowerCase() === 'nan'
       ? ''
       : String(qtyRaw).trim();
+    const unit = String(data?.unit ?? '').trim();
+    const expiryDate = String(data?.expiryDate ?? '').trim();
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      console.info('[createPantryItem] write', {
+        mode: householdId ? 'household' : 'personal',
+        path: savePath,
+        uid,
+        householdId,
+        payloadKeys: ['name', 'quantity', 'unit', 'expiryDate'],
+      });
+    }
     await svc.addIngredient(
       {
         name: ingredientName,
         quantity,
-        expiryDate: String(data?.expiryDate ?? ''),
+        unit,
+        expiryDate,
       },
       { householdId },
     );
@@ -4335,7 +4347,17 @@ async function updatePantryItem(id, data) {
     const item = PantryRepository.findById(id);
     const docId = item?.firestoreId || item?.id || id;
     if (!svc) throw new Error('Firebase 서비스를 불러오는 중입니다.');
-    await svc.updateIngredient(docId, data);
+    // UI 전용 필드(recipeId 등)는 Firestore ingredients 스키마에 넣지 않음
+    const qtyRaw = data?.quantity;
+    const quantity = qtyRaw == null || String(qtyRaw).trim() === '' || String(qtyRaw).trim().toLowerCase() === 'nan'
+      ? ''
+      : String(qtyRaw).trim();
+    await svc.updateIngredient(docId, {
+      name: String(data?.name || item?.name || '').trim(),
+      quantity,
+      unit: String(data?.unit ?? item?.unit ?? '').trim(),
+      expiryDate: String(data?.expiryDate ?? '').trim(),
+    });
     return null;
   }
   return PantryRepository.update(id, data);
@@ -4806,11 +4828,47 @@ const RecommendationService = {
 };
 
 const ExpiryService = {
+  /**
+   * YYYY-MM-DD / ISO / Date / Firestore Timestamp → 로컬 자정 Date (표시·D-day 전용)
+   * 저장 형식은 변경하지 않는다.
+   */
+  parseLocalDate(value) {
+    if (value == null || value === '') return null;
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return null;
+      return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    }
+    if (typeof value?.toDate === 'function') {
+      try {
+        const d = value.toDate();
+        if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      } catch (_) {
+        return null;
+      }
+    }
+    if (typeof value === 'object' && typeof value.seconds === 'number') {
+      const d = new Date(value.seconds * 1000);
+      if (Number.isNaN(d.getTime())) return null;
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+    const raw = String(value).trim();
+    if (!raw) return null;
+    const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (ymd) {
+      return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  },
+
   daysUntil(dateStr) {
-    if (!dateStr) return null;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const exp = new Date(`${dateStr}T00:00:00`);
-    return Math.ceil((exp - today) / 86400000);
+    const exp = this.parseLocalDate(dateStr);
+    if (!exp) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((exp.getTime() - today.getTime()) / 86400000);
   },
   status(dateStr) {
     const d = this.daysUntil(dateStr);
@@ -4827,7 +4885,30 @@ const ExpiryService = {
     if (d <= CONFIG.EXPIRY_SOON_DAYS) return `${d}일 남음`;
     return '';
   },
+  /** 재료 목록 보조줄용 유통기한 문구 + 톤 (soon | expired | ok | none) */
+  listLabel(dateStr) {
+    const d = this.daysUntil(dateStr);
+    if (d === null) return { text: '', tone: 'none' };
+    if (d < 0) return { text: '유통기한 지남', tone: 'expired' };
+    if (d === 0) return { text: '오늘까지', tone: 'soon' };
+    if (d <= 3) return { text: `D-${d}`, tone: 'soon' };
+    const exp = this.parseLocalDate(dateStr);
+    return {
+      text: `${exp.getMonth() + 1}월 ${exp.getDate()}일까지`,
+      tone: 'ok',
+    };
+  },
 };
+
+/** 재료 목록: quantity + unit 표시 (unit만 단독 표시 안 함, 0은 정상 표시) */
+function formatPantryQuantityLabel(item) {
+  if (!item) return '';
+  const rawQty = item.quantity;
+  if (rawQty == null || String(rawQty).trim() === '') return '';
+  const qty = String(rawQty).trim();
+  const unit = item.unit != null ? String(item.unit).trim() : '';
+  return unit ? `${qty}${unit}` : qty;
+}
 
 /** 홈 «오늘의 냉장고 브리핑» — Firestore/앱 상태만으로 계산 (AI 없음) */
 const HomeBriefingService = {
@@ -4956,6 +5037,7 @@ const HomeBriefingService = {
 const state = {
   view: 'main', filters: new Set(), menuSearch: '', homeSavedOnly: false,
   editingRecipeId: null, editingPantryId: null,
+  pantrySearchQuery: '',
   editingMealId: null, editingShoppingId: null, formImage: null, mealFormImage: null, isComposing: false,
   calendarYear: new Date().getFullYear(), calendarMonth: new Date().getMonth(),
   selectedCalendarDate: null, selectedMealType: 'home-cook', mealPhotoRemoved: false,
@@ -5066,6 +5148,9 @@ const dom = {
   myRecipesSortOptions: $('#my-recipes-sort-options'),
   myRecipesSortSheetTitle: $('#my-recipes-sort-sheet-title'),
   pantryList: $('#pantry-list'), pantryCount: $('#pantry-manage-count'), pantryEmpty: $('#pantry-empty'),
+  pantrySearchInput: $('#pantry-search-input'),
+  pantryModalDeleteWrap: $('#pantry-modal-delete-wrap'),
+  pantryModalDeleteBtn: $('#pantry-modal-delete-btn'),
   openPantryAdd: $('#open-pantry-add-btn'), openRecipeForm: $('#open-recipe-form-btn'),
   openVideoRecipeFormBtn: $('#open-video-recipe-form-btn'),
   mealStats: $('#meal-stats'), currencySelect: $('#currency-select'), calendarLabel: $('#calendar-label'),
@@ -7496,43 +7581,100 @@ function renderMyRecipes() {
 }
 
 // ===== Render: Pantry Manage =====
+function getPantrySearchQuery() {
+  if (dom.pantrySearchInput && document.activeElement === dom.pantrySearchInput) {
+    return String(dom.pantrySearchInput.value || '').trim();
+  }
+  return String(state.pantrySearchQuery || '').trim();
+}
+
+function confirmAndDeletePantryItem(id) {
+  const item = getPantryItemsForUi().find((x) => x.id === id);
+  if (!item) return;
+  if (!confirm(`"${item.name || '재료'}" 삭제할까요?`)) return;
+  removePantryItem(id)
+    .then(() => {
+      if (state.editingPantryId === id) closeModal('pantry');
+      refreshAll();
+    })
+    .catch((err) => handlePantryFirestoreError(err));
+}
+
 function renderPantryManage() {
+  const allItems = getPantryItemsForUi();
+  const query = getPantrySearchQuery();
+  state.pantrySearchQuery = query;
+  if (dom.pantrySearchInput && document.activeElement !== dom.pantrySearchInput) {
+    dom.pantrySearchInput.value = query;
+  }
+
   const emptyTextEl = dom.pantryEmpty.querySelector('.empty-state__text');
-  if (emptyTextEl) emptyTextEl.textContent = '등록된 재료가 없습니다';
-  const items = [...getPantryItemsForUi()].sort((a, b) => {
-    const o = { expired: 0, soon: 1, ok: 2, none: 3 };
-    return o[ExpiryService.status(a.expiryDate)] - o[ExpiryService.status(b.expiryDate)];
-  });
-  dom.pantryCount.textContent = items.length ? `${items.length}개` : '';
-  dom.pantryEmpty.hidden = items.length > 0;
-  dom.pantryList.innerHTML = items.map((item) => {
-    const st = ExpiryService.status(item.expiryDate);
-    const lbl = ExpiryService.label(item.expiryDate);
-    const qty = [item.quantity, item.unit].filter((part) => part != null && String(part).trim() !== '').join(' ');
-    const statusClass = st !== 'none' && st !== 'ok' ? st : 'normal';
-    return `
-      <article class="pantry-card pantry-card--${statusClass}" role="listitem">
-        <div class="pantry-card__body">
-          <p class="pantry-card__name">${esc(item.name)}</p>
-          ${qty ? `<p class="pantry-card__detail">${esc(qty)}</p>` : ''}
-          ${item.expiryDate ? `<p class="pantry-card__expiry">${esc(item.expiryDate)}</p>` : ''}
-          ${item.recipeName ? `<p class="pantry-card__recipe">📖 ${esc(item.recipeName)}</p>` : ''}
-          ${lbl ? `<span class="pantry-card__badge pantry-card__badge--${st}">${st === 'expired' ? '만료' : '임박'} · ${esc(lbl)}</span>` : ''}
-        </div>
-        <div class="pantry-card__actions">
-          <button type="button" class="btn btn--ghost btn--sm" data-edit="${esc(item.id)}">수정</button>
-          <button type="button" class="btn btn--danger btn--sm" data-del="${esc(item.id)}">삭제</button>
-        </div>
-      </article>`;
-  }).join('');
-  dom.pantryList.querySelectorAll('[data-edit]').forEach((b) => { b.onclick = () => openPantryModal(b.dataset.edit); });
-  dom.pantryList.querySelectorAll('[data-del]').forEach((b) => {
-    b.onclick = () => {
-      const item = getPantryItemsForUi().find((x) => x.id === b.dataset.del);
-      if (confirm(`"${item?.name || '재료'}" 삭제할까요?`)) {
-        removePantryItem(b.dataset.del).catch((err) => handlePantryFirestoreError(err));
+  const grouper = window.HangulGroup?.groupItemsByHangulInitial;
+  const groups = typeof grouper === 'function'
+    ? grouper(allItems, { query, getName: (item) => item?.name || '' })
+    : [{
+      group: '',
+      items: [...allItems]
+        .filter((item) => !query || String(item.name || '').toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko')),
+    }];
+
+  const visibleCount = groups.reduce((sum, g) => sum + g.items.length, 0);
+  dom.pantryCount.textContent = allItems.length ? `${allItems.length}개` : '';
+
+  if (!allItems.length) {
+    if (emptyTextEl) emptyTextEl.textContent = '등록된 재료가 없습니다';
+    dom.pantryEmpty.hidden = false;
+    dom.pantryList.innerHTML = '';
+    return;
+  }
+
+  if (!visibleCount) {
+    if (emptyTextEl) emptyTextEl.textContent = '검색 결과가 없어요';
+    dom.pantryEmpty.hidden = false;
+    dom.pantryList.innerHTML = '';
+    return;
+  }
+
+  dom.pantryEmpty.hidden = true;
+  dom.pantryList.innerHTML = groups.map(({ group, items }) => {
+    const heading = group
+      ? `<h3 class="pantry-list__group-title" aria-label="${esc(group)} 그룹">${esc(group)}</h3>`
+      : '';
+    const rows = items.map((item) => {
+      const qtyLabel = formatPantryQuantityLabel(item);
+      const expiry = ExpiryService.listLabel(item.expiryDate);
+      const hasMeta = Boolean(qtyLabel || expiry.text);
+      const toneClass = expiry.tone === 'expired'
+        ? ' pantry-row__expiry--expired'
+        : expiry.tone === 'soon'
+          ? ' pantry-row__expiry--soon'
+          : '';
+      const metaParts = [];
+      if (qtyLabel) {
+        metaParts.push(`<span class="pantry-row__qty">${esc(qtyLabel)}</span>`);
       }
-    };
+      if (expiry.text) {
+        if (qtyLabel) metaParts.push('<span class="pantry-row__sep" aria-hidden="true">·</span>');
+        metaParts.push(`<span class="pantry-row__expiry${toneClass}">${esc(expiry.text)}</span>`);
+      }
+      const metaHtml = hasMeta
+        ? `<span class="pantry-row__meta">${metaParts.join('')}</span>`
+        : '';
+      return `
+        <button type="button" class="pantry-row${hasMeta ? ' pantry-row--has-meta' : ''}" role="listitem" data-edit="${esc(item.id)}" aria-label="${esc(item.name)} 수정">
+          <span class="pantry-row__text">
+            <span class="pantry-row__name">${esc(item.name)}</span>
+            ${metaHtml}
+          </span>
+          <span class="material-symbols-outlined pantry-row__chevron" aria-hidden="true">chevron_right</span>
+        </button>`;
+    }).join('');
+    return `<section class="pantry-list__group">${heading}${rows}</section>`;
+  }).join('');
+
+  dom.pantryList.querySelectorAll('[data-edit]').forEach((row) => {
+    row.onclick = () => openPantryModal(row.dataset.edit);
   });
 }
 
@@ -11120,6 +11262,7 @@ function openPantryModal(id = null) {
   dom.pantryModalForm.reset();
   RecipePickerService.clear(state.pantryRecipePicker);
   dom.pantryModalTitle.textContent = id ? '재료 수정' : '재료 추가';
+  if (dom.pantryModalDeleteWrap) dom.pantryModalDeleteWrap.hidden = !id;
   if (id) {
     const item = getPantryItemsForUi().find((x) => x.id === id);
     if (!item) return;
@@ -11566,6 +11709,18 @@ function init() {
   dom.groceryBudget?.addEventListener('change', commitGroceryBudget);
   dom.groceryBudget?.addEventListener('blur', commitGroceryBudget);
   dom.pantryModalForm.addEventListener('submit', handlePantryModalSubmit);
+  dom.pantryModalDeleteBtn?.addEventListener('click', () => {
+    if (!state.editingPantryId) return;
+    confirmAndDeletePantryItem(state.editingPantryId);
+  });
+  dom.pantrySearchInput?.addEventListener('input', () => {
+    state.pantrySearchQuery = String(dom.pantrySearchInput.value || '').trim();
+    if (state.view === 'pantry') renderPantryManage();
+  });
+  dom.pantrySearchInput?.addEventListener('search', () => {
+    state.pantrySearchQuery = String(dom.pantrySearchInput.value || '').trim();
+    if (state.view === 'pantry') renderPantryManage();
+  });
   dom.mealModalForm.addEventListener('submit', handleMealModalSubmit);
   dom.shoppingModalForm.addEventListener('submit', handleShoppingModalSubmit);
   dom.mealRecipeSelect.addEventListener('change', handleMealRecipeSelect);

@@ -379,9 +379,11 @@ async function ensureMembershipAndActivePointer(db, uid, householdId, {
 
   if (!memberSnap.exists) {
     if (!(allowCreateOwnerMember && isOwner)) return null;
+    // Rules isHouseholdMember 는 members/{uid} 존재를 요구한다 (ownerId 단독 불가).
     await mRef.create({
       uid,
       role: ROLE_OWNER,
+      active: true,
       joinedAt: FieldValue.serverTimestamp(),
       joinedBy: uid,
       repairedAt: FieldValue.serverTimestamp(),
@@ -736,11 +738,72 @@ async function logHouseholdCandidateDiagnostics(db, snap) {
 }
 
 /**
+ * ownerId === uid 인 active household 중 안전하게 하나만 고른다.
+ * - preferredHouseholdId 가 후보에 있으면 최우선 (stale cleanup 직전 포인터)
+ * - active owned 가 정확히 1개면 그것
+ * - 여러 개면 "다른 활성 구성원이 있는" household 가 정확히 1개일 때만
+ * 새 household 생성·데이터 이동/삭제 없음. owner membership 만 복구.
+ */
+async function selectOwnedHouseholdForRepair(db, uid, ownedSnaps, preferredHouseholdId = null) {
+  const activeOwned = ownedSnaps.filter((snap) => isHouseholdActiveDoc(snap.data()));
+  if (!activeOwned.length) return null;
+
+  const preferredId = storedHouseholdId(preferredHouseholdId);
+  if (preferredId) {
+    const preferred = activeOwned.find((snap) => snap.id === preferredId);
+    if (preferred && preferred.data()?.ownerId === uid) {
+      return { snap: preferred, reason: 'preferred_pointer' };
+    }
+  }
+
+  if (activeOwned.length === 1) {
+    const only = activeOwned[0];
+    if (only.data()?.ownerId !== uid) return null;
+    return { snap: only, reason: 'sole_active_owned' };
+  }
+
+  const scored = [];
+  for (const snap of activeOwned) {
+    if (snap.data()?.ownerId !== uid) continue;
+    const membersSnap = await snap.ref.collection('members').get();
+    const otherActive = membersSnap.docs.filter(
+      (docSnap) => docSnap.id !== uid && isMemberActiveDoc(docSnap.data()),
+    ).length;
+    scored.push({
+      snap,
+      otherActive,
+      recency: householdRecencyMs(snap.data()),
+    });
+  }
+
+  const inUse = scored.filter((item) => item.otherActive > 0);
+  if (inUse.length === 1) {
+    return { snap: inUse[0].snap, reason: 'sole_in_use_owned' };
+  }
+
+  console.info('[HOUSEHOLD DEBUG] auto-select skipped; ambiguous owner households', {
+    uid,
+    activeOwnedCount: activeOwned.length,
+    inUseCount: inUse.length,
+    preferredHouseholdId: preferredId,
+    candidates: scored.map((item) => ({
+      householdId: item.snap.id,
+      otherActive: item.otherActive,
+      recency: item.recency,
+    })),
+  });
+  return null;
+}
+
+/**
  * active/pending 포인터가 없을 때 ownerId 또는 members 문서로 소속을 찾는다.
  * 새 household는 만들지 않는다.
+ *
+ * owner 후보가 있어도 members/{ownerUid} 누락·포인터 wipe 상태면
+ * 검증된 단일 household 에 한해 membership + activeHouseholdId 만 복구한다.
  */
-async function discoverAndRepairHouseholdForUser(db, uid) {
-  // 1) ownerId 후보 진단만 (읽기 전용 — 자동 선택/쓰기 없음)
+async function discoverAndRepairHouseholdForUser(db, uid, { preferredHouseholdId = null } = {}) {
+  // 1) ownerId 후보 — 진단 + (안전할 때만) owner membership/pointer 복구
   // 쿼리: db.collection('households').where('ownerId', '==', uid)
   const ownedSnap = await db.collection(HOUSEHOLDS).where('ownerId', '==', uid).get();
   console.info('[HOUSEHOLD DEBUG]\nowner query uid:\n%s\n\nowner households:\n%s\n\nowner count:\n%d\n\nowner query:\n.where("ownerId","==",uid)\ncollection: households',
@@ -754,11 +817,39 @@ async function discoverAndRepairHouseholdForUser(db, uid) {
   }
 
   if (ownedSnap.size > 0) {
-    console.info('[HOUSEHOLD DEBUG] auto-select skipped; compare HOUSEHOLD CANDIDATE logs', {
+    const selected = await selectOwnedHouseholdForRepair(
+      db,
       uid,
-      ownerCount: ownedSnap.size,
+      ownedSnap.docs,
+      preferredHouseholdId,
+    );
+    if (!selected) {
+      return null;
+    }
+    const householdId = selected.snap.id;
+    const repaired = await ensureMembershipAndActivePointer(db, uid, householdId, {
+      allowCreateOwnerMember: true,
+      forceActive: true,
     });
-    return null;
+    if (!repaired) {
+      console.warn('[household] owned household repair failed', {
+        uid,
+        householdId,
+        reason: selected.reason,
+      });
+      return null;
+    }
+    console.info('[household] repaired owned household membership/pointer', {
+      uid,
+      householdId,
+      reason: selected.reason,
+      source: 'ownerId',
+    });
+    return {
+      ...repaired,
+      recency: householdRecencyMs(selected.snap.data()),
+      source: 'ownerId',
+    };
   }
 
   // 2) owner 후보가 없을 때만 collectionGroup(members) 경로 유지
@@ -1044,6 +1135,43 @@ async function tryGetCurrentHouseholdFast(db, uid, timing, { includeMembers = fa
 
   const data = householdSnap.data();
   const memberData = memberSnap.data() || {};
+
+  // pending 만 있고 가족이 이미 운영 중(다른 활성 구성원 있음)이거나
+  // migrationChoiceCompletedAt 만 남은 불일치 상태면 owner active 포인터를 복구한다.
+  // (공유 데이터 복사/삭제 없음. 새 household 없음.)
+  let resolvedActiveId = activeId;
+  if (!resolvedActiveId && pendingId) {
+    const isOwner = data.ownerId === uid || memberData.role === ROLE_OWNER;
+    if (isOwner) {
+      let hasOtherActiveMember = false;
+      if (includeMembers && membersSnap) {
+        hasOtherActiveMember = membersSnap.docs.some(
+          (snap) => snap.id !== uid && isMemberActiveDoc(snap.data()),
+        );
+      } else {
+        const preview = await householdRef(db, householdId).collection('members').limit(8).get();
+        hasOtherActiveMember = preview.docs.some(
+          (snap) => snap.id !== uid && isMemberActiveDoc(snap.data()),
+        );
+      }
+      const migrationDone = Boolean(memberData.migrationChoiceCompletedAt);
+      if (hasOtherActiveMember || migrationDone) {
+        await userRef.set({
+          activeHouseholdId: householdId,
+          pendingHouseholdId: FieldValue.delete(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        resolvedActiveId = householdId;
+        console.info('[household] promoted stuck pending owner to active', {
+          uid,
+          householdId,
+          hasOtherActiveMember,
+          migrationDone,
+        });
+      }
+    }
+  }
+
   let members;
   if (includeMembers && membersSnap) {
     members = membersSnap.docs
@@ -1075,7 +1203,7 @@ async function tryGetCurrentHouseholdFast(db, uid, timing, { includeMembers = fa
       members,
       membersPartial: !includeMembers,
       createdAt: serializeTimestamp(data.createdAt),
-      pendingSetup: !activeId,
+      pendingSetup: !resolvedActiveId,
       resolutionPath: 'fast',
     },
   };
@@ -1138,13 +1266,16 @@ async function getCurrentHouseholdRecovery(db, user, userRef, timing, { userSnap
       reason: 'state.activeId and state.pendingId are both null after inspect',
       rawActiveHouseholdId: diagnostics.rawActiveHouseholdId,
     });
-    const discovered = await timing.step('discovery', () => discoverAndRepairHouseholdForUser(db, user.uid));
+    const preferredHouseholdId = diagnostics.rawActiveHouseholdId || diagnostics.rawPendingHouseholdId || null;
+    const discovered = await timing.step('discovery', () => discoverAndRepairHouseholdForUser(db, user.uid, {
+      preferredHouseholdId,
+    }));
     if (!discovered?.householdId) {
       let returnReason = 'NO_ACTIVE_PENDING_OWNER_OR_MEMBER_HOUSEHOLD';
       if (diagnostics.ownerHouseholds.length > 1) {
         returnReason = 'NO_ACTIVE_AND_MULTIPLE_OWNER_HOUSEHOLDS';
       } else if (diagnostics.ownerHouseholds.length === 1) {
-        returnReason = 'DISCOVERY_SKIPPED_OWNER_CANDIDATES_PRESENT';
+        returnReason = 'DISCOVERY_OWNER_REPAIR_FAILED';
       } else if (diagnostics.memberHouseholds.length > 0) {
         returnReason = 'DISCOVERY_FOUND_NO_REPAIRABLE_MEMBERSHIP';
       } else if (diagnostics.memberQueryError) {
@@ -1233,19 +1364,6 @@ async function getCurrentHouseholdRecovery(db, user, userRef, timing, { userSnap
   }
   const data = householdSnap.data();
   const memberData = memberSnap.data() || {};
-  const okReason = state.activeId ? 'OK_ACTIVE_HOUSEHOLD' : 'OK_PENDING_HOUSEHOLD';
-  await timing.step('validation', () => buildActiveHouseholdValidationDebug(db, user.uid, {
-    inspectedActiveId: state.activeId,
-    inspectedPendingId: state.pendingId,
-    enteredDiscovery,
-    returnReason: okReason,
-  }));
-  logCurrentHouseholdDebug({
-    ...baseDebug,
-    inspectedActiveId: state.activeId,
-    inspectedPendingId: state.pendingId,
-    returnReason: okReason,
-  });
   const members = includeMembers && membersSnap
     ? membersSnap.docs
       .filter((snap) => isMemberActiveDoc(snap.data()))
@@ -1259,6 +1377,52 @@ async function getCurrentHouseholdRecovery(db, user, userRef, timing, { userSnap
       role: memberData.role || ROLE_MEMBER,
       joinedAt: serializeTimestamp(memberData.joinedAt),
     }];
+
+  // recovery 경로에서도 stuck pending owner 를 active 로 승격
+  let resolvedActiveId = state.activeId;
+  if (!resolvedActiveId && state.pendingId) {
+    const isOwner = data.ownerId === user.uid || memberData.role === ROLE_OWNER;
+    if (isOwner) {
+      let hasOtherActiveMember = includeMembers && membersSnap
+        ? membersSnap.docs.some((snap) => snap.id !== user.uid && isMemberActiveDoc(snap.data()))
+        : false;
+      if (!includeMembers || !membersSnap) {
+        const preview = await householdRef(db, householdId).collection('members').limit(8).get();
+        hasOtherActiveMember = preview.docs.some(
+          (snap) => snap.id !== user.uid && isMemberActiveDoc(snap.data()),
+        );
+      }
+      const migrationDone = Boolean(memberData.migrationChoiceCompletedAt);
+      if (hasOtherActiveMember || migrationDone) {
+        await userRef.set({
+          activeHouseholdId: householdId,
+          pendingHouseholdId: FieldValue.delete(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        resolvedActiveId = householdId;
+        console.info('[household] recovery promoted stuck pending owner to active', {
+          uid: user.uid,
+          householdId,
+          hasOtherActiveMember,
+          migrationDone,
+        });
+      }
+    }
+  }
+
+  const okReason = resolvedActiveId ? 'OK_ACTIVE_HOUSEHOLD' : 'OK_PENDING_HOUSEHOLD';
+  await timing.step('validation', () => buildActiveHouseholdValidationDebug(db, user.uid, {
+    inspectedActiveId: resolvedActiveId || state.activeId,
+    inspectedPendingId: state.pendingId,
+    enteredDiscovery,
+    returnReason: okReason,
+  }));
+  logCurrentHouseholdDebug({
+    ...baseDebug,
+    inspectedActiveId: resolvedActiveId || state.activeId,
+    inspectedPendingId: state.pendingId,
+    returnReason: okReason,
+  });
   return {
     householdId,
     name: data.name,
@@ -1269,7 +1433,7 @@ async function getCurrentHouseholdRecovery(db, user, userRef, timing, { userSnap
     members,
     membersPartial: !includeMembers,
     createdAt: serializeTimestamp(data.createdAt),
-    pendingSetup: !state.activeId,
+    pendingSetup: !resolvedActiveId,
     resolutionPath: 'recovery',
   };
 }

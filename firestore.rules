@@ -35,7 +35,10 @@ service cloud.firestore {
     }
 
     function isHouseholdMember(householdId) {
-      return isSignedIn() && exists(householdMemberRef(householdId));
+      // soft-delete(active == false) 구성원은 쓰기/읽기 불가. active 누락은 활성으로 간주.
+      return isSignedIn()
+        && exists(householdMemberRef(householdId))
+        && get(householdMemberRef(householdId)).data.active != false;
     }
 
     function isHouseholdOwner(householdId) {
@@ -160,27 +163,33 @@ service cloud.firestore {
       }
 
       match /ingredients/{ingredientId} {
+        // 허용 필드: name/normalizedName/quantity/unit/expiryDate + timestamps
+        // unit은 UI·개인 경로와 동일하게 문자열로 저장 (마이그레이션 잔여 필드 제거는 클라이언트가 정리)
         allow read: if isHouseholdMember(householdId);
         allow create: if isHouseholdMember(householdId)
-          && request.resource.data.keys().hasAll(['name', 'normalizedName', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
-          && request.resource.data.keys().hasOnly(['name', 'normalizedName', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasAll(['name', 'normalizedName', 'quantity', 'unit', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'normalizedName', 'quantity', 'unit', 'expiryDate', 'createdAt', 'updatedAt'])
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
           && request.resource.data.normalizedName is string
           && request.resource.data.normalizedName.size() > 0
           && request.resource.data.quantity is string
+          && request.resource.data.unit is string
+          && request.resource.data.unit.size() <= 40
           && request.resource.data.expiryDate is string
           && householdItemTimestampsValid();
         allow update: if isHouseholdMember(householdId)
           && householdCreatedAtUnchanged()
-          && request.resource.data.keys().hasOnly(['name', 'normalizedName', 'quantity', 'expiryDate', 'createdAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['name', 'normalizedName', 'quantity', 'unit', 'expiryDate', 'createdAt', 'updatedAt'])
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
           && request.resource.data.name.size() <= 120
           && request.resource.data.normalizedName is string
           && request.resource.data.normalizedName.size() > 0
           && request.resource.data.quantity is string
+          && request.resource.data.unit is string
+          && request.resource.data.unit.size() <= 40
           && request.resource.data.expiryDate is string
           && householdItemTimestampsValid();
         allow delete: if isHouseholdMember(householdId);

@@ -755,7 +755,19 @@ function buildUserSyncHandlers(markHomeSnapshot) {
       window.dispatchEvent(new CustomEvent('settings-firestore-sync', { detail: { settings } }));
     },
     onError: (err) => {
-      console.error('[firebase-bootstrap] user data sync failed:', err?.code, err?.message, err);
+      const family = FamilySharingService.getActiveFamily?.();
+      console.error('[firebase-bootstrap] user data sync failed — keeping existing UI state', {
+        operation: 'userDataSync',
+        code: err?.code || null,
+        message: err?.message || String(err),
+        authPresent: Boolean(AuthService.isLoggedIn?.() || auth?.currentUser),
+        activeHouseholdId: FamilySharingService.getActiveHouseholdId?.() || null,
+        role: family?.role || null,
+        pendingSetup: Boolean(family?.pendingSetup),
+        err,
+      });
+      // permission-denied / 구독 실패 시 빈 데이터로 overwrite 하지 않는다.
+      // 로딩 스피너만 해제한다.
       markHomeSnapshot?.('ingredients');
       markHomeSnapshot?.('myRecipes');
     },
@@ -865,13 +877,14 @@ async function syncUserData(user, { force = false } = {}) {
       startMs: householdStartMs,
     });
 
-    // hint와 서버 결과가 다르면 household-scoped(ingredients)만 재구독.
+    // hint와 서버 결과가 다르면 household-scoped 구독 전부 재시작.
     // myRecipes는 users/{uid}/myRecipes 고정이라 재등록하지 않는다 (duplicateListeners 방지).
     if (scopeBeforeVerify !== householdId) {
       console.log('[HouseholdPerf] scope-mismatch-resubscribe', {
         hintHadHousehold: Boolean(scopeBeforeVerify),
         resolvedHadHousehold: Boolean(householdId),
         keepMyRecipes: true,
+        restartDeferred: true,
       });
       homeSeen.ingredients = false;
       if (homeSeen.myRecipes) {
@@ -883,9 +896,10 @@ async function syncUserData(user, { force = false } = {}) {
         startDataLoading(user);
         firstSnapshotDone = false;
       }
-      FirestoreUserDataSync.restartIngredientsSync(
-        buildUserSyncHandlers(markHomeSnapshot),
-      );
+      FirestoreUserDataSync.restartScopedSync({
+        householdId,
+        ...buildUserSyncHandlers(markHomeSnapshot),
+      });
     }
 
     if (householdId && !deduplicatedHouseholdsThisSession.has(householdId)) {

@@ -3560,158 +3560,174 @@ body.home-search-keyboard-active .home-search-dock {
   flex: 1;
 }
 
-.pantry-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.625rem;
-  margin-top: 1rem;
+/* ===== Pantry manage: 1열 가나다순 리스트 ===== */
+#view-pantry.view--pantry {
+  padding-bottom: 0.75rem;
+  overflow-x: hidden;
 }
 
-.pantry-card {
+.section--pantry-add {
+  padding-bottom: 0.25rem;
+}
+
+.section--pantry-list {
+  padding-top: 0.75rem;
+}
+
+.pantry-search {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.pantry-search__input {
+  width: 100%;
+}
+
+.pantry-list {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  padding: 0.875rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  border-top: 3px solid var(--color-border);
-  min-height: 100%;
+  margin-top: 0.5rem;
+  padding-bottom: 1rem;
+  overflow-x: hidden;
 }
 
-.pantry-card--soon {
-  border-top-color: var(--color-warning);
-  background: #fffdf5;
+.pantry-list__group {
+  margin: 0;
+  padding: 0;
 }
 
-.pantry-card--expired {
-  border-top-color: #dc3545;
-  background: #fff8f8;
+.pantry-list__group + .pantry-list__group {
+  margin-top: 0.75rem;
 }
 
-.pantry-card__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.pantry-card__name {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
-  word-break: keep-all;
-}
-
-.pantry-card__detail {
+.pantry-list__group-title {
+  margin: 0;
+  padding: 0.5rem 0.125rem 0.25rem;
   font-size: 0.8125rem;
+  font-weight: 700;
   color: var(--color-text-muted);
+  line-height: 1.3;
 }
 
-.pantry-card__expiry {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  margin-top: 0.125rem;
-}
-
-.pantry-card__badge {
-  display: inline-block;
-  margin-top: 0.375rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-full);
-  font-size: 0.6875rem;
-  font-weight: 600;
-}
-
-.pantry-card__badge--soon {
-  background: #fff8e1;
-  color: #f57f17;
-}
-
-.pantry-card__badge--expired {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.pantry-card__actions {
+.pantry-row {
   display: flex;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 640px) {
-  .pantry-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 380px) {
-  .pantry-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-.pantry-item {
-  display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.875rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  border-left: 3px solid var(--color-border);
+  width: 100%;
+  min-height: 3.5rem; /* 56px — 이름만 */
+  padding: 0.75rem 0.25rem 0.75rem 0.125rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
 }
 
-.pantry-item--soon {
-  border-left-color: var(--color-warning);
-  background: #fffdf5;
+.pantry-row--has-meta {
+  min-height: 4.25rem; /* ~68px */
+  padding-top: 0.8125rem;
+  padding-bottom: 0.8125rem;
 }
 
-.pantry-item--expired {
-  border-left-color: #dc3545;
-  background: #fff8f8;
+.pantry-row:last-child {
+  border-bottom-color: var(--color-border);
 }
 
-.pantry-item__body {
-  flex: 1;
+.pantry-row:active {
+  background: var(--color-surface);
+}
+
+.pantry-row__text {
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-.pantry-item__name {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
-}
-
-.pantry-item__detail {
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  line-height: 1.5;
-}
-
-.pantry-item__badge {
-  display: inline-block;
-  margin-top: 0.375rem;
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-full);
-  font-size: 0.6875rem;
-  font-weight: 600;
-}
-
-.pantry-item__badge--soon {
-  background: #fff8e1;
-  color: #f57f17;
-}
-
-.pantry-item__badge--expired {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.pantry-item__actions {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
-  flex-shrink: 0;
+  justify-content: center;
+  gap: 0.25rem; /* 4px */
+  padding-right: 0.25rem;
+  overflow: hidden;
+}
+
+.pantry-row__name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.35;
+  word-break: keep-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pantry-row__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.8125rem; /* ~13px, 이름보다 3px */
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pantry-row__qty {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-muted);
+}
+
+.pantry-row__sep {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.pantry-row__expiry {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-muted);
+}
+
+.pantry-row__expiry--soon {
+  color: var(--color-primary, #ff6b35);
+  font-weight: 600;
+}
+
+.pantry-row__expiry--expired {
+  color: #c62828;
+  font-weight: 600;
+}
+
+.pantry-row__chevron {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: 1.375rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+}
+
+.pantry-modal-delete {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* legacy pantry-card / pantry-item (미사용, 호환 유지) */
+.pantry-card,
+.pantry-item {
+  display: none;
 }
 
 .recipe-card__expiry-hint {

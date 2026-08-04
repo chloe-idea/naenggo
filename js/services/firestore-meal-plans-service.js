@@ -20,6 +20,7 @@ const SUBCOLLECTION = 'mealPlans';
 const DOC_ID = 'default';
 
 let snapshotUnsubscribe = null;
+let listenGeneration = 0;
 
 function planDoc(uid) {
   if (!db || !uid) return null;
@@ -42,6 +43,7 @@ function clonePlans(plans) {
 
 export const FirestoreMealPlansService = {
   stopSync() {
+    listenGeneration += 1;
     if (snapshotUnsubscribe) {
       snapshotUnsubscribe();
       snapshotUnsubscribe = null;
@@ -50,9 +52,10 @@ export const FirestoreMealPlansService = {
 
   startSync(onPlans, onError) {
     this.stopSync();
+    const generation = listenGeneration;
     const uid = resolveUid();
     if (!uid || !db) {
-      onPlans?.({});
+      if (generation === listenGeneration) onPlans?.({});
       return null;
     }
     const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
@@ -75,6 +78,7 @@ export const FirestoreMealPlansService = {
     snapshotUnsubscribe = onSnapshot(
       planDoc(uid),
       (snap) => {
+        if (generation !== listenGeneration) return;
         const data = snap.exists() ? snap.data() : {};
         const plans = data.plans && typeof data.plans === 'object' ? clonePlans(data.plans) : {};
         StartupPerf.end('meal plan loaded', {
@@ -84,7 +88,18 @@ export const FirestoreMealPlansService = {
         });
         onPlans?.(plans);
       },
-      (err) => onError?.(err),
+      (err) => {
+        if (generation !== listenGeneration) return;
+        console.error('[FirestoreMealPlansService] onSnapshot failed', {
+          operation: 'mealPlans.onSnapshot',
+          firestorePath: collectionPath,
+          code: err?.code || null,
+          authPresent: Boolean(auth?.currentUser),
+          activeHouseholdId: FamilySharingService.getActiveHouseholdId(),
+          message: err?.message || String(err),
+        });
+        onError?.(err);
+      },
     );
     return snapshotUnsubscribe;
   },

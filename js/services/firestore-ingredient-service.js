@@ -5,9 +5,10 @@ import {
   collection,
   doc,
   addDoc,
+  getDoc,
   getDocs,
+  setDoc,
   runTransaction,
-  updateDoc,
   deleteDoc,
   onSnapshot,
   serverTimestamp,
@@ -18,8 +19,44 @@ import { FamilySharingService } from './family-sharing-service.js';
 import { StartupPerf } from './startup-perf.js';
 
 const INGREDIENTS_COLLECTION = 'ingredients';
+/** households/{id}/ingredients Rules hasOnly 와 동일한 허용 필드 */
+const HOUSEHOLD_INGREDIENT_KEYS = [
+  'name',
+  'normalizedName',
+  'quantity',
+  'unit',
+  'expiryDate',
+  'createdAt',
+  'updatedAt',
+];
 
 let snapshotUnsubscribe = null;
+/** stale personal/household listener 가 최신 scope state 를 덮지 않도록 */
+let listenGeneration = 0;
+
+function isDevIngredientLog() {
+  try {
+    const host = String(globalThis?.location?.hostname || '');
+    return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+  } catch (_) {
+    return false;
+  }
+}
+
+function logIngredientWrite(label, details = {}) {
+  if (!isDevIngredientLog()) return;
+  const mode = details.householdId ? 'household' : 'personal';
+  console.info(`[FirestoreIngredientService] ${label}`, {
+    mode,
+    path: details.path || null,
+    documentId: details.documentId || null,
+    payloadKeys: details.payloadKeys || null,
+    uid: details.uid || null,
+    householdId: details.householdId || null,
+    code: details.code || null,
+    message: details.message || null,
+  });
+}
 
 function ingredientsCollection(uid) {
   if (!db || !uid) return null;
@@ -55,10 +92,10 @@ function mapFirestoreDoc(docSnap, uid) {
     id: docSnap.id,
     firestoreId: docSnap.id,
     name: data.name || '',
-    normalizedName: normalizeIngredientName(data.normalizedName || data.name),
+    normalizedName: normalizedIngredientName(data.normalizedName || data.name),
     quantity: data.quantity == null || data.quantity === '' ? '' : String(data.quantity),
-    unit: '',
-    expiryDate: data.expiryDate || '',
+    unit: data.unit == null ? '' : String(data.unit),
+    expiryDate: normalizeExpiryDateForStorage(data.expiryDate),
     recipeId: null,
     recipeName: '',
     userId: uid,
@@ -67,13 +104,41 @@ function mapFirestoreDoc(docSnap, uid) {
   };
 }
 
+/** 유통기한: 기존 Firestore 형식(YYYY-MM-DD 문자열)으로 통일 */
+function normalizeExpiryDateForStorage(value) {
+  if (value == null || value === '') return '';
+  if (typeof value?.toDate === 'function') {
+    const d = value.toDate();
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const raw = String(value).trim();
+  if (!raw) return '';
+  // date input / ISO → YYYY-MM-DD
+  const isoDay = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoDay) return isoDay[1];
+  return raw.slice(0, 40);
+}
+
 function buildFirestorePayload(data) {
   return {
     name: String(data?.name || '').trim(),
-    normalizedName: normalizeIngredientName(String(data?.name || '').trim()),
+    normalizedName: normalizedIngredientName(String(data?.name || '').trim()),
     quantity: normalizeQuantityForStorage(data?.quantity),
-    expiryDate: String(data?.expiryDate ?? ''),
+    unit: String(data?.unit ?? '').trim().slice(0, 40),
+    expiryDate: normalizeExpiryDateForStorage(data?.expiryDate),
   };
+}
+
+function pickHouseholdIngredientFields(data = {}) {
+  const out = {};
+  HOUSEHOLD_INGREDIENT_KEYS.forEach((key) => {
+    if (data[key] !== undefined) out[key] = data[key];
+  });
+  return out;
 }
 
 function normalizedIngredientName(value) {
@@ -146,16 +211,21 @@ function mergeHouseholdIngredientData(items, payload, normalizedName) {
     ...existingItems.map((item) => item.expiryDate),
   );
   const primary = existingItems[0] || {};
-  return {
-    ...primary,
-    ...payload,
+  const unit = String(
+    payload.unit != null && String(payload.unit).trim() !== ''
+      ? payload.unit
+      : (primary.unit ?? ''),
+  ).trim().slice(0, 40);
+  // Rules hasOnly 를 위해 허용 필드만 반환 (legacy unit/recipeId 등 잔여 필드 제거)
+  return pickHouseholdIngredientFields({
     name: String(primary.name || payload.name).trim(),
     normalizedName,
     quantity,
+    unit,
     expiryDate,
     createdAt: primary.createdAt || payload.createdAt || serverTimestamp(),
     updatedAt: serverTimestamp(),
-  };
+  });
 }
 
 async function addOrMergeHouseholdIngredient(householdId, ingredient) {
@@ -189,10 +259,10 @@ async function addOrMergeHouseholdIngredient(householdId, ingredient) {
     const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)));
     const existingItems = snapshots.filter((snap) => snap.exists()).map((snap) => snap.data());
     const merged = mergeHouseholdIngredientData(existingItems, payload, normalizedName);
+    // merge:false — 마이그레이션으로 남은 비허용 필드를 문서에서 제거해 Rules hasOnly 통과
     transaction.set(
       ingredientRef,
       sanitizeFirestorePayload(merged, 'FirestoreIngredientService.mergeHouseholdIngredient'),
-      { merge: true },
     );
     legacyRefs.forEach((ref) => transaction.delete(ref));
     return { id: ingredientRef.id, firestoreId: ingredientRef.id, ...merged };
@@ -213,6 +283,7 @@ export const FirestoreIngredientService = {
   },
 
   stopSync() {
+    listenGeneration += 1;
     if (snapshotUnsubscribe) {
       snapshotUnsubscribe();
       snapshotUnsubscribe = null;
@@ -222,11 +293,13 @@ export const FirestoreIngredientService = {
 
   startSync(onItems, onError) {
     this.stopSync();
+    const generation = listenGeneration;
 
     const user = auth?.currentUser;
     if (!user?.uid) {
       console.warn('[FirestoreIngredientService] startSync — 로그인 사용자 없음');
-      onItems?.([]);
+      // 로그인 전 빈 emit 은 허용. permission-denied 와는 구분한다.
+      if (generation === listenGeneration) onItems?.([]);
       return null;
     }
 
@@ -234,7 +307,7 @@ export const FirestoreIngredientService = {
       console.error('NO_FIRESTORE_DB');
       const err = new Error('Firestore가 초기화되지 않았습니다.');
       err.code = 'firestore/not-initialized';
-      onError?.(err);
+      if (generation === listenGeneration) onError?.(err);
       return null;
     }
 
@@ -242,6 +315,21 @@ export const FirestoreIngredientService = {
     const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
     const householdId = FamilySharingService.getActiveFamily()?.householdId || activeHouseholdId || null;
     const collectionPath = ingredientPath(user.uid);
+    const family = FamilySharingService.getActiveFamily();
+    console.info('[HouseholdDataSource]', {
+      uid: user.uid,
+      role: family?.role || null,
+      activeHouseholdId: activeHouseholdId || null,
+      resolvedHouseholdId: householdId || null,
+      pendingSetup: Boolean(family?.pendingSetup),
+      ingredientsPath: collectionPath,
+      shoppingPath: activeHouseholdId
+        ? `households/${activeHouseholdId}/shopping`
+        : `users/${user.uid}/shopping`,
+      mealPlansPath: activeHouseholdId
+        ? `households/${activeHouseholdId}/mealPlans/default`
+        : `users/${user.uid}/mealPlans/default`,
+    });
     console.info([
       '[CURRENT INGREDIENT SOURCE]',
       `uid: ${user.uid}`,
@@ -254,6 +342,7 @@ export const FirestoreIngredientService = {
         m.startsWith('/users/') ? '/users/{uid}' : '/households/{householdId}'
       )),
       hasHousehold: Boolean(activeHouseholdId),
+      generation,
     });
 
     const perfPath = activeHouseholdId
@@ -265,6 +354,14 @@ export const FirestoreIngredientService = {
     snapshotUnsubscribe = onSnapshot(
       col,
       (snapshot) => {
+        if (generation !== listenGeneration) {
+          console.warn('[FirestoreIngredientService] ignore stale snapshot', {
+            generation,
+            listenGeneration,
+            path: collectionPath,
+          });
+          return;
+        }
         const items = snapshot.docs
           .map((docSnap) => mapFirestoreDoc(docSnap, user.uid))
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
@@ -277,14 +374,21 @@ export const FirestoreIngredientService = {
         onItems?.(items);
       },
       (error) => {
+        if (generation !== listenGeneration) return;
         console.error('[FirestoreIngredientService] onSnapshot failed', {
+          operation: 'ingredients.onSnapshot',
           uid: user.uid,
-          path: ingredientPath(user.uid),
+          firestorePath: collectionPath,
+          path: collectionPath,
           householdId: FamilySharingService.getActiveHouseholdId(),
+          activeHouseholdId: FamilySharingService.getActiveHouseholdId(),
+          authPresent: Boolean(auth?.currentUser),
+          membershipRole: FamilySharingService.getActiveFamily()?.role || null,
           code: error?.code || null,
           message: error?.message || String(error),
           error,
         });
+        // permission-denied 시 빈 배열로 state 를 덮지 않는다.
         onError?.(error);
       },
     );
@@ -309,8 +413,9 @@ export const FirestoreIngredientService = {
       throw err;
     }
 
+    const base = buildFirestorePayload(data);
     const payload = {
-      ...buildFirestorePayload(data),
+      ...base,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -336,31 +441,40 @@ export const FirestoreIngredientService = {
     const path = isHouseholdSave
       ? `households/${householdId}/${INGREDIENTS_COLLECTION}`
       : `users/${user.uid}/${INGREDIENTS_COLLECTION}`;
-    console.info('[FirestoreIngredientService] add ingredient target', {
+    const writePayload = isHouseholdSave
+      ? pickHouseholdIngredientFields(payload)
+      : payload;
+    logIngredientWrite('addIngredient', {
       uid: user.uid,
       path,
-      householdId,
-      payloadKeys: Object.keys(payload),
+      householdId: isHouseholdSave ? householdId : null,
+      payloadKeys: Object.keys(writePayload),
     });
 
     try {
       const result = isHouseholdSave
-        ? await addOrMergeHouseholdIngredient(householdId, payload)
+        ? await addOrMergeHouseholdIngredient(householdId, writePayload)
         : await addDoc(
           col,
-          sanitizeFirestorePayload(payload, 'FirestoreIngredientService.addIngredient'),
-        ).then((docRef) => ({ id: docRef.id, firestoreId: docRef.id, ...payload }));
+          sanitizeFirestorePayload(writePayload, 'FirestoreIngredientService.addIngredient'),
+        ).then((docRef) => ({ id: docRef.id, firestoreId: docRef.id, ...writePayload }));
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', result.id);
       return result;
     } catch (error) {
-      console.error('가족 재료 저장 실패', {
+      logIngredientWrite('addIngredient failed', {
         uid: user.uid,
         path,
-        householdId,
-        normalizedName: payload.normalizedName,
+        householdId: isHouseholdSave ? householdId : null,
+        payloadKeys: Object.keys(writePayload),
         code: error?.code || null,
         message: error?.message || String(error),
-        stack: error?.stack || null,
+      });
+      console.error('재료 저장 실패', {
+        uid: user.uid,
+        path,
+        householdId: isHouseholdSave ? householdId : null,
+        code: error?.code || null,
+        message: error?.message || String(error),
         error,
       });
       throw error;
@@ -380,24 +494,58 @@ export const FirestoreIngredientService = {
       throw new Error('Firestore가 초기화되지 않았습니다.');
     }
 
-    const payload = {
-      ...buildFirestorePayload(data),
-      updatedAt: serverTimestamp(),
-    };
-    if (!payload.name) throw new Error('재료명이 비어 있습니다.');
+    const householdId = FamilySharingService.getActiveHouseholdId();
     const path = ingredientPath(user.uid, docId);
+    const base = buildFirestorePayload(data);
+    if (!base.name) throw new Error('재료명이 비어 있습니다.');
 
     try {
-      await updateDoc(
+      const existingSnap = await getDoc(ref);
+      if (!existingSnap.exists()) {
+        const err = new Error('재료를 찾을 수 없습니다.');
+        err.code = 'firestore/not-found';
+        throw err;
+      }
+      const existing = existingSnap.data() || {};
+      // 전체 문서를 허용 필드로 재작성 — updateDoc+잔여 필드 시 Rules hasOnly 실패 방지
+      const payload = householdId
+        ? pickHouseholdIngredientFields({
+          ...base,
+          createdAt: existing.createdAt || serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        })
+        : {
+          ...base,
+          createdAt: existing.createdAt || serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+      logIngredientWrite('updateIngredient', {
+        uid: user.uid,
+        path,
+        documentId: docId,
+        householdId,
+        payloadKeys: Object.keys(payload),
+      });
+
+      await setDoc(
         ref,
         sanitizeFirestorePayload(payload, 'FirestoreIngredientService.updateIngredient'),
       );
       console.log('INGREDIENT_FIRESTORE_SAVE_SUCCESS', docId);
     } catch (error) {
+      logIngredientWrite('updateIngredient failed', {
+        uid: user.uid,
+        path,
+        documentId: docId,
+        householdId,
+        code: error?.code || null,
+        message: error?.message || String(error),
+      });
       console.error('[FirestoreIngredientService] update ingredient failed', {
         uid: user.uid,
         path,
-        householdId: FamilySharingService.getActiveHouseholdId(),
+        householdId,
         code: error?.code || null,
         message: error?.message || String(error),
         error,

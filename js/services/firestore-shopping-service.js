@@ -19,6 +19,7 @@ import { StartupPerf } from './startup-perf.js';
 const SUBCOLLECTION = 'shopping';
 
 let snapshotUnsubscribe = null;
+let listenGeneration = 0;
 
 function col(uid) {
   if (!db || !uid) return null;
@@ -59,6 +60,7 @@ function mapDoc(docSnap) {
 
 export const FirestoreShoppingService = {
   stopSync() {
+    listenGeneration += 1;
     if (snapshotUnsubscribe) {
       snapshotUnsubscribe();
       snapshotUnsubscribe = null;
@@ -67,9 +69,10 @@ export const FirestoreShoppingService = {
 
   startSync(onItems, onError) {
     this.stopSync();
+    const generation = listenGeneration;
     const uid = auth?.currentUser?.uid;
     if (!uid || !db) {
-      onItems?.([]);
+      if (generation === listenGeneration) onItems?.([]);
       return null;
     }
     const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
@@ -92,6 +95,7 @@ export const FirestoreShoppingService = {
     snapshotUnsubscribe = onSnapshot(
       col(uid),
       (snap) => {
+        if (generation !== listenGeneration) return;
         const items = snap.docs.map(mapDoc).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         StartupPerf.end('shopping loaded (extra)', {
           documentCount: items.length,
@@ -100,7 +104,18 @@ export const FirestoreShoppingService = {
         });
         onItems?.(items);
       },
-      (err) => onError?.(err),
+      (err) => {
+        if (generation !== listenGeneration) return;
+        console.error('[FirestoreShoppingService] onSnapshot failed', {
+          operation: 'shopping.onSnapshot',
+          firestorePath: collectionPath,
+          code: err?.code || null,
+          authPresent: Boolean(auth?.currentUser),
+          activeHouseholdId: FamilySharingService.getActiveHouseholdId(),
+          message: err?.message || String(err),
+        });
+        onError?.(err);
+      },
     );
     return snapshotUnsubscribe;
   },
