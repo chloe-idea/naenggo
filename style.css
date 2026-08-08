@@ -2091,10 +2091,11 @@ body.home-search-keyboard-active .home-search-dock {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.375rem; /* 6px */
   min-height: 2rem; /* 32px — 높이 유지 */
   height: 2rem;
-  padding: 0 0.4375rem; /* 7px — was 5px, 좌우 +2px */
+  padding: 0 0.4375rem; /* 7px — 더보기 pill 기존 padding 유지 */
   border-radius: 9999px;
   border: 1px solid #ececec;
   background: #fff;
@@ -2104,15 +2105,16 @@ body.home-search-keyboard-active .home-search-dock {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
-.home-tags--rail .tag.tag--home-rail .tag__emoji {
-  font-size: 1.125rem; /* ~18px */
-  line-height: 1;
+/* 재료 pill만: 이모지 제거에 맞춰 좌우 padding 재조정 */
+.home-tags--rail .tag.tag--home-rail {
+  padding: 0 0.625rem; /* 10px */
 }
 
 .home-tags--rail .tag.tag--home-rail .tag__name {
   max-width: 6.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .home-tags--rail .tag.tag--home-more {

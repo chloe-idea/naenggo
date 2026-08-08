@@ -5894,11 +5894,10 @@ const HOME_PANTRY_PREVIEW_COUNT = 5; // 폭 측정 전 fallback
 let pantryChipsRelayoutTimer = null;
 let pantryMeasureHost = null;
 
-/** 홈 보유 재료 칩 — 삭제/배지 없이 아이콘+이름만 */
+/** 홈 보유 재료 칩 — 삭제/배지/이모지 없이 이름만 (다른 화면 아이콘은 유지) */
 function pantryChipHomeHTML(item) {
   return `
     <span class="tag tag--home-rail" role="listitem">
-      <span class="tag__emoji" aria-hidden="true">${pantryItemEmoji(item.name)}</span>
       <span class="tag__name">${esc(item.name)}</span>
     </span>`;
 }
