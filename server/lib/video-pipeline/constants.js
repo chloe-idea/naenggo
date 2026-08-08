@@ -18,9 +18,9 @@ export const PLATFORM_LABELS = {
 
 export const VIDEO_EXTRACT_UI = {
   FALLBACK_MSG:
-    '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.',
+    '영상에서 레시피 정보를 충분히 가져오지 못했어요. 영상 설명이나 레시피 내용을 직접 붙여넣어 주세요.',
   INSUFFICIENT_MSG:
-    '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.',
+    '영상에서 레시피 정보를 충분히 가져오지 못했어요. 영상 설명이나 레시피 내용을 직접 붙여넣어 주세요.',
   YOUTUBE_AUTO_HINT: 'YouTube·Shorts는 링크만으로 자동 추출을 시도합니다.',
   INSTAGRAM_HINT:
     'Instagram Reels는 링크만으로는 캡션을 가져오기 어려울 수 있어요. 캡션을 함께 붙여넣으면 정확합니다.',
@@ -31,7 +31,7 @@ export const VIDEO_EXTRACT_UI = {
   PARTIAL_INGREDIENTS: '재료를 자동으로 추출하지 못했어요. 검토 화면에서 직접 추가해 주세요.',
   PARTIAL_STEPS: '영상에서 조리 순서를 충분히 확인하지 못했습니다.',
   MISSING_TRANSCRIPT_FOR_STEPS:
-    '이 영상에서는 자막을 가져오지 못해 조리 순서를 추출할 수 없습니다.',
+    '자막을 가져오지 못해 조리 순서는 비워 두었어요. 필요하면 영상 설명이나 조리 순서를 붙여넣어 주세요.',
 };
 
 /** API 라우팅용 — youtube / youtube_shorts → youtube 백엔드 */

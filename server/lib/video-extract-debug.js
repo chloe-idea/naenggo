@@ -30,12 +30,17 @@ export const EXTRACT_FAILURE = {
   },
   OPENAI_NOT_A_RECIPE: {
     code: 'OPENAI_NOT_A_RECIPE',
-    label: '레시피 정보 부족',
+    label: '레시피 아님/정보 부족',
     userMessage: VIDEO_EXTRACT_UI.INSUFFICIENT_MSG,
   },
   INCOMPLETE_RECIPE: {
     code: 'INCOMPLETE_RECIPE',
     label: '레시피 정보 부족',
+    userMessage: VIDEO_EXTRACT_UI.INSUFFICIENT_MSG,
+  },
+  INSUFFICIENT_RECIPE_SOURCE: {
+    code: 'INSUFFICIENT_RECIPE_SOURCE',
+    label: 'transcript·description 모두 부족',
     userMessage: VIDEO_EXTRACT_UI.INSUFFICIENT_MSG,
   },
 };
@@ -198,6 +203,9 @@ export function resolveExtractFailure(err, context = null) {
   if (code === 'INCOMPLETE_RECIPE') {
     return EXTRACT_FAILURE.INCOMPLETE_RECIPE;
   }
+  if (code === 'INSUFFICIENT_RECIPE_SOURCE') {
+    return EXTRACT_FAILURE.INSUFFICIENT_RECIPE_SOURCE;
+  }
   if (OPENAI_FAIL_CODES.has(code)) {
     return {
       ...EXTRACT_FAILURE.OPENAI_RESPONSE_FAILED,
@@ -238,6 +246,13 @@ export function buildExtractDebugPayload({
         hasCaptions: String(youtubeContent.extractedTranscript || '').trim().length >= 20,
         textSource: youtubeContent.textSource || null,
         autoExtractFailed: Boolean(youtubeContent.autoExtractFailed),
+        metadataProvider: youtubeContent.metadataProvider || null,
+        transcriptProvider: youtubeContent.transcriptProvider || null,
+        finalSourceFieldsUsed: [
+          youtubeContent.title ? 'title' : null,
+          String(youtubeContent.extractedDescription || '').trim().length >= 20 ? 'description' : null,
+          String(youtubeContent.extractedTranscript || '').trim().length >= 20 ? 'transcript' : null,
+        ].filter(Boolean),
       }
       : null,
     openaiPromptPreview: promptPreview || null,

@@ -253,19 +253,31 @@ export async function handleExtractVideoRecipe({
         aiUsage,
         warning,
         extractionWarning: recipe.extractionWarning || null,
+        extractStatus: recipe.extractStatus || 'full',
+        partialReason: recipe.partialReason || null,
         infoHint: infoHint || context.infoHint || null,
         pipelineSteps: platformContent?.pipelineSteps || null,
       },
     };
   } catch (err) {
     const mapped = mapExtractErrorCode(err);
-    console.error('[extract-video-recipe]', {
-      ...getTraceReport({ errorCode: mapped }),
-      code: err.code,
-      message: err.message,
-      stack: err.stack,
-      details: err.details,
-    });
+    const expectedFallback = Boolean(err?.fallback)
+      || ['INSUFFICIENT_RECIPE_SOURCE', 'INCOMPLETE_RECIPE', 'NOT_A_RECIPE', 'OPENAI_NOT_A_RECIPE'].includes(err?.code);
+    if (expectedFallback) {
+      console.warn('[extract-video-recipe] expected extract fallback:', {
+        ...getTraceReport({ errorCode: mapped }),
+        code: err.code,
+        message: err.message,
+      });
+    } else {
+      console.error('[extract-video-recipe]', {
+        ...getTraceReport({ errorCode: mapped }),
+        code: err.code,
+        message: err.message,
+        stack: err.stack,
+        details: err.details,
+      });
+    }
 
     if (err.code === 'ANALYSIS_LIMIT_EXCEEDED' || err.code === 'DAILY_LIMIT_EXCEEDED') {
       return {

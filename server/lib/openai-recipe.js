@@ -185,15 +185,33 @@ function normalizeRecipe(raw, meta) {
   };
 }
 
-function throwInsufficientRecipeError({ userContent, content, parsed, reason }) {
+function throwInsufficientRecipeError({
+  userContent = '',
+  content = '',
+  parsed = null,
+  reason,
+  code = 'INSUFFICIENT_RECIPE_SOURCE',
+} = {}) {
   const err = new Error(VIDEO_EXTRACT_UI.INSUFFICIENT_MSG);
-  err.code = 'INCOMPLETE_RECIPE';
-  err.failureReason = 'INCOMPLETE_RECIPE';
-  err.failureReasonLabel = reason || '레시피 정보 부족';
-  err.openaiPromptPreview = userContent.slice(0, 500);
-  err.openaiResponsePreview = content.slice(0, 500);
+  err.code = code;
+  err.failureReason = code;
+  err.failureReasonLabel = reason || 'transcript·description 모두 부족';
+  err.openaiPromptPreview = userContent ? userContent.slice(0, 500) : null;
+  err.openaiResponsePreview = content ? content.slice(0, 500) : null;
   err.fallback = true;
   throw err;
+}
+
+/** title-only 등 AI에 넘길 레시피 본문이 있는지 */
+export function hasRecipeSourceText(context) {
+  const userText = String(context?.userText || '').trim();
+  const desc = String(context?.extractedDescription || '').trim();
+  const transcript = String(context?.extractedTranscript || '').trim();
+  const caption = String(context?.extractedCaption || '').trim();
+  return userText.length >= 20
+    || desc.length >= 20
+    || transcript.length >= 20
+    || caption.length >= 20;
 }
 
 function buildPromptContent(context) {
@@ -342,6 +360,7 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
       content,
       parsed,
       reason: parsed.reason || '출처에서 레시피 확인 불가',
+      code: 'INSUFFICIENT_RECIPE_SOURCE',
     });
   }
 
@@ -421,7 +440,8 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
       userContent,
       content,
       parsed,
-      reason: '재료·조리순서 없음',
+      reason: '재료·조리순서 모두 없음',
+      code: 'INSUFFICIENT_RECIPE_SOURCE',
     });
   }
 
@@ -431,13 +451,21 @@ function finalizeRecipeFromParsed(parsed, context, userContent, content) {
     recipe.extractionWarning = `영상(${detectedDish})과 추출 결과(${recipe.title})가 다를 수 있어요. 내용을 확인해 주세요.`;
   }
 
+  const hasTranscript = String(context.extractedTranscript || '').trim().length >= 20;
+  recipe.extractStatus = 'full';
+  recipe.partialReason = null;
+
   if (parsedIngredientsCount === 0 || parsedStepsCount === 0) {
-    const hasTranscript = String(context.extractedTranscript || '').trim().length >= 20;
+    recipe.extractStatus = 'partial';
     if (parsedIngredientsCount === 0) {
+      recipe.partialReason = 'MISSING_INGREDIENTS';
       recipe.extractionWarning = VIDEO_EXTRACT_UI.PARTIAL_INGREDIENTS;
     } else if (!hasTranscript) {
+      // description-only에서 steps가 비면 transcript 실패로 구분 (추측 steps는 프롬프트에서 금지)
+      recipe.partialReason = 'MISSING_TRANSCRIPT_FOR_STEPS';
       recipe.extractionWarning = VIDEO_EXTRACT_UI.MISSING_TRANSCRIPT_FOR_STEPS;
     } else {
+      recipe.partialReason = 'MISSING_STEPS_IN_SOURCE';
       recipe.extractionWarning = VIDEO_EXTRACT_UI.PARTIAL_STEPS;
     }
   }
@@ -466,6 +494,20 @@ export async function analyzeVideoTextToRecipe(context) {
     err.contentAvailability = availability;
     err.fallback = true;
     throw err;
+  }
+
+  // title-only 등 transcript·description·userText 모두 부족하면 OpenAI 호출 없이 fallback
+  if (!hasRecipeSourceText(context)) {
+    console.warn('[OpenAI] insufficient recipe source (title-only or empty body)', {
+      titleLength: String(context.title || '').length,
+      descriptionLength: String(context.extractedDescription || '').length,
+      transcriptLength: String(context.extractedTranscript || '').length,
+      userTextLength: String(context.userText || '').length,
+    });
+    throwInsufficientRecipeError({
+      reason: 'transcript·description 모두 부족',
+      code: 'INSUFFICIENT_RECIPE_SOURCE',
+    });
   }
 
   const apiKey = getOpenAiApiKey();

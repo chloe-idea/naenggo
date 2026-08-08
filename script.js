@@ -721,7 +721,7 @@ function affiliateDisclosureHTML() {
 
 // ===== 영상 레시피 추출 (Recime-style pipeline — js/video-extract-platform.js) =====
 const VEP = () => window.VideoExtractPlatform || {};
-const VIDEO_EXTRACT_FALLBACK_MSG = '이 영상에서는 레시피 정보를 충분히 추출하지 못했어요. 캡션이나 재료 설명을 함께 붙여넣어 주세요.';
+const VIDEO_EXTRACT_FALLBACK_MSG = '영상에서 레시피 정보를 충분히 가져오지 못했어요. 영상 설명이나 레시피 내용을 직접 붙여넣어 주세요.';
 const VIDEO_EXTRACT_YOUTUBE_NO_CAPTION_MSG = VIDEO_EXTRACT_FALLBACK_MSG;
 const VIDEO_EXTRACT_PARTIAL_WARNING = '영상 설명글, 자막, 고정 댓글을 함께 붙여넣으면 더 정확합니다';
 const INSTAGRAM_REELS_EXTRACT_HINT = 'Instagram Reels는 링크만으로는 캡션을 가져오기 어려울 수 있어요. 캡션을 함께 붙여넣으면 정확합니다.';
@@ -956,6 +956,7 @@ function mapVideoExtractUserError(err, apiData = null) {
     'NOT_A_RECIPE',
     'OPENAI_NOT_A_RECIPE',
     'INCOMPLETE_RECIPE',
+    'INSUFFICIENT_RECIPE_SOURCE',
   ]);
 
   if (code === 'INVALID_URL' || code === 'INVALID_VIDEO_ID' || code === 'INVALID_SHORTCODE') {

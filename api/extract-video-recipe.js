@@ -9,10 +9,12 @@ import {
   summarizeExtractLengths,
 } from '../server/lib/video-extract-trace.js';
 
-/** Vercel: Node.js serverless only (youtubei.js is not Edge-compatible) */
+/** Vercel: Node.js serverless only (youtubei.js is not Edge-compatible).
+ *  hnd1: US datacenter IPs (iad1) often get YouTube LOGIN_REQUIRED / empty metadata. */
 export const config = {
   runtime: 'nodejs',
   maxDuration: 60,
+  regions: ['hnd1'],
 };
 
 function parseJsonBody(req) {
