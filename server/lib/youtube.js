@@ -16,6 +16,7 @@ import {
   fetchYouTubeCaptionTranscript,
   logYouTubeCaptionDebug,
 } from './youtube-captions.js';
+import { logVideoExtractStep, summarizeExtractLengths } from './video-extract-trace.js';
 
 export {
   extractYouTubeVideoId,
@@ -208,6 +209,8 @@ export async function fetchYouTubeContent(url) {
   let extractionMode = 'legacy-scraper';
   let apiStatus = getYouTubeApiKey() ? 'api-attempted' : 'no-api-key';
 
+  logVideoExtractStep('04 youtube metadata start', { videoId, apiStatus });
+
   const apiSnippet = await fetchVideoSnippetFromApi(videoId);
   if (apiSnippet) {
     result.title = apiSnippet.title;
@@ -232,7 +235,17 @@ export async function fetchYouTubeContent(url) {
     }
   }
 
+  logVideoExtractStep('05 youtube metadata complete', summarizeExtractLengths({
+    title: result.title,
+    description: result.extractedDescription,
+    videoId,
+    apiStatus,
+    extractionMode,
+    ok: Boolean(result.title || result.extractedDescription),
+  }));
+
   // 자막: Data API/innertube getTranscript 대신 PoToken 대응 경로 (항상 시도)
+  logVideoExtractStep('06 transcript start', { videoId });
   const captionResult = await fetchYouTubeCaptionTranscript(videoId);
   result.availableCaptionLanguages = captionResult.availableCaptionLanguages;
   result.selectedCaptionLanguage = captionResult.selectedCaptionLanguage;
@@ -240,6 +253,12 @@ export async function fetchYouTubeContent(url) {
   if (captionResult.text && captionResult.text.length >= 20) {
     result.extractedTranscript = captionResult.text;
   }
+  logVideoExtractStep('07 transcript complete', {
+    videoId,
+    transcriptLength: result.extractedTranscript.length,
+    ok: result.extractedTranscript.length >= 20,
+    errorCode: captionResult.error ? 'YOUTUBE_TRANSCRIPT_FAILED' : null,
+  });
   logYouTubeCaptionDebug({
     videoId,
     availableCaptionLanguages: captionResult.availableCaptionLanguages,

@@ -15,6 +15,12 @@ import {
 } from '../video-extract-debug.js';
 import { assertNoDuplicateFirestoreVideo } from '../firestore-video-duplicate.js';
 import { resolveAuthUidFromToken } from '../firestore-analysis-quota.js';
+import {
+  getTraceReport,
+  logVideoExtractStep,
+  mapExtractErrorCode,
+  summarizeExtractLengths,
+} from '../video-extract-trace.js';
 
 /**
  * YouTube / Instagram 등 플랫폼 공통 레시피 추출 핸들러
@@ -64,21 +70,40 @@ export async function handleExtractVideoRecipe({
   }
 
   try {
+    let authUid = null;
     if (token) {
-      const uid = await resolveAuthUidFromToken(token);
-      if (uid) {
-        const dupCheck = await assertNoDuplicateFirestoreVideo(uid, trimmedUrl);
-        if (dupCheck.duplicate) {
-          return {
-            status: 409,
-            body: {
-              success: false,
-              error: 'DUPLICATE_VIDEO_SOURCE',
-              message: '이미 등록된 영상입니다.',
-              duplicateRecipeId: dupCheck.recipeId || null,
-            },
-          };
-        }
+      authUid = await resolveAuthUidFromToken(token);
+      logVideoExtractStep('02 auth verified', {
+        ok: Boolean(authUid),
+        hasToken: true,
+      });
+    } else {
+      logVideoExtractStep('02 auth verified', {
+        ok: true,
+        hasToken: false,
+        guestUserId: Boolean(trimmedUserId),
+      });
+    }
+
+    logVideoExtractStep('03 url normalized', {
+      platform: urlValidation.platform,
+      videoId: urlValidation.videoId,
+      ok: true,
+    });
+
+    if (authUid) {
+      const dupCheck = await assertNoDuplicateFirestoreVideo(authUid, trimmedUrl);
+      if (dupCheck.duplicate) {
+        return {
+          status: 409,
+          body: {
+            success: false,
+            error: 'DUPLICATE_VIDEO_SOURCE',
+            message: '이미 등록된 영상입니다.',
+            duplicateRecipeId: dupCheck.recipeId || null,
+            ...getTraceReport(),
+          },
+        };
       }
     }
 
@@ -86,14 +111,19 @@ export async function handleExtractVideoRecipe({
     try {
       platformContent = await fetchContent(trimmedUrl, urlValidation);
     } catch (fetchErr) {
-      console.warn('[extract-video-recipe] fetchContent failed:', fetchErr?.message || fetchErr);
+      console.warn('[extract-video-recipe] fetchContent failed:', {
+        ...getTraceReport({ errorCode: mapExtractErrorCode(fetchErr) }),
+        message: fetchErr?.message || String(fetchErr),
+        code: fetchErr?.code || null,
+      });
       if (fetchErr.code === 'INVALID_SHORTCODE' || fetchErr.code === 'INVALID_VIDEO_ID') {
         return {
           status: 400,
           body: {
             success: false,
-            error: fetchErr.code,
+            error: 'YOUTUBE_METADATA_FAILED',
             message: invalidUrlMessage,
+            ...getTraceReport({ firstFailedStep: '04 youtube metadata start' }),
           },
         };
       }
@@ -105,6 +135,19 @@ export async function handleExtractVideoRecipe({
       url: trimmedUrl,
       userInputs,
     });
+
+    logVideoExtractStep('08 combined text ready', summarizeExtractLengths({
+      ...context,
+      title: context.title,
+      description: context.extractedDescription,
+      transcript: context.extractedTranscript,
+      combinedText: context.combinedText,
+      userText: context.userText,
+      platform: context.platform,
+      videoId: context.videoId,
+      apiStatus: context.apiStatus,
+      extractionMode: context.extractionMode,
+    }));
 
     logAnalysisContextDebug(context);
 
@@ -119,6 +162,7 @@ export async function handleExtractVideoRecipe({
             error: 'ANALYSIS_LIMIT_EXCEEDED',
             message: limitErr.message,
             aiUsage: limitErr.aiUsage,
+            ...getTraceReport(),
           },
         };
       }
@@ -130,6 +174,7 @@ export async function handleExtractVideoRecipe({
             error: limitErr.code,
             message: limitErr.message,
             firebaseCode: limitErr.firebaseCode || null,
+            ...getTraceReport(),
           },
         };
       }
@@ -138,24 +183,32 @@ export async function handleExtractVideoRecipe({
 
     let recipe;
     try {
+      logVideoExtractStep('09 OpenAI request start', summarizeExtractLengths({
+        combinedText: context.combinedText,
+        userText: context.userText,
+        platform: context.platform,
+        videoId: context.videoId,
+      }));
       recipe = await analyzeRecipe(context);
+      logVideoExtractStep('10 OpenAI request complete', summarizeExtractLengths(recipe));
+      logVideoExtractStep('11 response normalization complete', summarizeExtractLengths(recipe));
     } catch (aiErr) {
       const failure = resolveExtractFailure(aiErr, context);
+      const mapped = mapExtractErrorCode(aiErr);
       logExtractFailure(aiErr, context, {
         openaiStatus: aiErr?.httpStatus,
         openaiCode: aiErr?.openaiCode,
       });
       console.error('[extract-video-recipe] analyzeRecipe failed:', {
+        ...getTraceReport({ errorCode: mapped, firstFailedStep: '09 OpenAI request start' }),
         failureReason: failure.code,
         failureReasonLabel: failure.label,
         code: aiErr?.code,
         message: aiErr?.message,
         httpStatus: aiErr?.httpStatus,
         openaiCode: aiErr?.openaiCode,
-        openaiMessage: aiErr?.openaiMessage,
         contentAvailability: aiErr?.contentAvailability || null,
       });
-      console.error(aiErr);
 
       const debug = buildExtractDebugPayload({
         context,
@@ -170,7 +223,7 @@ export async function handleExtractVideoRecipe({
           status: 422,
           body: {
             success: false,
-            error: aiErr.failureReason || aiErr.code || 'EXTRACTION_FAILED',
+            error: aiErr.failureReason || aiErr.code || mapped || 'EXTRACTION_FAILED',
             message: failure.userMessage,
             failureReason: failure.code,
             failureReasonLabel: failure.label,
@@ -178,6 +231,7 @@ export async function handleExtractVideoRecipe({
             warning: context.autoExtractFailed ? autoExtractWarning : null,
             infoHint: infoHint || context.infoHint || null,
             debug,
+            ...getTraceReport({ firstFailedStep: mapped }),
           },
         };
       }
@@ -204,7 +258,9 @@ export async function handleExtractVideoRecipe({
       },
     };
   } catch (err) {
+    const mapped = mapExtractErrorCode(err);
     console.error('[extract-video-recipe]', {
+      ...getTraceReport({ errorCode: mapped }),
       code: err.code,
       message: err.message,
       stack: err.stack,
@@ -219,6 +275,7 @@ export async function handleExtractVideoRecipe({
           error: 'ANALYSIS_LIMIT_EXCEEDED',
           message: err.message,
           aiUsage: err.aiUsage,
+          ...getTraceReport(),
         },
       };
     }
@@ -231,6 +288,7 @@ export async function handleExtractVideoRecipe({
           error: err.code,
           message: err.message,
           firebaseCode: err.firebaseCode || null,
+          ...getTraceReport(),
         },
       };
     }
@@ -241,7 +299,7 @@ export async function handleExtractVideoRecipe({
         status: resolveOpenAiHttpStatus(err),
         body: {
           success: false,
-          error: err.failureReason || err.code,
+          error: mapped,
           message: err.message,
           failureReason: failure.code,
           failureReasonLabel: failure.label,
@@ -251,6 +309,7 @@ export async function handleExtractVideoRecipe({
             openaiResponsePreview: err.openaiResponsePreview || err.details?.slice?.(0, 500) || null,
             failure,
           }),
+          ...getTraceReport({ firstFailedStep: mapped }),
         },
       };
     }
@@ -259,8 +318,9 @@ export async function handleExtractVideoRecipe({
       status: 500,
       body: {
         success: false,
-        error: err.code || 'SERVER_ERROR',
-        message: '레시피 추출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+        error: mapped || err.code || 'INTERNAL_ERROR',
+        message: err.message || '레시피 추출 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+        ...getTraceReport({ firstFailedStep: mapped || 'INTERNAL_ERROR' }),
       },
     };
   }

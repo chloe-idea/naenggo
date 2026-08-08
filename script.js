@@ -936,6 +936,7 @@ function mapVideoExtractUserError(err, apiData = null) {
   const genericServerMsg = '레시피 추출 중 오류가 발생했습니다';
   const openAiCodes = new Set([
     'MISSING_OPENAI_KEY',
+    'OPENAI_NOT_CONFIGURED',
     'OPENAI_AUTH_ERROR',
     'OPENAI_FORBIDDEN',
     'OPENAI_MODEL_NOT_FOUND',
@@ -972,7 +973,7 @@ function mapVideoExtractUserError(err, apiData = null) {
     };
   }
   if (openAiCodes.has(code)) {
-    const showFallback = !['MISSING_OPENAI_KEY', 'OPENAI_AUTH_ERROR', 'OPENAI_FORBIDDEN', 'OPENAI_MODEL_NOT_FOUND', 'OPENAI_RATE_LIMIT', 'OPENAI_SERVER_ERROR'].includes(code);
+    const showFallback = !['MISSING_OPENAI_KEY', 'OPENAI_NOT_CONFIGURED', 'OPENAI_AUTH_ERROR', 'OPENAI_FORBIDDEN', 'OPENAI_MODEL_NOT_FOUND', 'OPENAI_RATE_LIMIT', 'OPENAI_SERVER_ERROR'].includes(code);
     return {
       message: mapOpenAiStatusUserMessage(apiData, err),
       showFallback,
@@ -1457,7 +1458,12 @@ const VideoRecipeAnalysisService = {
           vercelError: vercelError || null,
           bodyPreview: String(rawText || '').slice(0, 300),
         });
-        const err = new Error('서버 응답을 처리할 수 없습니다.');
+        const detail = [
+          `HTTP ${res.status}`,
+          contentType || 'no-content-type',
+          vercelError || null,
+        ].filter(Boolean).join(' · ');
+        const err = new Error(`서버 응답을 처리할 수 없습니다. (${detail})`);
         err.code = 'INVALID_RESPONSE';
         err.httpStatus = res.status;
         err.contentType = contentType;
@@ -1472,11 +1478,24 @@ const VideoRecipeAnalysisService = {
           contentType,
           bodyPreview: String(rawText || '').slice(0, 300),
         });
-        const err = new Error('서버 응답을 처리할 수 없습니다.');
+        const err = new Error(`서버 응답을 처리할 수 없습니다. (HTTP ${res.status} · empty JSON)`);
         err.code = 'INVALID_RESPONSE';
         err.httpStatus = res.status;
         err.contentType = contentType;
         throw err;
+      }
+
+      if (!res.ok) {
+        console.error('[VideoExtract] API error JSON', {
+          apiUrl: currentApiUrl,
+          status: res.status,
+          error: data.error || null,
+          failureReason: data.failureReason || null,
+          requestId: data.requestId || data.trace?.requestId || null,
+          lastStep: data.trace?.lastStep || data.lastStep || null,
+          firstFailedStep: data.trace?.firstFailedStep || null,
+          totalDurationMs: data.trace?.totalDurationMs || data.totalDurationMs || null,
+        });
       }
 
       if (!res.ok) {
