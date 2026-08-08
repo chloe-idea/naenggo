@@ -12,12 +12,12 @@ import {
 const router = Router();
 const DEFAULT_DISPLAY_NAME = '냉장GO 사용자';
 
-const AVATAR_TYPES = new Set(['letter', 'upload', 'google', 'initial', 'fridge']);
+const AVATAR_TYPES = new Set(['letter', 'fridge', 'google', 'initial', 'upload']);
 
 function normalizeAvatarType(value) {
   const type = String(value || '').trim();
-  if (type === 'initial' || type === 'fridge') return 'letter';
-  if (type === 'letter' || type === 'upload' || type === 'google') return type;
+  if (type === 'initial' || type === 'upload') return 'letter';
+  if (type === 'letter' || type === 'fridge' || type === 'google') return type;
   return '';
 }
 
@@ -33,7 +33,6 @@ function pickProfileFields(body = {}) {
       ? body.profileImageUrl.trim()
       : (typeof body.profileImage === 'string' ? body.profileImage.trim() : undefined),
     photoURL: typeof body.photoURL === 'string' ? body.photoURL.trim() : undefined,
-    uploadedPhotoURL: typeof body.uploadedPhotoURL === 'string' ? body.uploadedPhotoURL.trim() : undefined,
     googlePhotoURL: typeof body.googlePhotoURL === 'string' ? body.googlePhotoURL.trim() : undefined,
     avatarType: typeof avatarRaw === 'string' && AVATAR_TYPES.has(avatarRaw.trim())
       ? normalizeAvatarType(avatarRaw)
@@ -76,26 +75,25 @@ router.post('/user-profile', async (req, res) => {
     const bio = fields.bio !== undefined
       ? fields.bio
       : String(existing.bio || '').trim();
-    const profileImageUrl = fields.profileImageUrl !== undefined
-      ? fields.profileImageUrl
-      : String(existing.profileImageUrl || existing.profileImage || '').trim();
     const avatarType = fields.avatarType !== undefined
       ? fields.avatarType
       : normalizeAvatarType(existing.avatarType || existing.profileImageType) || undefined;
-    const uploadedPhotoURL = fields.uploadedPhotoURL !== undefined
-      ? fields.uploadedPhotoURL
-      : String(existing.uploadedPhotoURL || '').trim();
     const googlePhotoURL = fields.googlePhotoURL !== undefined
       ? fields.googlePhotoURL
       : String(existing.googlePhotoURL || decoded.picture || '').trim();
 
-    let resolvedImage = profileImageUrl || existing.profileImageUrl || existing.profileImage || '';
-    if (avatarType === 'letter') {
-      resolvedImage = '';
-    } else if (avatarType === 'upload') {
-      resolvedImage = uploadedPhotoURL || resolvedImage;
-    } else if (avatarType === 'google') {
-      resolvedImage = googlePhotoURL || decoded.picture || resolvedImage;
+    let resolvedImage = '';
+    if (avatarType === 'google') {
+      resolvedImage = googlePhotoURL || decoded.picture || '';
+    } else if (fields.profileImageUrl !== undefined && avatarType !== 'letter' && avatarType !== 'fridge') {
+      resolvedImage = fields.profileImageUrl;
+    } else if (!avatarType) {
+      resolvedImage = String(
+        fields.profileImageUrl
+          ?? existing.profileImageUrl
+          ?? existing.profileImage
+          ?? '',
+      ).trim();
     }
 
     const userPayload = {
@@ -104,7 +102,6 @@ router.post('/user-profile', async (req, res) => {
       profileImage: resolvedImage || '',
       profileImageUrl: resolvedImage || '',
       photoURL: resolvedImage || '',
-      uploadedPhotoURL: uploadedPhotoURL || '',
       googlePhotoURL: googlePhotoURL || '',
       socialLinks: linksResult.socialLinks,
       updatedAt: FieldValue.serverTimestamp(),
@@ -151,7 +148,6 @@ router.post('/user-profile', async (req, res) => {
         profileImageUrl: resolvedImage || '',
         profileImage: resolvedImage || '',
         photoURL: resolvedImage || '',
-        uploadedPhotoURL: uploadedPhotoURL || '',
         googlePhotoURL: googlePhotoURL || '',
         avatarType: userPayload.avatarType || null,
         profileImageType: userPayload.profileImageType || userPayload.avatarType || null,

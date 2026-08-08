@@ -1,11 +1,10 @@
 /**
- * Firebase 앱 초기화 (Auth + Firestore + Storage)
- * auth, db, storage, googleProvider를 export — getter/전역 변수 의존 없이 import해서 사용
+ * Firebase 앱 초기화 (Auth + Firestore)
+ * auth, db, googleProvider를 export — getter/전역 변수 의존 없이 import해서 사용
  */
 import { initializeApp, getApps, getApp } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js';
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js';
-import { getStorage } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js';
 import { firebaseConfig } from './firebase-config.js';
 
 export const FREE_ANALYSIS_LIMIT = 5;
@@ -23,14 +22,9 @@ export function isFirebaseConfigured() {
   return isConfigReady() && Boolean(auth);
 }
 
-export function isFirebaseStorageConfigured() {
-  return Boolean(isConfigReady() && storage && firebaseConfig?.storageBucket);
-}
-
 let app = null;
 export let auth = null;
 export let db = null;
-export let storage = null;
 export let googleProvider = null;
 
 if (isConfigReady()) {
@@ -38,18 +32,14 @@ if (isConfigReady()) {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    storage = firebaseConfig.storageBucket ? getStorage(app) : null;
     googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: 'select_account' });
-    console.log('[firebase] initializeApp OK, project:', firebaseConfig.projectId, {
-      storage: Boolean(storage),
-    });
+    console.log('[firebase] initializeApp OK, project:', firebaseConfig.projectId);
   } catch (err) {
     console.error('[firebase] initializeApp failed:', err?.code || err?.name, err?.message, err);
     app = null;
     auth = null;
     db = null;
-    storage = null;
     googleProvider = null;
   }
 } else {

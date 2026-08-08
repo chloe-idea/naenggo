@@ -19,8 +19,8 @@ import {
 import { FirestorePublicProfilesService } from './firestore-public-profiles-service.js';
 
 const USERS_COLLECTION = 'users';
-/** letter(글자) | upload(사진 업로드) | google — legacy: initial→letter, fridge→letter */
-const AVATAR_TYPES = new Set(['letter', 'upload', 'google', 'initial', 'fridge']);
+/** letter(글자) | fridge(냉장GO) | google — legacy: initial→letter, upload→letter */
+const AVATAR_TYPES = new Set(['letter', 'fridge', 'google', 'initial', 'upload']);
 
 function userDocRef(uid) {
   if (!db || !uid) return null;
@@ -29,24 +29,20 @@ function userDocRef(uid) {
 
 export function normalizeAvatarType(value, authUser) {
   const type = String(value || '').trim();
-  if (type === 'initial' || type === 'fridge') return 'letter';
-  if (type === 'letter' || type === 'upload' || type === 'google') return type;
-  if (AVATAR_TYPES.has(type)) return type === 'fridge' || type === 'initial' ? 'letter' : type;
-  return authUser?.photoURL ? 'google' : 'letter';
+  if (type === 'initial' || type === 'upload') return 'letter';
+  if (type === 'letter' || type === 'fridge' || type === 'google') return type;
+  if (AVATAR_TYPES.has(type)) return type;
+  return authUser?.photoURL ? 'google' : 'fridge';
 }
 
-/** 선택 타입에 따른 공개 표시용 이미지 URL (letter면 빈 문자열) */
+/** 선택 타입에 따른 공개 표시용 이미지 URL (letter/fridge면 빈 문자열) */
 export function resolveEffectivePhotoURL(profile, authUser) {
   const avatarType = normalizeAvatarType(profile?.avatarType ?? profile?.profileImageType, authUser);
-  const uploaded = String(profile?.uploadedPhotoURL || '').trim()
-    || String(profile?.profileImageUrl || profile?.profileImage || '').trim();
   const google = String(profile?.googlePhotoURL || authUser?.photoURL || '').trim();
 
-  if (avatarType === 'letter') return '';
-  if (avatarType === 'upload') return String(profile?.uploadedPhotoURL || '').trim() || uploaded;
+  if (avatarType === 'letter' || avatarType === 'fridge') return '';
   if (avatarType === 'google') return google;
-  // 타입이 모호할 때: 업로드 > Google > 글자
-  return String(profile?.uploadedPhotoURL || '').trim() || google || '';
+  return google || '';
 }
 
 export function resolveProfileAvatar(profile, authUser) {
@@ -59,11 +55,11 @@ export function resolveProfileAvatar(profile, authUser) {
   const avatarType = normalizeAvatarType(profile?.avatarType ?? profile?.profileImageType, authUser);
   const photoURL = resolveEffectivePhotoURL(profile, authUser);
 
-  if (avatarType === 'letter') {
-    return { mode: 'initial', initial, displayName, avatarType: 'letter', src: '' };
+  if (avatarType === 'google' && photoURL) {
+    return { mode: 'image', src: photoURL, initial, displayName, avatarType: 'google' };
   }
-  if (photoURL) {
-    return { mode: 'image', src: photoURL, initial, displayName, avatarType };
+  if (avatarType === 'fridge') {
+    return { mode: 'emoji', emoji: '🧊', initial, displayName, avatarType: 'fridge', src: '' };
   }
   return { mode: 'initial', initial, displayName, avatarType: 'letter', src: '' };
 }
@@ -104,7 +100,7 @@ export const FirestoreUserService = {
     );
     const nameFields = nicknameDualWriteFields(siteName);
     const googlePhotoURL = user.photoURL || '';
-    const avatarType = googlePhotoURL ? 'google' : 'letter';
+    const avatarType = googlePhotoURL ? 'google' : 'fridge';
     const profileImageUrl = avatarType === 'google' ? googlePhotoURL : '';
     const normalized = normalizeWeeklyUsageRecord({}, FREE_ANALYSIS_LIMIT);
     const payload = {
@@ -117,7 +113,6 @@ export const FirestoreUserService = {
       profileImage: profileImageUrl,
       profileImageUrl,
       photoURL: profileImageUrl,
-      uploadedPhotoURL: '',
       googlePhotoURL,
       profileImageType: avatarType,
       bio: '',
@@ -178,9 +173,6 @@ export const FirestoreUserService = {
       payload.profileImage = payload.profileImageUrl;
     }
     if (typeof updates.photoURL === 'string') payload.photoURL = updates.photoURL.trim();
-    if (typeof updates.uploadedPhotoURL === 'string') {
-      payload.uploadedPhotoURL = updates.uploadedPhotoURL.trim();
-    }
     if (typeof updates.googlePhotoURL === 'string') {
       payload.googlePhotoURL = updates.googlePhotoURL.trim();
     }

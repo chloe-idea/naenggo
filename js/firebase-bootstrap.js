@@ -8,7 +8,6 @@ import {
   resolveEffectivePhotoURL,
   resolveProfileAvatar,
 } from './services/firestore-user-service.js';
-import { ProfileImageService } from './services/profile-image-service.js';
 import { FirestoreIngredientService } from './services/firestore-ingredient-service.js';
 import { migrateLegacyPantryToFirestore } from './services/pantry-local-migration.js';
 import { AnalysisQuotaService } from './services/analysis-quota-service.js';
@@ -314,22 +313,10 @@ function updateProfileMenuContent(authUser, profile = null) {
       if (type === 'google') {
         btn.disabled = !authUser?.photoURL;
       }
-      if (type === 'upload') {
-        btn.disabled = !ProfileImageService.isAvailable();
-      }
     });
   }
 
   updateProfileMenuSyncStatus();
-}
-
-function setProfileAvatarStatus(message = '', { isError = false } = {}) {
-  const el = $('profile-avatar-status');
-  if (!el) return;
-  el.textContent = message || '';
-  el.hidden = !message;
-  el.classList.toggle('profile-menu__sync--loading', Boolean(message) && !isError);
-  el.style.color = isError ? '#c0392b' : '';
 }
 
 function syncProfilePreviewFromInputs() {
@@ -660,26 +647,31 @@ async function saveFullProfile() {
   }
 }
 
-async function saveProfileAvatarType(avatarType, extra = {}) {
+function patchFamilyMemberPhoto(uid, photoURL) {
+  const family = FamilySharingService.getActiveFamily();
+  if (!family || !Array.isArray(family.members)) return;
+  family.members = family.members.map((member) => (
+    member.uid === uid
+      ? { ...member, photoURL: photoURL || '', profileImageUrl: photoURL || '' }
+      : member
+  ));
+  const familyModal = $('family-sharing-modal');
+  if (familyModal && !familyModal.hidden) renderFamilySharing();
+}
+
+async function saveProfileAvatarType(avatarType) {
   const user = resolveAuthUser();
   if (!user?.uid || !avatarType) return;
 
   const type = normalizeAvatarType(avatarType, user);
   try {
     const googlePhotoURL = String(user.photoURL || cachedUserProfile?.googlePhotoURL || '').trim();
-    const uploadedPhotoURL = String(
-      extra.uploadedPhotoURL ?? cachedUserProfile?.uploadedPhotoURL ?? '',
-    ).trim();
-    const effective = type === 'letter'
-      ? ''
-      : (type === 'upload' ? uploadedPhotoURL : googlePhotoURL);
-
+    const effective = type === 'google' ? googlePhotoURL : '';
     cachedUserProfile = await FirestoreUserService.updateProfile(
       user.uid,
       {
         avatarType: type,
         profileImageType: type,
-        uploadedPhotoURL,
         googlePhotoURL,
         profileImageUrl: effective,
         profileImage: effective,
@@ -687,45 +679,13 @@ async function saveProfileAvatarType(avatarType, extra = {}) {
       },
       { photoURL: googlePhotoURL },
     );
+    patchFamilyMemberPhoto(user.uid, effective);
     renderAuthUi(user);
     updateProfileMenuContent(user, cachedUserProfile);
     window.dispatchEvent(new CustomEvent('public-profile-updated', { detail: { uid: user.uid } }));
-    // 업로드 파일은 교체 시에만 overwrite. letter/google 전환 시 Storage 파일은 보관.
   } catch (err) {
     console.error('[firebase-bootstrap] save avatarType failed:', err);
     showAuthError({ message: err?.message || '프로필 이미지 변경에 실패했어요.' });
-    throw err;
-  }
-}
-
-async function handleProfileAvatarUpload(file) {
-  const user = resolveAuthUser();
-  if (!user?.uid || !file) return;
-
-  setProfileAvatarStatus('사진을 준비하는 중…');
-  try {
-    const result = await ProfileImageService.uploadAvatar(file, {
-      onProgress: (phase) => {
-        if (phase === 'compressing') setProfileAvatarStatus('사진을 최적화하는 중…');
-        if (phase === 'uploading') setProfileAvatarStatus('업로드 중…');
-      },
-    });
-    // 미리보기 즉시 반영
-    const previewImg = $('profile-menu-avatar-img');
-    if (previewImg && result.downloadURL) {
-      previewImg.src = result.downloadURL;
-      previewImg.hidden = false;
-      const emojiEl = $('profile-menu-avatar-emoji');
-      const initialEl = $('profile-menu-avatar-initial');
-      if (emojiEl) emojiEl.hidden = true;
-      if (initialEl) initialEl.hidden = true;
-    }
-    await saveProfileAvatarType('upload', { uploadedPhotoURL: result.downloadURL });
-    setProfileAvatarStatus('프로필 사진을 저장했어요.');
-    if (typeof window.showToast === 'function') window.showToast('프로필 사진을 저장했어요');
-  } catch (err) {
-    console.error('[firebase-bootstrap] avatar upload failed:', err);
-    setProfileAvatarStatus(err?.message || '사진 업로드에 실패했어요.', { isError: true });
   }
 }
 
@@ -1827,24 +1787,7 @@ function bindAuthUi() {
   avatarPicker?.addEventListener('click', (event) => {
     const btn = event.target.closest('[data-avatar-type]');
     if (!btn || btn.disabled) return;
-    const type = btn.dataset.avatarType;
-    if (type === 'upload') {
-      const fileInput = $('profile-avatar-file');
-      if (!ProfileImageService.isAvailable()) {
-        setProfileAvatarStatus('사진 업로드 저장소가 아직 준비되지 않았어요.', { isError: true });
-        return;
-      }
-      fileInput?.click();
-      return;
-    }
-    setProfileAvatarStatus('');
-    saveProfileAvatarType(type).catch(() => {});
-  });
-  $('profile-avatar-file')?.addEventListener('change', (event) => {
-    const file = event.target?.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    handleProfileAvatarUpload(file);
+    saveProfileAvatarType(btn.dataset.avatarType);
   });
   nameInput?.addEventListener('input', syncProfilePreviewFromInputs);
   bioInput?.addEventListener('input', syncProfilePreviewFromInputs);
@@ -1924,7 +1867,6 @@ async function bootstrap() {
     FirestoreUserDataSync,
     FirestoreSettingsService: FirestoreUserDataSync.settings,
     FamilySharingService,
-    ProfileImageService,
     AnalysisQuotaService,
     getDisplayName,
     getCachedUserProfile: () => cachedUserProfile,

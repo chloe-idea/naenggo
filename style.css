@@ -1348,10 +1348,6 @@ body.view--profile .main {
   cursor: not-allowed;
 }
 
-#profile-avatar-status {
-  margin: 0.625rem 0 0;
-}
-
 .profile-manage__preview-avatar .profile-menu__avatar-img,
 .profile-avatar-btn__img,
 .family-member-card__avatar-img,

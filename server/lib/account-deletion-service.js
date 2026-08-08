@@ -308,25 +308,6 @@ async function deletePersonalDocuments(db, uid) {
   }
 }
 
-async function deleteProfileStorageFiles(uid) {
-  const targetUid = String(uid || '').trim();
-  if (!targetUid) return { deleted: false };
-  try {
-    const bucketName = process.env.FIREBASE_STORAGE_BUCKET
-      || 'naenggo.firebasestorage.app';
-    const bucket = getFirebaseAdmin().storage().bucket(bucketName);
-    await bucket.deleteFiles({ prefix: `profile-images/${targetUid}/` });
-    return { deleted: true };
-  } catch (err) {
-    // Storage 미사용/파일 없음은 탈퇴를 막지 않는다.
-    console.warn('[account-deletion] profile storage cleanup skipped', {
-      uid: targetUid,
-      message: err?.message || String(err),
-    });
-    return { deleted: false, error: err?.message || String(err) };
-  }
-}
-
 async function deleteAuthUser(uid) {
   try {
     await getFirebaseAdmin().auth().deleteUser(uid);
@@ -409,9 +390,6 @@ export async function deleteAccount({ idToken }) {
 
     await writeDeletionStatus(db, uid, { phase: 'personal_data' });
     await deletePersonalDocuments(db, uid);
-
-    await writeDeletionStatus(db, uid, { phase: 'profile_storage' });
-    await deleteProfileStorageFiles(uid);
 
     await writeDeletionStatus(db, uid, { phase: 'auth' });
     await deleteAuthUser(uid);
