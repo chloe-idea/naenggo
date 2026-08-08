@@ -252,8 +252,8 @@ function logYouTubeExtraction({ extractionMode, videoId, result, apiStatus }) {
  * Metadata fallback:
  *   1) YOUTUBE_API_KEY 있으면 Data API (optional, title/description only — transcript 아님)
  *   2) youtubei.js (WEB → ANDROID → TV)
- *   3) raw InnerTube player
- *   4) watch HTML (ytInitialPlayerResponse → ytInitialData description)
+ *   3) watch HTML (ytInitialPlayerResponse → ytInitialData description) — key 불필요
+ *   4) raw InnerTube player (key 없이 best-effort; 실패해도 정상)
  *   5) oembed (title only)
  *
  * Transcript fallback (별도):
@@ -311,30 +311,8 @@ export async function fetchYouTubeContent(url) {
     }
   }
 
-  // Vercel: youtubei.js 파서/WEB 클라이언트 실패 시 raw InnerTube player → watch HTML
+  // youtubei 실패 시: key 불필요한 watch-html 우선 → InnerTube player는 best-effort
   let playerCaptionTracks = [];
-  if (!result.extractedDescription || result.extractedDescription.length < 20) {
-    const playerMeta = await fetchInnerTubePlayerMeta(videoId);
-    if (playerMeta.title && !result.title) result.title = playerMeta.title;
-    if (playerMeta.description && playerMeta.description.length > result.extractedDescription.length) {
-      result.extractedDescription = playerMeta.description;
-      if (extractionMode !== 'youtube-api') {
-        extractionMode = 'legacy-scraper';
-        metadataProvider = `innertube-player:${playerMeta.clientName || 'WEB'}`;
-      }
-    }
-    playerCaptionTracks = playerMeta.captionTracks || [];
-    console.log('[youtube] innertube-player meta fallback', {
-      ok: playerMeta.ok,
-      error: playerMeta.error || null,
-      clientName: playerMeta.clientName || null,
-      playability: playerMeta.playability || null,
-      titleLength: String(playerMeta.title || '').length,
-      descriptionLength: String(playerMeta.description || '').length,
-      captionTrackCount: playerCaptionTracks.length,
-    });
-  }
-
   if (!result.extractedDescription || result.extractedDescription.length < 20) {
     const watchPage = await fetchYouTubeWatchPageData(videoId);
     if (watchPage.title && !result.title) result.title = watchPage.title;
@@ -347,7 +325,7 @@ export async function fetchYouTubeContent(url) {
           : 'watch-html';
       }
     }
-    if (!playerCaptionTracks.length && watchPage.captionTracks?.length) {
+    if (watchPage.captionTracks?.length) {
       playerCaptionTracks = watchPage.captionTracks;
     }
     console.log('[youtube] watch-html meta fallback', {
@@ -357,6 +335,30 @@ export async function fetchYouTubeContent(url) {
       titleLength: String(watchPage.title || '').length,
       descriptionLength: String(watchPage.description || '').length,
       captionTrackCount: watchPage.captionTracks?.length || 0,
+    });
+  }
+
+  if (!result.extractedDescription || result.extractedDescription.length < 20) {
+    const playerMeta = await fetchInnerTubePlayerMeta(videoId);
+    if (playerMeta.title && !result.title) result.title = playerMeta.title;
+    if (playerMeta.description && playerMeta.description.length > result.extractedDescription.length) {
+      result.extractedDescription = playerMeta.description;
+      if (extractionMode !== 'youtube-api') {
+        extractionMode = 'legacy-scraper';
+        metadataProvider = `innertube-player:${playerMeta.clientName || 'WEB'}`;
+      }
+    }
+    if (!playerCaptionTracks.length && playerMeta.captionTracks?.length) {
+      playerCaptionTracks = playerMeta.captionTracks;
+    }
+    console.log('[youtube] innertube-player meta fallback', {
+      ok: playerMeta.ok,
+      error: playerMeta.error || null,
+      clientName: playerMeta.clientName || null,
+      playability: playerMeta.playability || null,
+      titleLength: String(playerMeta.title || '').length,
+      descriptionLength: String(playerMeta.description || '').length,
+      captionTrackCount: playerCaptionTracks.length,
     });
   }
 

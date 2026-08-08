@@ -284,9 +284,9 @@ export function pickPreferredCaptionTrack(tracks = []) {
 }
 
 /**
- * youtubei.js 파서를 거치지 않는 raw InnerTube player 호출.
- * Vercel datacenter IP 에서는 key 없는 player 요청이 400 이 되는 경우가 많아
- * YouTube WEB 클라이언트가 쓰는 공개 Innertube API key 를 붙인다.
+ * youtubei.js 파서를 거치지 않는 raw InnerTube player 호출 (best-effort).
+ * 공개 InnerTube/Google API key 를 코드·env 에 넣지 않는다.
+ * key 없는 요청이 실패해도 상위 watch-html / youtubei.js fallback 이 이어진다.
  */
 export async function fetchInnerTubePlayerMeta(videoId) {
   const empty = { ok: false, title: '', description: '', captionTracks: [], error: null };
@@ -294,8 +294,7 @@ export async function fetchInnerTubePlayerMeta(videoId) {
     return { ...empty, error: 'INVALID_VIDEO_ID' };
   }
 
-  // YouTube WEB 임베드/클라이언트가 사용하는 공개 Innertube key (비밀키 아님)
-  const INNERTUBE_WEB_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+  const playerEndpoint = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
 
   const clients = [
     {
@@ -325,8 +324,7 @@ export async function fetchInnerTubePlayerMeta(videoId) {
   let lastError = null;
   for (const client of clients) {
     try {
-      const endpoint = `https://www.youtube.com/youtubei/v1/player?prettyPrint=false&key=${INNERTUBE_WEB_KEY}`;
-      const res = await fetch(endpoint, {
+      const res = await fetch(playerEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
