@@ -1435,13 +1435,47 @@ const VideoRecipeAnalysisService = {
         continue;
       }
 
+      const contentType = res.headers.get('content-type') || '';
+      const vercelError = res.headers.get('x-vercel-error') || '';
+      const rawText = await res.text();
       let data;
       try {
-        data = await res.json();
+        data = rawText ? JSON.parse(rawText) : null;
       } catch (parseErr) {
-        logVideoExtractError('callVideoRecipeApi:parse', parseErr, { apiUrl: currentApiUrl, status: res.status });
+        console.error('[VideoExtract] non-JSON response', {
+          apiUrl: currentApiUrl,
+          status: res.status,
+          ok: res.ok,
+          contentType,
+          vercelError: vercelError || null,
+          bodyPreview: String(rawText || '').slice(0, 300),
+        });
+        logVideoExtractError('callVideoRecipeApi:parse', parseErr, {
+          apiUrl: currentApiUrl,
+          status: res.status,
+          contentType,
+          vercelError: vercelError || null,
+          bodyPreview: String(rawText || '').slice(0, 300),
+        });
         const err = new Error('서버 응답을 처리할 수 없습니다.');
         err.code = 'INVALID_RESPONSE';
+        err.httpStatus = res.status;
+        err.contentType = contentType;
+        err.vercelError = vercelError || null;
+        throw err;
+      }
+
+      if (data == null || typeof data !== 'object') {
+        console.error('[VideoExtract] empty/non-object JSON response', {
+          apiUrl: currentApiUrl,
+          status: res.status,
+          contentType,
+          bodyPreview: String(rawText || '').slice(0, 300),
+        });
+        const err = new Error('서버 응답을 처리할 수 없습니다.');
+        err.code = 'INVALID_RESPONSE';
+        err.httpStatus = res.status;
+        err.contentType = contentType;
         throw err;
       }
 
