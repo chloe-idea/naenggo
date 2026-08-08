@@ -467,16 +467,30 @@ export const FirestoreSettingsService = {
       });
       return null;
     }
+    const activeHouseholdId = FamilySharingService.getActiveHouseholdId();
     const prefsPath = isFamilyScope()
-      ? 'households/{householdId}/grocery/preferences'
-      : 'users/{uid}/settings/preferences';
+      ? `households/${activeHouseholdId}/grocery/preferences`
+      : `users/${uid}/settings/preferences`;
     const savedPath = isFamilyScope()
+      ? `households/${activeHouseholdId}/savedRecipes`
+      : `users/${uid}/settings/preferences.savedRecipeIds`;
+    console.info([
+      '[CURRENT SETTINGS SOURCE]',
+      `uid: ${uid}`,
+      `activeHouseholdId: ${activeHouseholdId || ''}`,
+      `collectionPath: ${prefsPath}`,
+      `savedRecipesPath: ${savedPath}`,
+    ].join('\n'));
+    const groceryStartMs = StartupPerf.begin('grocery loaded', isFamilyScope()
+      ? 'households/{householdId}/grocery/preferences'
+      : 'users/{uid}/settings/preferences');
+    const savedStartMs = StartupPerf.begin('saved recipes loaded', isFamilyScope()
       ? 'households/{householdId}/savedRecipes'
-      : 'users/{uid}/settings/preferences.savedRecipeIds';
-    const groceryStartMs = StartupPerf.begin('grocery loaded', prefsPath);
-    const savedStartMs = StartupPerf.begin('saved recipes loaded', savedPath);
-    StartupPerf.markListener(prefsPath);
-    if (isFamilyScope()) StartupPerf.markListener(savedPath);
+      : 'users/{uid}/settings/preferences.savedRecipeIds');
+    StartupPerf.markListener(isFamilyScope()
+      ? 'households/{householdId}/grocery/preferences'
+      : 'users/{uid}/settings/preferences');
+    if (isFamilyScope()) StartupPerf.markListener('households/{householdId}/savedRecipes');
 
     const emit = (preferenceData, savedRecipes = []) => {
       const data = readSettingsData(preferenceData);
@@ -528,9 +542,35 @@ export const FirestoreSettingsService = {
     };
     let preferenceData = {};
     let savedRecipes = [];
+    let preferencesReady = false;
+
+    const emitDefaultsAfterPrefsError = (err) => {
+      console.error('[FirestoreSettingsService] preferences onSnapshot failed — hydrating UI with empty budget (no Firestore write)', {
+        operation: 'settings.preferences.onSnapshot',
+        firestorePath: prefsPath,
+        code: err?.code || null,
+        authPresent: Boolean(auth?.currentUser),
+        activeHouseholdId: FamilySharingService.getActiveHouseholdId(),
+        message: err?.message || String(err),
+      });
+      // 월 예산 "불러오는 중" 고착 방지. 빈 값을 정상 성공으로 오해하지 않도록 error 플래그 포함.
+      onSettings?.({
+        ...DEFAULT_SETTINGS,
+        grocery: { ...DEFAULT_SETTINGS.grocery, byWeek: {}, items: {}, manualItems: [], completedKeys: [], purchasedLedger: [] },
+        savedRecipeIds: [],
+        savedRecipes: [],
+        _syncError: {
+          code: err?.code || 'settings-preferences-error',
+          path: prefsPath,
+        },
+      });
+      onError?.(err);
+    };
+
     const stopPreferences = onSnapshot(
       settingsDoc(uid),
       (snap) => {
+        preferencesReady = true;
         preferenceData = snap.exists() ? snap.data() : {};
         if (isFamilyScope()) hydrateMissingFamilyBudget(uid, preferenceData);
         savedRecipes = isFamilyScope()
@@ -540,7 +580,7 @@ export const FirestoreSettingsService = {
           ? savedRecipes.map((item) => typeof item === 'string' ? { recipeId: item, savedByMembers: [] } : item)
           : []);
       },
-      (err) => onError?.(err),
+      (err) => emitDefaultsAfterPrefsError(err),
     );
     if (isFamilyScope()) {
       const stopSavedRecipes = onSnapshot(
@@ -551,9 +591,22 @@ export const FirestoreSettingsService = {
             ...item.data(),
             savedByMembers: normalizeSavedByMembers(item.data()),
           }));
+          // preferences 가 아직이면 savedRecipes만으로 grocery/예산을 덮지 않는다.
+          if (!preferencesReady && !Object.keys(preferenceData).length) return;
           emit(preferenceData, savedRecipes);
         },
-        (err) => onError?.(err),
+        (err) => {
+          console.error('[FirestoreSettingsService] savedRecipes onSnapshot failed', {
+            operation: 'settings.savedRecipes.onSnapshot',
+            firestorePath: savedPath,
+            code: err?.code || null,
+            authPresent: Boolean(auth?.currentUser),
+            activeHouseholdId: FamilySharingService.getActiveHouseholdId(),
+            message: err?.message || String(err),
+          });
+          // 예산(preferences)과 분리 — savedRecipes 오류만으로 월 예산을 막지 않는다.
+          onError?.(err);
+        },
       );
       snapshotUnsubscribe = () => { stopPreferences(); stopSavedRecipes(); };
     } else {

@@ -939,12 +939,29 @@ async function syncUserData(user, { force = false } = {}) {
       statistics: householdId ? 'derived from shared mealCalendar + shopping + grocery' : 'derived from personal mealCalendar + shopping + settings',
     });
   } catch (err) {
-    console.error('[firebase-bootstrap] syncUserData failed:', err);
+    console.error('[firebase-bootstrap] syncUserData failed:', {
+      message: err?.message || String(err),
+      code: err?.code || null,
+      status: err?.status || null,
+      url: '/api/households/current',
+      hostname: location.hostname,
+      hintUncleared: Boolean(FamilySharingService.getActiveFamily()?._fromHint),
+    });
+    // localhost 등에서 /current 실패 + 미검증 hint 가 남아 있으면
+    // household 경로 permission-denied 로 clearAll 이후 빈 화면이 고착될 수 있다.
+    // Firestore pointer는 건드리지 않고 메모리 hint만 제거 후 개인 경로로 재구독한다.
+    const clearedHint = FamilySharingService.clearUnvalidatedHintScope?.();
+    if (clearedHint) {
+      FirestoreUserDataSync.restartScopedSync(buildUserSyncHandlers(null));
+    }
     clearDataLoading('sync error');
   } finally {
     // notify(hydration) 핸들러가 같은 틱에서 force sync 하지 않도록 다음 마이크로태스크에서 해제
     queueMicrotask(() => {
       householdHydrationInProgress = false;
+      // clearAll/stopAll 이후에도 현재 탭의 deferred(mealCalendar/settings)를 다시 건다.
+      // (달력에 머문 채 resync 되면 구독이 끊긴 채 예산 "불러오는 중"이 남을 수 있음)
+      window.dispatchEvent(new CustomEvent('user-data-sync-restarted'));
     });
   }
 }
@@ -1944,13 +1961,10 @@ window.addEventListener('family-sharing-changed', (event) => {
   }
   const user = resolveAuthUser();
   if (!user?.uid || authState.isLoggingOut) return;
-  syncUserData(user, { force: true })
-    .then(() => {
-      window.dispatchEvent(new CustomEvent('user-data-sync-restarted'));
-    })
-    .catch((err) => {
-      console.error('[firebase-bootstrap] family sharing resync failed:', err);
-    });
+  // user-data-sync-restarted 는 syncUserData finally에서 발행 (deferred 재구독)
+  syncUserData(user, { force: true }).catch((err) => {
+    console.error('[firebase-bootstrap] family sharing resync failed:', err);
+  });
 });
 
 window.addEventListener('ui-modal-change', () => {

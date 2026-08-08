@@ -11813,7 +11813,15 @@ function startApp() {
   });
   window.addEventListener('meal-calendar-firestore-sync', (e) => {
     if (!isLoggedInAppUser()) return;
-    MealLogRepository.replaceAll(e.detail?.logs || []);
+    if (e.detail?.error) {
+      console.error('[meal-calendar] sync error — keeping current logs (not overwriting with empty)', {
+        code: e.detail.error.code || null,
+        path: e.detail.error.path || null,
+      });
+      refreshAll();
+      return;
+    }
+    MealLogRepository.replaceAll(Array.isArray(e.detail?.logs) ? e.detail.logs : []);
     refreshAll();
   });
   window.addEventListener('meal-plans-firestore-sync', (e) => {

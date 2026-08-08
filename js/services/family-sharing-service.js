@@ -291,6 +291,28 @@ export const FamilySharingService = {
     return Boolean(activeFamily?.householdId && !activeFamily.pendingSetup);
   },
 
+  /** /current 검증을 통과한 세션인지 */
+  isSessionValidated() {
+    return Boolean(sessionValidated);
+  },
+
+  /**
+   * 미검증 session hint scope만 메모리에서 제거한다.
+   * Firestore users.activeHouseholdId / membership 은 변경하지 않는다.
+   * (localhost API 실패 시 stale hint → household permission-denied → 빈 화면 고착 방지)
+   */
+  clearUnvalidatedHintScope() {
+    if (sessionValidated) return false;
+    if (!activeFamily?._fromHint) return false;
+    console.warn('[FamilySharing] clearing unvalidated hint scope (no Firestore pointer write)', {
+      hadHouseholdId: Boolean(activeFamily?.householdId),
+      pendingSetup: Boolean(activeFamily?.pendingSetup),
+    });
+    activeFamily = null;
+    clearSessionHint();
+    return true;
+  },
+
   /** 구독 경로 가속용 hint (권한 판정에 사용 금지) */
   getSessionHint() {
     return readSessionHint();

@@ -103,7 +103,7 @@ export const FirestoreMealCalendarService = {
       },
       (err) => {
         if (generation !== listenGeneration) return;
-        console.error('[FirestoreMealCalendarService] onSnapshot failed', {
+        console.error('[FirestoreMealCalendarService] onSnapshot failed — not treating as empty success', {
           operation: 'mealCalendar.onSnapshot',
           firestorePath: collectionPath,
           code: err?.code || null,
@@ -111,6 +111,13 @@ export const FirestoreMealCalendarService = {
           activeHouseholdId: FamilySharingService.getActiveHouseholdId(),
           message: err?.message || String(err),
         });
+        // 빈 배열로 성공 emit 하지 않음. UI는 error detail로 구분한다.
+        window.dispatchEvent(new CustomEvent('meal-calendar-firestore-sync', {
+          detail: {
+            logs: null,
+            error: { code: err?.code || 'meal-calendar-error', path: collectionPath },
+          },
+        }));
         onError?.(err);
       },
     );
