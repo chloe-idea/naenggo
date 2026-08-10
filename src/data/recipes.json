@@ -3213,7 +3213,7 @@
       "id": "recipe-107",
       "slug": "recipe-107",
       "title": "우유시리얼",
-      "image": null,
+      "image": "images/recipes/recipe-107.webp",
       "cuisine": "양식",
       "category": "western",
       "dishType": "snack",
@@ -3859,7 +3859,7 @@
       "id": "recipe-131",
       "slug": "recipe-131",
       "title": "계란볶음",
-      "image": null,
+      "image": "images/recipes/recipe-131.webp",
       "cuisine": "중식",
       "category": "chinese",
       "dishType": "stir-fry",
@@ -7263,8 +7263,8 @@
         "한끼"
       ],
       "substitutions": []
-    }
-    ,{
+    },
+    {
       "id": "okonomiyaki",
       "slug": "okonomiyaki",
       "title": "오코노미야끼",

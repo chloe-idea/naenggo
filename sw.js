@@ -2,7 +2,7 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v261';
+const CACHE_NAME = 'naengjanggo-v263';
 
 const RECIPE_IMAGE_SLUGS = [
   'sweet-potato-fries', 'potato-fries', 'sweet-potato-sticks', 'egg-white-omelet', 'potato-pancake', 'potato-cheese-bake', 'egg-in-hell',
@@ -20,7 +20,7 @@ const ASSETS = [
   'js/legal-page.js?v=2',
   'app-config.js?v=57',
   'style.css?v=199',
-  'script.js?v=239',
+  'script.js?v=240',
   'js/lib/budget-by-month.js',
   'js/lib/display-name.js',
   'js/lib/hangul-group.js?v=1',
@@ -40,7 +40,7 @@ const ASSETS = [
   'js/login-required-modal.js?v=73',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
-  'recipe-images.js?v=50',
+  'recipe-images.js?v=51',
   'js/data/builtin-recipes.js?v=1',
   'manifest.json',
   'icons/icon-192.png',
@@ -112,6 +112,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 레시피 이미지: 네트워크 우선 + 성공 시 캐시 갱신 (변환 직후 옛 WebP 고정 방지)
+  const isRecipeImage = url.pathname.includes('/images/recipes/');
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -121,6 +124,12 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request)),
+      .catch(() => caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        if (isRecipeImage) {
+          return caches.match(assetUrl('images/recipes/default-recipe.webp'));
+        }
+        return undefined;
+      })),
   );
 });

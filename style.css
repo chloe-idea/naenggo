@@ -5916,9 +5916,30 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 .ingredient-list__item--optional {
+  justify-content: space-between;
+  gap: 0.5rem;
   background: var(--color-surface);
   color: var(--color-text);
   border: 1px dashed var(--color-border);
+}
+
+.recipe-detail__optional-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.recipe-detail__optional-owned {
+  flex-shrink: 0;
+  color: var(--color-success);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ingredient-list__item--optional .btn-buy {
+  flex-shrink: 0;
 }
 
 .match-section {

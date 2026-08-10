@@ -12,7 +12,7 @@ window.RECIPE_IMAGE_MAP = {};
 
 const RECIPE_IMAGES_BASE = 'images/recipes/';
 const DEFAULT_RECIPE_IMAGE = `${RECIPE_IMAGES_BASE}default-recipe.webp`;
-const RECIPE_IMAGE_VERSION = '2';
+const RECIPE_IMAGE_VERSION = '3';
 
 /** public/images/recipes 에 실제로 있는 파일 (default 제외) */
 const EXISTING_RECIPE_IMAGE_FILES = new Set([
@@ -317,10 +317,12 @@ window.RecipeImageService = {
   isKnownBundledImage,
 
   /**
-   * 표시 가능한 실제 사진만 반환. 없으면 null (네트워크 요청 없음).
+   * 표시 가능한 실제 사진만 반환. 없으면 null.
    * - hasImage === false 이면 무조건 null
-   * - 사용자 업로드(data/http) 또는 allowlist 번들 경로만 허용
-   * - id/slug로 경로를 새로 만들지 않음
+   * - recipe.image / imageUrl / thumbnailUrl 에 명시된 경로를 우선 신뢰
+   *   (images/recipes/*.webp 가 allowlist에 없어도 데이터에 있으면 사용, 404는 onerror로 fallback)
+   * - id/slug로 없는 경로를 추측해 만들지 않음
+   * - hasImage === true 이고 명시 필드가 비었을 때만 allowlist slug 조회
    */
   pickPhoto(recipe) {
     if (!recipe) return null;
@@ -332,10 +334,12 @@ window.RecipeImageService = {
       const normalized = normalizeRecipePhotoUrl(raw);
       if (!normalized || !this.isValidPhoto(normalized)) continue;
       if (this.isUserUploadedPhoto(normalized)) return normalized;
-      if (normalized.startsWith(RECIPE_IMAGES_BASE) && isKnownBundledImage(normalized)) {
-        return withRecipeImageVersion(normalized);
+      if (normalized.startsWith(RECIPE_IMAGES_BASE)) {
+        const file = stripToRecipeImageFilename(normalized);
+        if (!file || /^default-recipe\./i.test(file)) continue;
+        // 레시피 데이터에 명시된 번들 경로 → allowlist 여부와 무관하게 표시
+        return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${file}`);
       }
-      // 데이터에 자동 생성된 경로가 있어도 파일이 없으면 무시
     }
 
     // hasImage: true 이고 명시 필드가 비었을 때만 slug allowlist 조회

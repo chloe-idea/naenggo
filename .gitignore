@@ -6,6 +6,7 @@ node_modules/
 .env.*.local
 .DS_Store
 server/data/
+src/data/backups/
 
 # Vercel Output=. 용: public/images 동기화 생성물 (원본은 public/images)
 /images/**

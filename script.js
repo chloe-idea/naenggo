@@ -5518,9 +5518,11 @@ function hasPhoto(img) {
   if (!img || img === DEFAULT_IMAGE || String(img).includes('images.unsplash.com')) return false;
   if (typeof RecipeImageService !== 'undefined') {
     if (RecipeImageService.isUserUploadedPhoto?.(img)) return true;
+    // 데이터에 명시된 images/recipes/* 경로는 allowlist와 무관하게 사진으로 인정
+    // (실제 404는 img onerror → default-recipe 로 처리)
+    const path = String(img).split('?')[0];
+    if (/images\/recipes\//.test(path) && !/default-recipe\./i.test(path)) return true;
     if (RecipeImageService.isKnownBundledImage?.(img)) return true;
-    // 자동 생성된 /images/recipes/… 경로인데 파일이 없으면 사진 없음
-    if (String(img).includes('images/recipes/')) return false;
   }
   return true;
 }
@@ -10411,23 +10413,37 @@ function renderRecipeDetailUnavailable(message = '레시피를 찾을 수 없습
   dom.recipeDetailContent.querySelector('[data-detail-back]')?.addEventListener('click', leaveRecipeDetail);
 }
 
-/** 선택 재료 목록 HTML — 일치율/매칭 로직과 분리된 표시 전용 */
-function recipeOptionalIngredientsHTML(recipe) {
-  const optional = Array.isArray(recipe?.optionalIngredients)
-    ? recipe.optionalIngredients.map((ing) => formatIngredientDisplay(ing)).filter(Boolean)
-    : [];
-  if (!optional.length) return '';
+/**
+ * 선택 재료 목록 HTML — 모든 레시피 공통, recipe.optionalIngredients 데이터 기반.
+ * 일치율/부족 재료/추천 점수에는 포함하지 않음 (표시·구매 편의만).
+ */
+function recipeOptionalIngredientsHTML(recipe, pantryNames = []) {
+  if (!Array.isArray(recipe?.optionalIngredients) || !recipe.optionalIngredients.length) return '';
+  const names = Array.isArray(pantryNames) ? pantryNames : [];
+  const items = recipe.optionalIngredients.map((ing) => {
+    const display = formatIngredientDisplay(ing);
+    const matchName = getIngredientMatchName(ing) || display;
+    if (!matchName) return '';
+    const owned = isAlwaysAvailableIngredient(matchName)
+      ? '기본 재료'
+      : IngredientAliasService.findOwned(matchName, names);
+    const trailing = owned
+      ? `<span class="recipe-detail__optional-owned" aria-label="보유 중">✓</span>`
+      : AffiliateService.buyButtonHTML(matchName, { compact: true });
+    return `
+      <li class="ingredient-list__item ingredient-list__item--optional">
+        <span class="recipe-detail__optional-name">${esc(display || matchName)}</span>
+        ${trailing}
+      </li>`;
+  }).filter(Boolean).join('');
+  if (!items) return '';
   return `
     <div class="recipe-detail__optional-ingredients">
       <h4 class="recipe-detail__optional-title">
         선택 재료
-        <span class="recipe-detail__optional-hint">있으면 더 좋아요</span>
+        <span class="recipe-detail__optional-hint">있으면 더 맛있어요</span>
       </h4>
-      <ul class="ingredient-list">
-        ${optional.map((name) => `
-          <li class="ingredient-list__item ingredient-list__item--optional">${esc(name)}</li>
-        `).join('')}
-      </ul>
+      <ul class="ingredient-list">${items}</ul>
     </div>`;
 }
 
@@ -10450,6 +10466,12 @@ function recipeDetailContentHTML(recipe, analysis) {
         ${AffiliateService.buyButtonHTML(name, { compact: true })}
       </li>`;
     }).join('')}</ul>`;
+  const optionalIngredientsHtml = recipeOptionalIngredientsHTML(recipe, names);
+  const showAffiliateDisclosure = AffiliateService.isEnabled() && (
+    (hasPantry && analysis.missing?.length > 0)
+    || (optionalIngredientsHtml.includes('btn-buy'))
+    || (!hasPantry && (recipe.ingredients || []).length > 0)
+  );
   const stepsTitleExtra = activeVariation
     ? `<span class="recipe-detail__variation-step-label">${esc(activeVariation.variantName)} 방식</span>`
     : '';
@@ -10479,9 +10501,9 @@ function recipeDetailContentHTML(recipe, analysis) {
         <section class="recipe-detail__section">
           <h3 class="recipe-detail__section-title">재료 ${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${analysis.matchPercent}%</span>` : ''}</h3>
           ${ingredientsHtml}
-          ${recipeOptionalIngredientsHTML(recipe)}
+          ${optionalIngredientsHtml}
           ${activeVariation ? `<p class="recipe-variation-extra-ing">함께 넣을 재료: <strong>${esc(activeVariation.ingredient)}</strong></p>` : ''}
-          ${hasPantry && analysis.missing?.length && AffiliateService.isEnabled() ? affiliateDisclosureHTML() : ''}
+          ${showAffiliateDisclosure ? affiliateDisclosureHTML() : ''}
         </section>
         ${recipeVariationsSectionHTML(recipe, names)}
         ${MatchService.renderSubstitutionGuideHTML(substitutionAdvices)}
@@ -11856,7 +11878,7 @@ async function registerServiceWorker() {
   };
 
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js?v=57');
+    const reg = await navigator.serviceWorker.register('./sw.js?v=58');
     reg.update();
     activateWaitingWorker(reg);
     reg.addEventListener('updatefound', () => {
