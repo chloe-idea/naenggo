@@ -2123,6 +2123,126 @@ function resolveRecipeImage(data) {
   return hasPhoto(data?.image) ? data.image : '';
 }
 
+function toBuiltinRuntimeId(catalogId) {
+  const raw = String(catalogId || '').trim().replace(/^builtin-/, '');
+  return raw ? `builtin-${raw}` : '';
+}
+
+/** variation 조리 단계 op 정규화 (beforeStep / afterStep / replaceStep, 1-based) */
+function normalizeVariationStepOps(variation) {
+  const rawOps = Array.isArray(variation?.stepOps) ? variation.stepOps : [];
+  const ops = [];
+  for (const raw of rawOps) {
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      if (text) ops.push({ text });
+      continue;
+    }
+    const text = String(raw?.text || raw?.instruction || '').trim();
+    if (!text) continue;
+    const beforeStep = Number(raw?.beforeStep ?? raw?.insertBeforeStep);
+    const afterStep = Number(raw?.afterStep ?? raw?.insertAfterStep);
+    const replaceStep = Number(raw?.replaceStep);
+    const op = { text };
+    if (Number.isFinite(replaceStep) && replaceStep >= 1) op.replaceStep = Math.floor(replaceStep);
+    else if (Number.isFinite(beforeStep) && beforeStep >= 1) op.beforeStep = Math.floor(beforeStep);
+    else if (Number.isFinite(afterStep) && afterStep >= 1) op.afterStep = Math.floor(afterStep);
+    ops.push(op);
+  }
+  if (ops.length) return ops;
+  // 위치 정보 없는 기존 addSteps → 맨 뒤 append fallback
+  const legacy = Array.isArray(variation?.addSteps) ? variation.addSteps : [];
+  return legacy.map((s) => String(s || '').trim()).filter(Boolean).map((text) => ({ text }));
+}
+
+/**
+ * 기본 steps에 variation stepOps를 원본 1-based 인덱스 기준으로 적용.
+ * 원본 recipe.steps는 변경하지 않고 새 배열만 반환.
+ * @returns {{ text: string, fromVariation: boolean }[]}
+ */
+function applyRecipeVariationSteps(baseSteps, variation) {
+  const base = (Array.isArray(baseSteps) ? baseSteps : [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean);
+  if (!variation) {
+    return base.map((text) => ({ text, fromVariation: false }));
+  }
+  const ops = normalizeVariationStepOps(variation);
+  if (!ops.length) {
+    return base.map((text) => ({ text, fromVariation: false }));
+  }
+
+  const n = base.length;
+  const clampIndex = (stepNo) => {
+    if (!n) return 0;
+    return Math.max(0, Math.min(n - 1, Math.floor(stepNo) - 1));
+  };
+  const replacements = new Map();
+  const beforeInserts = new Map();
+  const afterInserts = new Map();
+  const append = [];
+
+  const pushMap = (map, key, text) => {
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(text);
+  };
+
+  for (const op of ops) {
+    const text = op.text;
+    if (op.replaceStep != null) {
+      if (!n) append.push(text);
+      else replacements.set(clampIndex(op.replaceStep), text);
+    } else if (op.beforeStep != null) {
+      if (!n) append.push(text);
+      else pushMap(beforeInserts, clampIndex(op.beforeStep), text);
+    } else if (op.afterStep != null) {
+      if (!n) append.push(text);
+      else pushMap(afterInserts, clampIndex(op.afterStep), text);
+    } else {
+      append.push(text);
+    }
+  }
+
+  const result = [];
+  for (let i = 0; i < n; i += 1) {
+    for (const text of (beforeInserts.get(i) || [])) {
+      result.push({ text, fromVariation: true });
+    }
+    const replaced = replacements.has(i);
+    result.push({
+      text: replaced ? replacements.get(i) : base[i],
+      fromVariation: replaced,
+    });
+    for (const text of (afterInserts.get(i) || [])) {
+      result.push({ text, fromVariation: true });
+    }
+  }
+  for (const text of append) {
+    result.push({ text, fromVariation: true });
+  }
+  return result;
+}
+
+function normalizeBuiltinVariations(rawVariations) {
+  if (!Array.isArray(rawVariations)) return [];
+  return rawVariations.map((v) => {
+    const addSteps = Array.isArray(v?.addSteps)
+      ? v.addSteps.map((s) => String(s || '').trim()).filter(Boolean)
+      : [];
+    const stepOps = normalizeVariationStepOps(v);
+    return {
+      ingredient: String(v?.ingredient || '').trim(),
+      variantName: String(v?.variantName || '').trim(),
+      tip: String(v?.tip || '').trim(),
+      addSteps,
+      stepOps,
+      absorbRecipeIds: Array.isArray(v?.absorbRecipeIds)
+        ? v.absorbRecipeIds.map((id) => toBuiltinRuntimeId(id)).filter(Boolean)
+        : [],
+    };
+  }).filter((v) => v.ingredient && v.variantName);
+}
+
 function seed(id, data) {
   const cat = CATEGORY_MAP[data.category || 'korean'] || CATEGORY_MAP.korean;
   const name = data.name || data.title || '';
@@ -2130,11 +2250,16 @@ function seed(id, data) {
   const steps = Array.isArray(data.steps) ? data.steps : (Array.isArray(data.instructions) ? data.instructions : []);
   const cookTime = Number(data.cookTime ?? data.cookingTime) || 20;
   const tags = Array.isArray(data.tags) && data.tags.length ? data.tags : [...cat.tags];
+  const baseRecipeId = data.baseRecipeId ? toBuiltinRuntimeId(data.baseRecipeId) : null;
   return {
     id: `builtin-${slug}`,
     slug,
     name,
     ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+    optionalIngredients: Array.isArray(data.optionalIngredients) ? data.optionalIngredients : [],
+    variations: normalizeBuiltinVariations(data.variations),
+    hiddenAsVariation: Boolean(data.hiddenAsVariation),
+    baseRecipeId,
     steps,
     cookTime: Math.max(1, cookTime),
     difficulty: data.difficulty || '쉬움',
@@ -2154,6 +2279,10 @@ function seed(id, data) {
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
   };
+}
+
+function isCatalogVisibleRecipe(recipe) {
+  return !recipe?.hiddenAsVariation;
 }
 
 const BUILTIN_RECIPES = (typeof BUILTIN_RECIPE_RAW !== 'undefined' ? BUILTIN_RECIPE_RAW : []).map((data, i) => seed(i + 1, data));
@@ -2256,15 +2385,19 @@ const RecipeRepository = {
     return this.getHomeRecipes();
   },
   getHomeRecipes() {
-    const builtinIds = new Set(BUILTIN_RECIPES.map((r) => r.id));
+    const visibleBuiltins = BUILTIN_RECIPES.filter(isCatalogVisibleRecipe);
+    const builtinIds = new Set(visibleBuiltins.map((r) => r.id));
     const publicRecipes = PublicRecipeRepository.getAll().filter(
       (r) => r.visibility === 'public' || r.isPublic !== false,
     );
     const dedupedPublic = publicRecipes.filter((r) => !builtinIds.has(r.id));
-    return [...BUILTIN_RECIPES, ...dedupedPublic];
+    return [...visibleBuiltins, ...dedupedPublic];
   },
   getRecommendableRecipes() {
-    return [...BUILTIN_RECIPES, ...this._userRecipes];
+    return [
+      ...BUILTIN_RECIPES.filter(isCatalogVisibleRecipe),
+      ...this._userRecipes,
+    ];
   },
   forkFrom(source) {
     if (!source) return null;
@@ -4590,6 +4723,26 @@ const MatchService = {
     const substitutionAdvices = this.getSubstitutionAdvices(missing);
     return { exact, substituted, missing, matched, matchedPantryNames, matchPercent, substitutionAdvices };
   },
+  /** variation 재료는 매칭률에 넣지 않고, 보유 시에만 tip용으로 반환 */
+  findMatchedVariations(pantryNames, variations = []) {
+    if (!Array.isArray(variations) || !variations.length) return [];
+    const matched = [];
+    for (const variation of variations) {
+      const ingredient = String(variation?.ingredient || '').trim();
+      if (!ingredient) continue;
+      const owned = isAlwaysAvailableIngredient(ingredient)
+        ? '기본 재료'
+        : IngredientAliasService.findOwned(ingredient, pantryNames);
+      if (!owned) continue;
+      matched.push({
+        ...variation,
+        owned,
+        tip: variation.tip
+          || `${ingredient}도 있으니 ${variation.variantName || ingredient}으로 만들어보세요`,
+      });
+    }
+    return matched;
+  },
   getSubstitutionAdvices(missingIngredients) {
     const advices = [];
     const seen = new Set();
@@ -4642,9 +4795,10 @@ const MatchService = {
     const { exact, substituted, missing } = analysis;
     let html = '';
     if (exact.length) {
-      html += `<div class="match-section"><h4 class="match-section__title">정확 일치</h4><ul class="ingredient-list">${
+      // 섹션 제목 「재료」+ 일치율로 충분해 「정확 일치」소제목은 생략
+      html += `<ul class="ingredient-list">${
         exact.map((e) => `<li class="ingredient-list__item ingredient-list__item--have">✓ ${esc(e.required)}</li>`).join('')
-      }</ul></div>`;
+      }</ul>`;
     }
     if (substituted.length) {
       html += `<div class="match-section"><h4 class="match-section__title">대체 가능</h4><ul class="ingredient-list">${
@@ -4728,13 +4882,29 @@ const RecommendationService = {
     if (Number(result.recipe.cookTime) <= 15) return '⏱️ 15분 이하';
     return '';
   },
+  enrichWithVariations(result, pantryNames) {
+    const matchedVariations = MatchService.findMatchedVariations(
+      pantryNames,
+      result.recipe?.variations || [],
+    );
+    const first = matchedVariations[0];
+    return {
+      ...result,
+      matchedVariations,
+      variationTip: first
+        ? (first.tip || `${first.ingredient}도 있으니 ${first.variantName}으로 만들어보세요`)
+        : '',
+    };
+  },
   matchesHomeSearch(recipe, query) {
     const q = normalizeIngredient(query);
     if (!q) return true;
     const categoryLabel = CATEGORY_MAP[recipe.category]?.tags?.join(' ') || '';
+    const variationNames = (recipe.variations || []).flatMap((v) => [v.variantName, v.ingredient]);
     const haystack = [
       recipe.name,
       ...(recipe.ingredients || []).map(formatIngredientDisplay),
+      ...variationNames,
       recipe.authorName,
       recipe.category,
       categoryLabel,
@@ -4777,7 +4947,7 @@ const RecommendationService = {
       if (q && !this.matchesHomeSearch(recipe, q)) continue;
       const analysis = MatchService.analyze(names, recipe.ingredients);
       const matchPercent = Number(analysis.matchPercent);
-      const result = {
+      let result = {
         recipe,
         ...analysis,
         matchPercent: Number.isFinite(matchPercent) ? matchPercent : 0,
@@ -4785,6 +4955,7 @@ const RecommendationService = {
       };
       if (hasPantry && !hasSearchMode && result.matchPercent <= 0) continue;
       if (activeFilters?.size && !this.matchesFilters(result, activeFilters)) continue;
+      result = this.enrichWithVariations(result, names);
       results.push({
         ...result,
         recommendationReason: hasPantry ? this.reasonFor(result) : '',
@@ -4871,9 +5042,10 @@ const RecommendationService = {
     for (const recipe of recipes) {
       if (q && !normalizeIngredient(recipe.name).includes(q)) continue;
       const analysis = MatchService.analyze(names, recipe.ingredients);
-      const result = { recipe, ...analysis, expiryBoost: this.getExpiryBoost(analysis.matchedPantryNames) };
+      let result = { recipe, ...analysis, expiryBoost: this.getExpiryBoost(analysis.matchedPantryNames) };
       if (!q && !activeFilters?.size && analysis.matchPercent <= 0) continue;
       if (!this.matchesFilters(result, activeFilters)) continue;
+      result = this.enrichWithVariations(result, names);
       results.push({ ...result, recommendationReason: this.reasonFor(result) });
     }
     return results.sort((a, b) =>
@@ -5128,6 +5300,7 @@ const state = {
   authorProfileReturnView: 'main',
   profileReturnView: 'main',
   detailRecipeId: null,
+  detailActiveVariationIngredient: null,
   detailReturnView: 'main',
   detailReturnScrollY: 0,
 };
@@ -6200,6 +6373,15 @@ function koreanInstrumentalParticle(word) {
   const code = s.charCodeAt(s.length - 1);
   if (code < 0xAC00 || code > 0xD7A3) return '로';
   return ((code - 0xAC00) % 28) ? '으로' : '로';
+}
+
+/** 한국어 목적격 조사 을/를 (받침 유무) */
+function koreanObjectParticle(word) {
+  const s = String(word || '').trim();
+  if (!s) return '을';
+  const code = s.charCodeAt(s.length - 1);
+  if (code < 0xAC00 || code > 0xD7A3) return '을';
+  return ((code - 0xAC00) % 28) ? '을' : '를';
 }
 
 /** 예: 대파 → 쪽파로 대체 가능 (정확 일치 시에는 호출하지 않음) */
@@ -10141,8 +10323,66 @@ function openRecipeDetail(result) {
   }, '', window.location.href);
   history.pushState({ recipeDetail: true, recipeId: recipe.id }, '', getRecipeDetailPath(recipe.id));
   state.detailRecipeId = recipe.id;
+  state.detailActiveVariationIngredient = null;
   switchView('recipe-detail');
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+}
+
+function getActiveRecipeVariation(recipe) {
+  const key = String(state.detailActiveVariationIngredient || '').trim();
+  if (!key || !Array.isArray(recipe?.variations)) return null;
+  return recipe.variations.find((v) => MatchService.normalize(v.ingredient) === MatchService.normalize(key)) || null;
+}
+
+function recipeVariationOwnedLead(ingredient) {
+  const name = String(ingredient || '').trim();
+  if (!name) return '이 재료를 가지고 있어요';
+  return `${name}${koreanObjectParticle(name)} 가지고 있어요`;
+}
+
+function recipeVariationsSectionHTML(recipe, pantryNames = []) {
+  const variations = Array.isArray(recipe?.variations) ? recipe.variations : [];
+  if (!variations.length) return '';
+  // 보유 재료와 맞는 variation만 팁 카드로 노출 (없으면 섹션 자체 숨김)
+  const matched = MatchService.findMatchedVariations(pantryNames, variations);
+  if (!matched.length) return '';
+  const active = getActiveRecipeVariation(recipe);
+  const items = matched.map((variation) => {
+    const isActive = active
+      && MatchService.normalize(active.ingredient) === MatchService.normalize(variation.ingredient);
+    const emoji = pantryItemEmoji(variation.ingredient);
+    const tip = String(variation.tip || '').trim();
+    const variantName = String(variation.variantName || '').trim();
+    return `
+      <button type="button"
+        class="recipe-variation-card${isActive ? ' recipe-variation-card--active' : ''}"
+        data-variation-ingredient="${esc(variation.ingredient)}"
+        aria-pressed="${isActive ? 'true' : 'false'}">
+        <span class="recipe-variation-card__lead">
+          <span class="recipe-variation-card__emoji" aria-hidden="true">${esc(emoji)}</span>
+          <span class="recipe-variation-card__owned">${esc(recipeVariationOwnedLead(variation.ingredient))}</span>
+        </span>
+        <span class="recipe-variation-card__name">${esc(variantName)}${esc(koreanInstrumentalParticle(variantName))} 바꿔보세요</span>
+        ${tip ? `<span class="recipe-variation-card__tip">${esc(tip)}</span>` : ''}
+      </button>`;
+  }).join('');
+  return `
+    <section class="recipe-detail__section recipe-detail__variations">
+      <h3 class="recipe-detail__section-title">이렇게도 만들어보세요</h3>
+      <div class="recipe-variation-list">${items}</div>
+      ${active ? `<p class="recipe-variation-active-note"><strong>${esc(active.variantName)}</strong> 기준으로 조리 순서를 안내해요. 기본 레시피는 그대로 둡니다.</p>` : ''}
+    </section>`;
+}
+
+function recipeHiddenVariationBannerHTML(recipe) {
+  if (!recipe?.hiddenAsVariation || !recipe.baseRecipeId) return '';
+  const base = RecipeRepository.getById(recipe.baseRecipeId);
+  if (!base) return '';
+  return `
+    <div class="recipe-detail__variation-banner">
+      <p>이 메뉴는 <strong>${esc(base.name)}</strong>의 변형으로 안내됩니다.</p>
+      <button type="button" class="btn btn--outline btn--sm" data-open-base-recipe="${esc(base.id)}">기본 레시피 보기</button>
+    </div>`;
 }
 
 async function resolveRecipeDetail(recipeId) {
@@ -10171,10 +10411,33 @@ function renderRecipeDetailUnavailable(message = '레시피를 찾을 수 없습
   dom.recipeDetailContent.querySelector('[data-detail-back]')?.addEventListener('click', leaveRecipeDetail);
 }
 
+/** 선택 재료 목록 HTML — 일치율/매칭 로직과 분리된 표시 전용 */
+function recipeOptionalIngredientsHTML(recipe) {
+  const optional = Array.isArray(recipe?.optionalIngredients)
+    ? recipe.optionalIngredients.map((ing) => formatIngredientDisplay(ing)).filter(Boolean)
+    : [];
+  if (!optional.length) return '';
+  return `
+    <div class="recipe-detail__optional-ingredients">
+      <h4 class="recipe-detail__optional-title">
+        선택 재료
+        <span class="recipe-detail__optional-hint">있으면 더 좋아요</span>
+      </h4>
+      <ul class="ingredient-list">
+        ${optional.map((name) => `
+          <li class="ingredient-list__item ingredient-list__item--optional">${esc(name)}</li>
+        `).join('')}
+      </ul>
+    </div>`;
+}
+
 function recipeDetailContentHTML(recipe, analysis) {
   const names = RecommendationService.getPantryNames();
   const hasPantry = names.length > 0;
   const owned = RecipeRepository.isOwned(recipe);
+  const activeVariation = getActiveRecipeVariation(recipe);
+  const displayTitle = activeVariation?.variantName || recipe.name;
+  const displaySteps = applyRecipeVariationSteps(recipe.steps || [], activeVariation);
   const substitutionAdvices = analysis.substitutionAdvices?.length
     ? analysis.substitutionAdvices
     : MatchService.getSubstitutionAdvices(hasPantry ? analysis.missing : recipe.ingredients);
@@ -10187,15 +10450,19 @@ function recipeDetailContentHTML(recipe, analysis) {
         ${AffiliateService.buyButtonHTML(name, { compact: true })}
       </li>`;
     }).join('')}</ul>`;
+  const stepsTitleExtra = activeVariation
+    ? `<span class="recipe-detail__variation-step-label">${esc(activeVariation.variantName)} 방식</span>`
+    : '';
 
   return `
     <article class="recipe-detail">
       <div class="recipe-detail__hero">
         ${recipeHeroHTML(recipe)}
         <div class="recipe-detail__hero-overlay"></div>
-        <h1 class="recipe-detail__hero-title">${esc(recipe.name)}</h1>
+        <h1 class="recipe-detail__hero-title">${esc(displayTitle)}</h1>
       </div>
       <div class="recipe-detail__content">
+        ${recipeHiddenVariationBannerHTML(recipe)}
         ${recipeOriginHTML(recipe)}
         ${recipeSourcePostLinkHTML(recipe)}
         <div class="recipe-detail__tags">
@@ -10212,16 +10479,23 @@ function recipeDetailContentHTML(recipe, analysis) {
         <section class="recipe-detail__section">
           <h3 class="recipe-detail__section-title">재료 ${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${analysis.matchPercent}%</span>` : ''}</h3>
           ${ingredientsHtml}
+          ${recipeOptionalIngredientsHTML(recipe)}
+          ${activeVariation ? `<p class="recipe-variation-extra-ing">함께 넣을 재료: <strong>${esc(activeVariation.ingredient)}</strong></p>` : ''}
           ${hasPantry && analysis.missing?.length && AffiliateService.isEnabled() ? affiliateDisclosureHTML() : ''}
         </section>
+        ${recipeVariationsSectionHTML(recipe, names)}
         ${MatchService.renderSubstitutionGuideHTML(substitutionAdvices)}
         ${recipe.ingredientSubstitutes?.length ? `<section class="recipe-detail__section">
           <h3 class="recipe-detail__section-title">대체 가능 재료 (레시피 기록)</h3>
           <ul class="recipe-detail__substitutes">${recipe.ingredientSubstitutes.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
         </section>` : ''}
         <section class="recipe-detail__section">
-          <h3 class="recipe-detail__section-title">조리 순서</h3>
-          <ol class="step-list">${(recipe.steps || []).map((s) => `<li class="step-list__item">${esc(s)}</li>`).join('')}</ol>
+          <h3 class="recipe-detail__section-title">조리 순서${stepsTitleExtra}</h3>
+          <ol class="step-list">${displaySteps.map((step) => {
+            const text = typeof step === 'string' ? step : step.text;
+            const fromVariation = Boolean(step?.fromVariation);
+            return `<li class="step-list__item${fromVariation ? ' step-list__item--variation' : ''}">${esc(text)}</li>`;
+          }).join('')}</ol>
         </section>
         ${recipe.memo ? `<section class="recipe-detail__section"><h3 class="recipe-detail__section-title">메모</h3><p class="recipe-detail__memo">${linkifyText(recipe.memo)}</p></section>` : ''}
         <div class="recipe-detail__actions">
@@ -10243,7 +10517,10 @@ function updateRecipeDetailSaveIcon(saved) {
 }
 
 function updateRecipeDetailHeader(recipe) {
-  if (dom.recipeDetailTitle) dom.recipeDetailTitle.textContent = recipe.name || '레시피 상세';
+  const activeVariation = getActiveRecipeVariation(recipe);
+  if (dom.recipeDetailTitle) {
+    dom.recipeDetailTitle.textContent = activeVariation?.variantName || recipe.name || '레시피 상세';
+  }
   updateRecipeDetailSaveIcon(SavedRecipeRepository.isSaved(recipe.id));
 }
 
@@ -10282,6 +10559,24 @@ function bindRecipeDetailActions(recipe) {
   root.querySelector('[data-open-parent]')?.addEventListener('click', (e) => {
     const parent = RecipeRepository.getById(e.currentTarget.dataset.openParent);
     if (parent) openRecipeDetail(parent);
+  });
+  root.querySelector('[data-open-base-recipe]')?.addEventListener('click', (e) => {
+    const base = RecipeRepository.getById(e.currentTarget.dataset.openBaseRecipe);
+    if (base) openRecipeDetail(base);
+  });
+  root.querySelectorAll('[data-variation-ingredient]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const ingredient = String(btn.dataset.variationIngredient || '').trim();
+      if (!ingredient) return;
+      const current = String(state.detailActiveVariationIngredient || '').trim();
+      state.detailActiveVariationIngredient = MatchService.normalize(current) === MatchService.normalize(ingredient)
+        ? null
+        : ingredient;
+      const analysis = MatchService.analyze(RecommendationService.getPantryNames(), recipe.ingredients);
+      updateRecipeDetailHeader(recipe);
+      dom.recipeDetailContent.innerHTML = recipeDetailContentHTML(recipe, analysis);
+      bindRecipeDetailActions(recipe);
+    });
   });
   root.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -10325,6 +10620,7 @@ function leaveRecipeDetail() {
   }
   history.replaceState({ appView: 'main', scrollY: 0 }, '', '/');
   state.detailRecipeId = null;
+  state.detailActiveVariationIngredient = null;
   switchView('main');
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 }

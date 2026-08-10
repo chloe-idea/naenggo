@@ -58,7 +58,23 @@ window.BUILTIN_RECIPE_RAW = [
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "계란",
+        "variantName": "된장계란찌개",
+        "tip": "계란을 풀어 넣으면 더 든든하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "된장찌개가 끓으면 계란을 풀어 넣어요.",
+            "afterStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-179"
+        ]
+      }
+    ]
   },
   {
     "id": "soft-tofu-stew",
@@ -107,14 +123,46 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
-      "김치를 볶습니다.",
-      "밥을 넣고 볶습니다.",
-      "계란을 넣고 마무리합니다."
+      "김치는 먹기 좋은 크기로 자르고 대파는 송송 썰어요.",
+      "팬을 중불로 달군 뒤 김치와 대파를 먼저 볶아 신맛을 날려요.",
+      "밥을 넣고 김치와 고루 섞이도록 볶아요.",
+      "계란을 곁들이고 참기름을 둘러 마무리해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "스팸",
+        "variantName": "스팸김치볶음밥",
+        "tip": "스팸을 먼저 노릇하게 볶아 넣으면 짭짤하고 든든하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "스팸을 깍둑썰기해 먼저 노릇하게 볶아요.",
+            "beforeStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-68"
+        ]
+      },
+      {
+        "ingredient": "참치",
+        "variantName": "참치김치볶음밥",
+        "tip": "참치를 넣으면 감칠맛이 더해져 간단한 한 끼로 좋아요.",
+        "stepOps": [
+          {
+            "text": "기름을 가볍게 뺀 참치를 김치와 함께 볶아요.",
+            "afterStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-69",
+          "recipe-60"
+        ]
+      }
+    ]
   },
   {
     "id": "recipe-5",
@@ -136,6 +184,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 180,
     "instructions": [
       "감자를 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "양념과 함께 졸여 완성합니다."
     ],
     "tags": [
@@ -162,6 +211,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 150,
     "instructions": [
+      "대파을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "계란물을 만듭니다.",
       "약불에 쪄 완성합니다."
     ],
@@ -189,13 +239,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "밥, 계란, 간장을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "계란을 프라이합니다.",
       "밥과 간장을 곁들입니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "soy-sauce-egg-rice"
   },
   {
     "id": "recipe-8",
@@ -216,6 +269,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
+      "두부, 양파, 마늘을(를) 먹기 좋게 손질하고 조림 양념 재료를 준비해요.",
       "두부를 구워 줍니다.",
       "양념과 함께 졸입니다."
     ],
@@ -243,6 +297,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 180,
     "instructions": [
       "두부를 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "김치와 함께 먹기 좋게 담습니다."
     ],
     "tags": [
@@ -269,13 +324,31 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
-      "반죽을 만듭니다.",
-      "팬에 지져 완성합니다."
+      "김치는 잘게 썰고 대파는 송송 썰어요.",
+      "밀가루와 계란에 김치와 대파를 넣어 되직한 반죽을 만들어요.",
+      "팬에 식용유를 넉넉히 두르고 반죽을 얇게 펼쳐요.",
+      "앞뒤가 노릇해질 때까지 바삭하게 부쳐요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "치즈",
+        "variantName": "김치치즈전",
+        "tip": "치즈를 넣으면 김치의 매콤함이 부드러워지고 고소해져요.",
+        "stepOps": [
+          {
+            "text": "한 면을 뒤집은 뒤 치즈를 올리고 녹을 때까지 익혀요.",
+            "afterStep": 4
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-105"
+        ]
+      }
+    ]
   },
   {
     "id": "potato-pancake",
@@ -295,6 +368,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 260,
     "instructions": [
+      "감자을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
       "감자를 갈아 물기를 뺍니다.",
       "팬에 얇게 부쳐 완성합니다."
     ],
@@ -321,6 +395,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 80,
     "instructions": [
+      "대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "육수를 끓입니다.",
       "계란을 풀어 넣고 대파를 올립니다."
     ],
@@ -347,6 +422,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 120,
     "instructions": [
+      "마늘을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "미역을 불립니다.",
       "참기름에 볶아 끓여 완성합니다."
     ],
@@ -373,6 +449,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 60,
     "instructions": [
+      "콩나물, 대파, 마늘을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "육수를 끓입니다.",
       "콩나물을 넣고 끓여 완성합니다."
     ],
@@ -399,6 +476,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 50,
     "instructions": [
+      "마늘을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "시금치를 데칩니다.",
       "양념에 무쳐 완성합니다."
     ],
@@ -425,6 +503,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 45,
     "instructions": [
+      "콩나물, 대파, 마늘을(를) 먹기 좋게 손질한 뒤 물기를 가볍게 제거해요.",
       "콩나물을 데칩니다.",
       "양념에 무쳐 완성합니다."
     ],
@@ -451,6 +530,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 30,
     "instructions": [
       "깍두기를 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "참기름과 깨를 넣어 무칩니다."
     ],
     "tags": [
@@ -477,6 +557,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 35,
     "instructions": [
       "오이를 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "양념에 버무립니다."
     ],
     "tags": [
@@ -503,6 +584,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 40,
     "instructions": [
       "무를 채 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "양념에 무쳐 완성합니다."
     ],
     "tags": [
@@ -529,6 +611,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "국수를 삶습니다.",
       "육수에 양념을 넣고 면을 담습니다."
     ],
@@ -556,6 +639,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "고추장, 양파, 오이을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "국수를 삶습니다.",
       "양념과 채소를 넣고 비벼 완성합니다."
     ],
@@ -583,6 +667,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
+      "오이을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "면을 삶아 찬물에 헹굽니다.",
       "육수와 고명을 올립니다."
     ],
@@ -610,6 +695,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "감자, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "반죽을 만듭니다.",
       "끓는 육수에 떼어 넣어 완성합니다."
     ],
@@ -637,6 +723,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
+      "떡, 고추장, 양파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "양념에 끓입니다.",
       "떡과 라면을 넣어 완성합니다."
     ],
@@ -664,6 +751,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
+      "떡, 고추장, 양파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "양념장을 끓입니다.",
       "떡을 넣고 졸여 완성합니다."
     ],
@@ -690,6 +778,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
+      "김치, 대파, 마늘을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "김치를 볶습니다.",
       "대파를 넣고 마무리합니다."
     ],
@@ -716,6 +805,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 150,
     "instructions": [
+      "고추장, 마늘, 대파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "멸치를 볶습니다.",
       "양념을 넣고 졸입니다."
     ],
@@ -743,6 +833,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 220,
     "instructions": [
       "어묵을 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "양념에 볶아 완성합니다."
     ],
     "tags": [
@@ -769,6 +860,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 280,
     "instructions": [
       "채소와 햄을 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "간장에 볶아 완성합니다."
     ],
     "tags": [
@@ -795,6 +887,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 300,
     "instructions": [
       "재료를 썰어 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "볶아 완성합니다."
     ],
     "tags": [
@@ -821,6 +914,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 320,
     "instructions": [
       "스팸을 썰어 볶습니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "양파와 함께 볶아 완성합니다."
     ],
     "tags": [
@@ -846,6 +940,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 250,
     "instructions": [
+      "양파, 고추장, 대파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "양파를 볶습니다.",
       "참치와 양념을 넣어 완성합니다."
     ],
@@ -873,6 +968,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 조림 양념 재료를 준비해요.",
       "계란을 삶습니다.",
       "간장 양념에 졸여 완성합니다."
     ],
@@ -899,6 +995,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "감자, 대파, 마늘을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "감자를 넣고 끓입니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -926,6 +1023,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "소고기, 양파, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "고기를 볶습니다.",
       "밥 위에 올려 완성합니다."
     ],
@@ -953,6 +1051,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
+      "밥, 참치, 마요네즈을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "참치와 마요를 섞습니다.",
       "밥 위에 올립니다."
     ],
@@ -980,13 +1079,30 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
-      "계란을 프라이합니다.",
-      "밥과 간장을 곁들입니다."
+      "계란을 취향에 맞게 반숙 또는 완숙으로 프라이해요.",
+      "따뜻한 밥 위에 계란을 올리고 간장과 참기름을 둘러요.",
+      "김을 잘게 부숴 올린 뒤 가볍게 비벼 먹어요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "버터",
+        "variantName": "간장버터계란밥",
+        "tip": "따뜻한 밥에 버터를 녹이면 더 고소하고 진한 맛으로 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "따뜻한 밥에 버터를 넣어 먼저 녹여요.",
+            "beforeStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-53"
+        ]
+      }
+    ]
   },
   {
     "id": "recipe-38",
@@ -1008,6 +1124,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 520,
     "instructions": [
       "스팸을 구워 썰어 줍니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "마요와 섞어 밥 위에 올립니다."
     ],
     "tags": [
@@ -1034,6 +1151,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 430,
     "instructions": [
+      "김치, 고추장, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "김치와 참치를 볶습니다.",
       "밥 위에 올립니다."
     ],
@@ -1061,6 +1179,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "두부, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "두부를 구워 양념합니다.",
       "밥 위에 올립니다."
     ],
@@ -1088,6 +1207,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
+      "햄, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "햄과 양파를 볶습니다.",
       "밥 위에 올리고 계란을 올립니다."
     ],
@@ -1115,6 +1235,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 440,
     "instructions": [
+      "소시지, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "소시지를 볶습니다.",
       "밥 위에 올립니다."
     ],
@@ -1142,6 +1263,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 550,
     "instructions": [
+      "스팸을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "스팸을 구워 줍비합니다.",
       "치즈와 함께 밥 위에 올립니다."
     ],
@@ -1169,6 +1291,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "밥, 참치, 김을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "참치와 김을 섞습니다.",
       "밥 위에 올립니다."
     ],
@@ -1196,13 +1319,63 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 390,
     "instructions": [
-      "계란을 스크램블합니다.",
-      "밥 위에 올립니다."
+      "계란을 풀고 간장과 설탕을 섞어 간을 맞춰요.",
+      "팬에 계란물을 붓고 부드럽게 저어 스크램블해요.",
+      "따뜻한 밥 위에 계란을 올려요.",
+      "송송 썬 대파를 올려 마무리해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "양파",
+        "variantName": "양파계란덮밥",
+        "tip": "양파를 넣으면 달큰하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "양파를 얇게 썰어 먼저 볶아요.",
+            "beforeStep": 1
+          },
+          {
+            "text": "계란을 넣어 스크램블합니다.",
+            "replaceStep": 1
+          }
+        ],
+        "absorbRecipeIds": [
+          "onion-egg-rice-bowl"
+        ]
+      },
+      {
+        "ingredient": "치즈",
+        "variantName": "치즈계란덮밥",
+        "tip": "따뜻한 계란 위에 치즈를 올리면 부드럽고 고소하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "계란이 거의 익었을 때 치즈를 올려 살짝 녹여요.",
+            "afterStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-50"
+        ]
+      },
+      {
+        "ingredient": "스팸",
+        "variantName": "스팸계란덮밥",
+        "tip": "스팸을 노릇하게 구워 곁들이면 더 든든한 덮밥이 돼요.",
+        "stepOps": [
+          {
+            "text": "스팸을 먹기 좋은 크기로 잘라 노릇하게 구워요.",
+            "beforeStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-51"
+        ]
+      }
+    ]
   },
   {
     "id": "omurice",
@@ -1223,6 +1396,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "양파, 햄을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "볶음밥을 만듭니다.",
       "계란으로 감싸 완성합니다."
     ],
@@ -1250,6 +1424,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 460,
     "instructions": [
+      "닭가슴살, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "닭가슴살을 볶습니다.",
       "마요와 함께 밥 위에 올립니다."
     ],
@@ -1277,6 +1452,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 410,
     "instructions": [
+      "고추장, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "참치와 고추장을 섞습니다.",
       "밥 위에 올립니다."
     ],
@@ -1304,6 +1480,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "김치, 두부, 고추장을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "김치와 두부를 볶습니다.",
       "밥 위에 올립니다."
     ],
@@ -1331,13 +1508,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 430,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "계란을 스크램블합니다.",
       "치즈를 올려 밥과 함께 담습니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "recipe-45"
   },
   {
     "id": "recipe-51",
@@ -1358,13 +1538,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 500,
     "instructions": [
+      "스팸, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "스팸을 구워 줍니다.",
       "계란과 함께 밥 위에 올립니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "recipe-45"
   },
   {
     "id": "recipe-52",
@@ -1385,6 +1568,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "양파, 당근을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "야채와 참치를 볶습니다.",
       "밥 위에 올립니다."
     ],
@@ -1412,13 +1596,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
+      "밥, 계란, 버터을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "계란을 프라이합니다.",
       "버터와 간장을 곁들입니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "soy-sauce-egg-rice"
   },
   {
     "id": "egg-fried-rice",
@@ -1439,13 +1626,87 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
-      "계란을 스크램블합니다.",
-      "밥과 함께 볶아 완성합니다."
+      "양파와 대파를 잘게 썰고 계란은 미리 풀어둬요.",
+      "달군 팬에 계란을 넣어 가볍게 스크램블해요.",
+      "양파와 대파, 밥을 넣고 센 불에서 고루 볶아요.",
+      "간장으로 간을 맞추고 한 번 더 볶아 마무리해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "참치",
+        "variantName": "참치볶음밥",
+        "tip": "기름을 뺀 참치를 넣으면 담백하고 든든하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "기름을 가볍게 뺀 참치를 채소와 함께 볶아요.",
+            "beforeStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-55"
+        ]
+      },
+      {
+        "ingredient": "스팸",
+        "variantName": "스팸볶음밥",
+        "tip": "스팸을 노릇하게 볶아 넣으면 짭짤한 풍미가 더해져요.",
+        "stepOps": [
+          {
+            "text": "스팸을 잘게 썰어 노릇하게 먼저 볶아요.",
+            "beforeStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-56"
+        ]
+      },
+      {
+        "ingredient": "햄",
+        "variantName": "햄볶음밥",
+        "tip": "햄을 잘게 썰어 넣으면 간단하고 익숙한 볶음밥으로 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "햄을 잘게 썰어 양파와 함께 볶아요.",
+            "beforeStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-57"
+        ]
+      },
+      {
+        "ingredient": "소시지",
+        "variantName": "소시지볶음밥",
+        "tip": "소시지를 넣으면 씹는 맛이 좋아지고 아이들도 먹기 좋아요.",
+        "stepOps": [
+          {
+            "text": "소시지를 먹기 좋은 크기로 잘라 먼저 볶아요.",
+            "beforeStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-58"
+        ]
+      },
+      {
+        "ingredient": "치즈",
+        "variantName": "치즈볶음밥",
+        "tip": "마지막에 치즈를 넣어 녹이면 고소하고 부드러워져요.",
+        "stepOps": [
+          {
+            "text": "불을 약하게 줄이고 치즈를 넣어 녹여 마무리해요.",
+            "afterStep": 4
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-59"
+        ]
+      }
+    ]
   },
   {
     "id": "recipe-55",
@@ -1466,13 +1727,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
+      "양파, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "참치와 양파를 볶습니다.",
       "밥을 넣고 볶습니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "egg-fried-rice"
   },
   {
     "id": "recipe-56",
@@ -1493,13 +1757,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "스팸, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "스팸을 볶습니다.",
       "밥과 계란을 넣어 완성합니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "egg-fried-rice"
   },
   {
     "id": "recipe-57",
@@ -1520,13 +1787,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 440,
     "instructions": [
+      "햄, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "햄과 채소를 볶습니다.",
       "밥을 넣고 볶습니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "egg-fried-rice"
   },
   {
     "id": "recipe-58",
@@ -1547,13 +1817,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 460,
     "instructions": [
+      "소시지, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "소시지를 볶습니다.",
       "밥과 섞어 완성합니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "egg-fried-rice"
   },
   {
     "id": "recipe-59",
@@ -1574,13 +1847,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 470,
     "instructions": [
+      "햄을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "볶음밥을 만듭니다.",
       "치즈를 넣어 녹입니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "egg-fried-rice"
   },
   {
     "id": "recipe-60",
@@ -1601,13 +1877,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 440,
     "instructions": [
+      "김치, 고추장, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "김치와 참치를 볶습니다.",
       "밥을 넣고 볶습니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "kimchi-fried-rice"
   },
   {
     "id": "recipe-61",
@@ -1628,6 +1907,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 430,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "버터에 밥을 볶습니다.",
       "간장으로 간해 완성합니다."
     ],
@@ -1656,6 +1936,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 380,
     "instructions": [
       "나물을 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "밥과 함께 볶습니다."
     ],
     "tags": [
@@ -1682,6 +1963,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 390,
     "instructions": [
+      "두부, 양파, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "두부를 으깨 볶습니다.",
       "밥과 함께 볶아 완성합니다."
     ],
@@ -1709,6 +1991,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
+      "고추장, 양파, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "고추장에 재료를 볶습니다.",
       "밥을 넣고 볶습니다."
     ],
@@ -1736,6 +2019,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "밥, 김, 참기름을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "김을 넣고 볶습니다.",
       "참기름으로 마무리합니다."
     ],
@@ -1763,6 +2047,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 410,
     "instructions": [
+      "마늘, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "마늘을 볶습니다.",
       "밥과 계란을 넣어 완성합니다."
     ],
@@ -1790,6 +2075,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 360,
     "instructions": [
+      "양파, 당근을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "채소를 볶습니다.",
       "밥을 넣고 볶습니다."
     ],
@@ -1817,13 +2103,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 470,
     "instructions": [
+      "스팸, 김치을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "스팸과 김치를 볶습니다.",
       "밥을 넣고 볶습니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "kimchi-fried-rice"
   },
   {
     "id": "recipe-69",
@@ -1844,13 +2133,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 430,
     "instructions": [
+      "김치, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "김치와 참치를 볶습니다.",
       "밥을 넣어 완성합니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "kimchi-fried-rice"
   },
   {
     "id": "recipe-70",
@@ -1871,6 +2163,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "새우, 대파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "새우를 볶습니다.",
       "밥과 함께 볶아 완성합니다."
     ],
@@ -1897,14 +2190,73 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 500,
     "instructions": [
-      "물을 끓입니다.",
-      "면과 스프를 넣고 끓입니다.",
-      "계란과 대파를 올립니다."
+      "냄비에 물을 넣고 끓여요.",
+      "물이 끓으면 면과 스프를 넣고 풀어가며 끓여요.",
+      "면이 거의 익으면 계란을 넣어 원하는 정도로 익혀요.",
+      "대파를 올리고 한소끔 끓여 마무리해요."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "치즈",
+        "variantName": "치즈라면",
+        "tip": "완성 직전에 치즈를 올리면 국물이 더 부드럽고 고소해져요.",
+        "stepOps": [
+          {
+            "text": "불을 끄기 직전에 치즈를 올려 살짝 녹여요.",
+            "afterStep": 4
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-73"
+        ]
+      },
+      {
+        "ingredient": "김치",
+        "variantName": "김치라면",
+        "tip": "김치를 함께 끓이면 칼칼하고 시원한 맛을 더할 수 있어요.",
+        "stepOps": [
+          {
+            "text": "면과 스프를 넣을 때 잘게 썬 김치도 함께 넣어요.",
+            "afterStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-74"
+        ]
+      },
+      {
+        "ingredient": "참치",
+        "variantName": "참치라면",
+        "tip": "기름을 뺀 참치를 넣으면 감칠맛과 포만감이 더해져요.",
+        "stepOps": [
+          {
+            "text": "면이 거의 익었을 때 기름을 뺀 참치를 넣어요.",
+            "beforeStep": 4
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-75"
+        ]
+      },
+      {
+        "ingredient": "스팸",
+        "variantName": "스팸라면",
+        "tip": "얇게 썬 스팸을 넣으면 짭짤하고 든든하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "스팸을 얇게 썰어 면과 함께 넣고 끓여요.",
+            "afterStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-76"
+        ]
+      }
+    ]
   },
   {
     "id": "recipe-72",
@@ -1924,13 +2276,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 520,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "계란과 치즈를 넣어 완성합니다."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "ramen"
   },
   {
     "id": "recipe-73",
@@ -1950,13 +2305,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 550,
     "instructions": [
+      "라면, 치즈, 계란을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "치즈와 우유를 넣어 완성합니다."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "ramen"
   },
   {
     "id": "recipe-74",
@@ -1976,13 +2334,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "김치, 대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "김치를 볶습니다.",
       "라면을 넣고 끓입니다."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "ramen"
   },
   {
     "id": "recipe-75",
@@ -2002,13 +2363,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 490,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "참치와 계란을 넣습니다."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "ramen"
   },
   {
     "id": "recipe-76",
@@ -2028,13 +2392,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 530,
     "instructions": [
+      "스팸을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "스팸과 치즈를 넣습니다."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "ramen"
   },
   {
     "id": "recipe-77",
@@ -2054,6 +2421,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "오이, 고추장을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "면을 삶습니다.",
       "양념과 비벼 완성합니다."
     ],
@@ -2080,6 +2448,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
+      "양파, 대파을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "야채를 볶습니다.",
       "우동과 함께 볶아 완성합니다."
     ],
@@ -2106,6 +2475,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "면을 삶습니다.",
       "양념과 함께 비벼 완성합니다."
     ],
@@ -2132,6 +2502,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 390,
     "instructions": [
+      "고추장, 오이을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "면을 삶습니다.",
       "양념에 비벼 완성합니다."
     ],
@@ -2158,6 +2529,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
+      "양파, 고추장, 대파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "라면사리를 삶습니다.",
       "양념에 볶아 완성합니다."
     ],
@@ -2184,6 +2556,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "우유와 물로 끓입니다.",
       "치즈를 넣어 완성합니다."
     ],
@@ -2210,6 +2583,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 510,
     "instructions": [
+      "라면, 마요네즈, 계란을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "마요와 계란을 곁들입니다."
     ],
@@ -2236,6 +2610,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 460,
     "instructions": [
+      "두부, 대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "된장을 풀어 끓입니다.",
       "라면과 두부를 넣습니다."
     ],
@@ -2262,6 +2637,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "오이, 토마토을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "면을 삶습니다.",
       "채소와 섞어 완성합니다."
     ],
@@ -2288,6 +2664,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 370,
     "instructions": [
+      "대파을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "면을 삶습니다.",
       "양념에 비벼 완성합니다."
     ],
@@ -2314,6 +2691,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 520,
     "instructions": [
+      "떡, 고추장, 대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "떡과 라면을 함께 끓입니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -2340,6 +2718,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 490,
     "instructions": [
+      "양파, 감자을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "카레를 끓입니다.",
       "라면을 넣어 완성합니다."
     ],
@@ -2366,6 +2745,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "라면, 버터, 간장을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "버터와 간장을 넣어 완성합니다."
     ],
@@ -2392,6 +2772,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 470,
     "instructions": [
+      "순두부, 대파을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 끓입니다.",
       "순두부와 계란을 넣습니다."
     ],
@@ -2417,6 +2798,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
+      "식빵, 버터, 잼을(를) 먹기 좋게 준비하고 빵과 속재료를 꺼내두어요.",
       "식빵을 굽습니다.",
       "버터와 잼을 발라 완성합니다."
     ],
@@ -2429,7 +2811,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-92",
     "slug": "recipe-92",
     "title": "프렌치토스트",
-    "image": null,
+    "image": "images/recipes/recipe-92.webp",
     "cuisine": "양식",
     "category": "western",
     "dishType": "toast",
@@ -2443,6 +2825,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
+      "식빵, 계란, 우유을(를) 먹기 좋게 준비하고 빵과 속재료를 꺼내두어요.",
       "계란물에 식빵을 담급니다.",
       "팬에 구워 완성합니다."
     ],
@@ -2469,6 +2852,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 300,
     "instructions": [
+      "식빵, 계란, 치즈을(를) 먹기 좋게 준비하고 빵과 속재료를 꺼내두어요.",
       "식빵에 계란과 치즈를 올립니다.",
       "오ven 또는 팬에 구워 완성합니다."
     ],
@@ -2495,8 +2879,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
-      "재료를 올려 굽습니다.",
-      "치즈가 녹으면 완성합니다."
+      "식빵에 버터를 얇게 바르고 햄과 치즈를 올려요.",
+      "팬이나 오븐에서 치즈가 녹고 빵이 노릇해질 때까지 구워요.",
+      "먹기 좋은 크기로 잘라 따뜻할 때 즐겨요."
     ],
     "tags": [
       "양식"
@@ -2521,6 +2906,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 300,
     "instructions": [
       "감자를 썰어 튀깁니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "소금을 뿌려 완성합니다."
     ],
     "tags": [
@@ -2546,6 +2932,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 150,
     "instructions": [
+      "계란, 우유, 버터을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "계란을 풀어 스크램블합니다.",
       "완성합니다."
     ],
@@ -2558,7 +2945,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-97",
     "slug": "recipe-97",
     "title": "에그마요샌드위치",
-    "image": null,
+    "image": "images/recipes/recipe-97.webp",
     "cuisine": "양식",
     "category": "western",
     "dishType": "sandwich",
@@ -2572,6 +2959,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "식빵, 계란, 마요네즈을(를) 먹기 좋게 준비하고 빵과 속재료를 꺼내두어요.",
       "계란삶과 마요를 섞습니다.",
       "식빵 사이에 넣습니다."
     ],
@@ -2598,6 +2986,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "식빵, 참치, 마요네즈을(를) 먹기 좋게 준비하고 빵과 속재료를 꺼내두어요.",
       "참치 마요를 만듭니다.",
       "식빵 사이에 넣습니다."
     ],
@@ -2624,7 +3013,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
-      "재료를 올려 완성합니다."
+      "빵과 레시피에 적힌 속재료를 먹기 좋게 준비해요.",
+      "빵 위에 준비한 재료를 고르게 올리거나 사이에 넣어요.",
+      "필요하면 팬이나 오븐에서 빵이 노릇해질 때까지 익혀 완성해요."
     ],
     "tags": [
       "양식"
@@ -2635,7 +3026,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-100",
     "slug": "recipe-100",
     "title": "떡구이",
-    "image": null,
+    "image": "images/recipes/recipe-100.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "snack",
@@ -2648,6 +3039,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 250,
     "instructions": [
+      "떡, 고추장을(를) 먹기 좋게 손질하고 표면의 물기를 가볍게 제거해요.",
       "떡을 굽습니다.",
       "양념을 발라 완성합니다."
     ],
@@ -2674,6 +3066,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
+      "떡, 고추장, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "떡볶이를 끓입니다.",
       "치즈를 올려 완성합니다."
     ],
@@ -2700,6 +3093,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
+      "라면, 간장, 설탕을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "라면을 부숴 볶습니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -2712,7 +3106,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-103",
     "slug": "recipe-103",
     "title": "식빵피자",
-    "image": null,
+    "image": "images/recipes/recipe-103.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "default",
@@ -2726,6 +3120,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "토마토소스, 햄을(를) 먹기 좋게 준비하고 빵과 속재료를 꺼내두어요.",
       "식빵에 토핑을 올립니다.",
       "오ven 또는 팬에 구워 완성합니다."
     ],
@@ -2752,6 +3147,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
+      "감자을(를) 먹기 좋게 손질하고 표면의 물기를 가볍게 제거해요.",
       "감자를 슬라이스합니다.",
       "치즈와 함께 구워 완성합니다."
     ],
@@ -2778,13 +3174,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 300,
     "instructions": [
+      "김치을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
       "반죽을 만들어 지집니다.",
       "치즈를 넣어 완성합니다."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "kimchi-pancake"
   },
   {
     "id": "recipe-106",
@@ -2803,6 +3202,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 250,
     "instructions": [
+      "식빵, 버터, 설탕을(를) 먹기 좋게 손질하고 표면의 물기를 가볍게 제거해요.",
       "식빵에 버터를 바릅니다.",
       "굽거나 팬에 구워 완성합니다."
     ],
@@ -2827,6 +3227,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
+      "시리얼, 우유을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "그릇에 시리얼을 담습니다.",
       "우유를 부어 완성합니다."
     ],
@@ -2852,7 +3253,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
-      "모든 재료를 갈아 완성합니다."
+      "바나나을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "모든 재료를 갈아 완성합니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -2877,6 +3280,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "소시지, 양파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "소시지를 구워 빵에 넣습니다.",
       "양념을 곁들입니다."
     ],
@@ -2903,6 +3307,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
+      "닭가슴살, 양파, 마늘을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "닭가슴살을 볶습니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -2929,6 +3334,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
+      "계란, 우유, 소금을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "계란을 스크램블합니다.",
       "완성합니다."
     ],
@@ -2941,7 +3347,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-112",
     "slug": "recipe-112",
     "title": "오트밀죽",
-    "image": null,
+    "image": "images/recipes/recipe-112.webp",
     "cuisine": "한식",
     "category": "diet",
     "dishType": "drink",
@@ -2955,6 +3361,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
+      "오트밀, 우유, 꿀을(를) 먹기 좋게 준비하고 냄비에 넣을 재료를 계량해요.",
       "오트밀을 끓입니다.",
       "토핑을 올려 완성합니다."
     ],
@@ -2981,6 +3388,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
+      "두부, 토마토을(를) 먹기 좋게 손질한 뒤 물기를 가볍게 제거해요.",
       "두부를 구워 줍니다.",
       "채소와 함께 담습니다."
     ],
@@ -3007,6 +3415,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 120,
     "instructions": [
+      "계란, 우유, 소금을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "계란을 풀어 지집니다.",
       "완성합니다."
     ],
@@ -3033,6 +3442,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
+      "토마토을(를) 먹기 좋게 손질한 뒤 물기를 가볍게 제거해요.",
       "참치와 채소를 섞습니다.",
       "드레싱을 넣어 완성합니다."
     ],
@@ -3060,6 +3470,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 250,
     "instructions": [
       "닭가슴살을 구워 썰어 줍니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "샐러드와 함께 담습니다."
     ],
     "tags": [
@@ -3086,6 +3497,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 200,
     "instructions": [
       "두부를 두껍게 썰어 구웁니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "양념을 곁들입니다."
     ],
     "tags": [
@@ -3111,6 +3523,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 160,
     "instructions": [
+      "오이을(를) 먹기 좋게 손질한 뒤 물기를 가볍게 제거해요.",
       "계란찜을 만듭니다.",
       "채소와 함께 담습니다."
     ],
@@ -3137,6 +3550,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
+      "닭가슴살, 대파을(를) 먹기 좋게 준비하고 냄비에 넣을 재료를 계량해요.",
       "쌀을 끓입니다.",
       "닭가슴살을 넣어 완성합니다."
     ],
@@ -3163,6 +3577,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 250,
     "instructions": [
+      "두부, 김치, 대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "김치를 볶아 끓입니다.",
       "두부를 넣어 완성합니다."
     ],
@@ -3189,6 +3604,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 90,
     "instructions": [
+      "대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "육수를 끓입니다.",
       "계란을 넣어 완성합니다."
     ],
@@ -3215,6 +3631,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 240,
     "instructions": [
+      "새우, 두부, 마늘을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "새우와 두부를 볶습니다.",
       "간장으로 마무리합니다."
     ],
@@ -3241,6 +3658,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 260,
     "instructions": [
+      "닭가슴살, 양파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "닭가슴살을 볶습니다.",
       "계란을 넣어 완성합니다."
     ],
@@ -3253,7 +3671,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-124",
     "slug": "recipe-124",
     "title": "마파두부",
-    "image": null,
+    "image": "images/recipes/recipe-124.webp",
     "cuisine": "중식",
     "category": "chinese",
     "dishType": "default",
@@ -3268,6 +3686,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "두부, 돼지고기, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "두부를 넣고 끓입니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -3294,6 +3713,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 500,
     "instructions": [
+      "양파, 감자을(를) 먹기 좋게 손질하고 면과 스프를 준비해요.",
       "채소를 볶습니다.",
       "짜장과 라면을 넣습니다."
     ],
@@ -3320,6 +3740,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "면을 삶습니다.",
       "계란탕 국물에 담습니다."
     ],
@@ -3346,6 +3767,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "양파, 고추을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "채소를 볶습니다.",
       "라면과 함께 끓입니다."
     ],
@@ -3372,6 +3794,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
+      "양파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "양파를 볶습니다.",
       "계란을 넣어 완성합니다."
     ],
@@ -3398,6 +3821,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
+      "두부, 양파, 고추을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "양념에 끓입니다.",
       "두부를 넣어 완성합니다."
     ],
@@ -3410,7 +3834,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-130",
     "slug": "recipe-130",
     "title": "깐풍두부",
-    "image": null,
+    "image": "images/recipes/recipe-130.webp",
     "cuisine": "중식",
     "category": "chinese",
     "dishType": "default",
@@ -3424,6 +3848,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
+      "두부, 마늘을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "두부를 튀기듯 구웁니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -3450,13 +3875,30 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
-      "재료를 볶습니다.",
-      "완성합니다."
+      "계란을 풀고 토마토와 양파는 먹기 좋은 크기로 썰어요.",
+      "팬에 양파와 토마토를 먼저 볶아 수분을 살짝 날려요.",
+      "계란물을 넣고 크게 저어가며 부드럽게 익힌 뒤 설탕으로 간을 맞춰요."
     ],
     "tags": [
       "중식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "고추",
+        "variantName": "고추계란볶음",
+        "tip": "고추를 함께 볶으면 매콤하게 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "고추를 어슷하게 썰어 먼저 볶아요.",
+            "beforeStep": 1
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-133"
+        ]
+      }
+    ]
   },
   {
     "id": "onion-stir-fry",
@@ -3476,7 +3918,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 120,
     "instructions": [
-      "양파를 볶아 완성합니다."
+      "양파, 대파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "중식"
@@ -3501,13 +3945,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 190,
     "instructions": [
+      "고추, 마늘을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "고추를 볶습니다.",
       "계란을 넣어 완성합니다."
     ],
     "tags": [
       "중식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "recipe-131"
   },
   {
     "id": "recipe-134",
@@ -3527,7 +3974,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "두부를 볶아 완성합니다."
+      "두부, 대파, 마늘을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "중식"
@@ -3538,7 +3987,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-135",
     "slug": "recipe-135",
     "title": "라조기",
-    "image": null,
+    "image": "images/recipes/recipe-135.webp",
     "cuisine": "중식",
     "category": "chinese",
     "dishType": "stew",
@@ -3552,6 +4001,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "닭다리, 고추, 마늘을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "닭을 튀기듯 볶습니다.",
       "양념을 넣어 완성합니다."
     ],
@@ -3579,6 +4029,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "밥, 참치, 김을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "밥과 참치를 섞습니다.",
       "주먹밥으로 만듭니다."
     ],
@@ -3591,7 +4042,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "rolled-omelette",
     "slug": "rolled-omelette",
     "title": "계란말이",
-    "image": null,
+    "image": "images/recipes/rolled-omelette.webp",
     "cuisine": "일식",
     "category": "japanese",
     "dishType": "default",
@@ -3606,12 +4057,59 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "계란물을 만들어 말아 굽습니다."
+      "계란을 풀고 잘게 썬 대파, 간장, 설탕을 넣어 섞어요.",
+      "팬에 식용유를 얇게 두르고 계란물 일부를 부어요.",
+      "가장자리부터 말아준 뒤 남은 계란물을 이어 붓고 반복해서 말아요.",
+      "모양을 잡아 한김 식힌 뒤 먹기 좋은 크기로 썰어요."
     ],
     "tags": [
       "일식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "김치",
+        "variantName": "김치계란말이",
+        "tip": "잘게 썬 김치를 넣으면 새콤하고 매콤한 맛을 더할 수 있어요.",
+        "stepOps": [
+          {
+            "text": "잘게 썬 김치의 물기를 가볍게 짠 뒤 계란물에 섞어요.",
+            "beforeStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-165"
+        ]
+      },
+      {
+        "ingredient": "참치",
+        "variantName": "참치계란말이",
+        "tip": "기름을 뺀 참치를 넣으면 한 끼 반찬으로 더 든든해져요.",
+        "stepOps": [
+          {
+            "text": "기름을 뺀 참치를 계란물에 고루 섞어요.",
+            "beforeStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-166"
+        ]
+      },
+      {
+        "ingredient": "스팸",
+        "variantName": "스팸계란말이",
+        "tip": "잘게 썬 스팸을 넣으면 별도 간을 많이 하지 않아도 맛있어요.",
+        "stepOps": [
+          {
+            "text": "스팸을 잘게 썰어 계란물에 넣어요.",
+            "beforeStep": 2
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-167"
+        ]
+      }
+    ]
   },
   {
     "id": "recipe-138",
@@ -3632,6 +4130,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 450,
     "instructions": [
+      "닭고기, 양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "닭과 양파를 볶습니다.",
       "계란을 올려 밥에 담습니다."
     ],
@@ -3644,7 +4143,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-139",
     "slug": "recipe-139",
     "title": "규동",
-    "image": null,
+    "image": "images/recipes/recipe-139.webp",
     "cuisine": "일식",
     "category": "japanese",
     "dishType": "rice-bowl",
@@ -3659,6 +4158,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 480,
     "instructions": [
+      "소고기, 양파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "고기와 양파를 볶습니다.",
       "밥 위에 올립니다."
     ],
@@ -3686,6 +4186,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 350,
     "instructions": [
       "낫또를 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "밥 위에 올립니다."
     ],
     "tags": [
@@ -3711,7 +4212,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
-      "육수에 우동을 넣고 끓입니다."
+      "면은 제품 안내에 맞춰 삶은 뒤 물기를 빼 준비해요.",
+      "대파을(를) 먹기 좋게 준비하고 레시피에 적힌 재료를 익혀 국물이나 소스를 만들어요.",
+      "삶은 면을 넣어 맛이 어우러지도록 한 번 더 조리해 완성해요."
     ],
     "tags": [
       "일식"
@@ -3736,6 +4239,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 500,
     "instructions": [
+      "돼지고기, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "육수에 라면을 끓입니다.",
       "고명을 올립니다."
     ],
@@ -3748,7 +4252,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-143",
     "slug": "recipe-143",
     "title": "돈까스덮밥",
-    "image": null,
+    "image": "images/recipes/recipe-143.webp",
     "cuisine": "일식",
     "category": "japanese",
     "dishType": "rice-bowl",
@@ -3764,6 +4268,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 550,
     "instructions": [
       "돈까스를 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "덮밥으로 완성합니다."
     ],
     "tags": [
@@ -3790,6 +4295,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 490,
     "instructions": [
+      "양파을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "케첩 볶음밥을 만듭니다.",
       "계란으로 감쌉니다."
     ],
@@ -3802,7 +4308,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-145",
     "slug": "recipe-145",
     "title": "연어덮밥",
-    "image": null,
+    "image": "images/recipes/recipe-145.webp",
     "cuisine": "일식",
     "category": "japanese",
     "dishType": "rice-bowl",
@@ -3817,6 +4323,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 420,
     "instructions": [
       "연어를 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "밥 위에 올립니다."
     ],
     "tags": [
@@ -3843,6 +4350,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
+      "밥, 참치, 간장을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
       "참치를 양념합니다.",
       "밥 위에 올립니다."
     ],
@@ -3869,6 +4377,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 80,
     "instructions": [
+      "두부, 대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
       "된장을 풀어 끓입니다.",
       "두부를 넣어 완성합니다."
     ],
@@ -3881,7 +4390,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-148",
     "slug": "recipe-148",
     "title": "야키토리",
-    "image": null,
+    "image": "images/recipes/recipe-148.webp",
     "cuisine": "일식",
     "category": "japanese",
     "dishType": "default",
@@ -3895,7 +4404,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 350,
     "instructions": [
-      "닭을 구워 양념을 바릅니다."
+      "닭다리, 대파을(를) 먹기 좋은 크기로 손질하고 물기를 가볍게 제거해요.",
+      "레시피에 적힌 양념을 고루 묻힌 뒤 달군 팬이나 그릴에서 익혀요.",
+      "앞뒤가 노릇하고 속까지 알맞게 익으면 불에서 내려 완성해요."
     ],
     "tags": [
       "일식"
@@ -3920,6 +4431,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 450,
     "instructions": [
+      "새우을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "새우튀김을 만듭니다.",
       "우동과 함께 담습니다."
     ],
@@ -3947,6 +4459,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 520,
     "instructions": [
+      "마늘, 고추을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "면을 삶습니다.",
       "마늘을 볶고 면과 섞습니다."
     ],
@@ -3973,6 +4486,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
+      "토마토, 마늘을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "토마토 소스를 만듭니다.",
       "면과 섞어 완성합니다."
     ],
@@ -3999,6 +4513,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 550,
     "instructions": [
+      "마늘을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "크림 소스를 만듭니다.",
       "면과 섞어 완성합니다."
     ],
@@ -4025,6 +4540,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "마늘을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "조개를 볶습니다.",
       "면과 섞어 완성합니다."
     ],
@@ -4037,7 +4553,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "--154",
     "slug": "--154",
     "title": "토마토 계란볶음",
-    "image": null,
+    "image": "images/recipes/--154.webp",
     "cuisine": "양식",
     "category": "western",
     "dishType": "stir-fry",
@@ -4051,6 +4567,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
+      "토마토, 양파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "토마토와 양파를 볶습니다.",
       "계란을 넣어 완성합니다."
     ],
@@ -4077,6 +4594,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 310,
     "instructions": [
+      "닭가슴살, 토마토을(를) 먹기 좋게 손질한 뒤 물기를 가볍게 제거해요.",
       "닭가슴살을 구웁니다.",
       "샐러드와 함께 담습니다."
     ],
@@ -4103,6 +4621,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 200,
     "instructions": [
+      "감자, 양파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "감자를 삶습니다.",
       "갈아 끓여 완성합니다."
     ],
@@ -4129,6 +4648,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
+      "햄을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
       "수란을 만듭니다.",
       "식빵 위에 올립니다."
     ],
@@ -4155,6 +4675,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
+      "마카로니, 치즈, 우유을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "면을 삶습니다.",
       "치즈 소스와 섞습니다."
     ],
@@ -4181,6 +4702,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 420,
     "instructions": [
+      "토마토, 새우, 마늘을(를) 먹기 좋게 손질하고 면과 양념 재료를 준비해요.",
       "해물과 토마토를 볶습니다.",
       "면과 섞습니다."
     ],
@@ -4207,6 +4729,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
+      "감자을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "감자를 삶습니다.",
       "버터와 섞어 완성합니다."
     ],
@@ -4233,12 +4756,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
-      "토핑을 올려 구워 완성합니다."
+      "빵과 레시피에 적힌 속재료를 먹기 좋게 준비해요.",
+      "빵 위에 준비한 재료를 고르게 올리거나 사이에 넣어요.",
+      "필요하면 팬이나 오븐에서 빵이 노릇해질 때까지 익혀 완성해요."
     ],
     "tags": [
       "양식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "recipe-94"
   },
   {
     "id": "recipe-162",
@@ -4258,7 +4785,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 150,
     "instructions": [
-      "재료를 끓여 갈아 완성합니다."
+      "토마토, 양파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "재료를 끓여 갈아 완성합니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "양식"
@@ -4269,7 +4798,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-163",
     "slug": "recipe-163",
     "title": "그릴드치즈",
-    "image": null,
+    "image": "images/recipes/recipe-163.webp",
     "cuisine": "양식",
     "category": "western",
     "dishType": "toast",
@@ -4282,7 +4811,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
-      "치즈를 넣고 팬에 구워 완성합니다."
+      "빵과 레시피에 적힌 속재료를 먹기 좋게 준비해요.",
+      "빵 위에 준비한 재료를 고르게 올리거나 사이에 넣어요.",
+      "필요하면 팬이나 오븐에서 빵이 노릇해질 때까지 익혀 완성해요."
     ],
     "tags": [
       "양식"
@@ -4307,7 +4838,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
-      "베이컨과 계란을 구워 완성합니다."
+      "베이컨을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "베이컨과 계란을 구워 완성합니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "양식"
@@ -4332,12 +4865,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
-      "김치를 넣어 계란말이를 만듭니다."
+      "김치, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "김치를 넣어 계란말이를 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "rolled-omelette"
   },
   {
     "id": "recipe-166",
@@ -4357,12 +4894,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 240,
     "instructions": [
-      "참치를 넣어 계란말이를 만듭니다."
+      "대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "참치를 넣어 계란말이를 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "rolled-omelette"
   },
   {
     "id": "recipe-167",
@@ -4382,12 +4923,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
-      "스팸을 넣어 계란말이를 만듭니다."
+      "스팸, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "스팸을 넣어 계란말이를 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "rolled-omelette"
   },
   {
     "id": "recipe-168",
@@ -4407,7 +4952,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "김치를 볶고 계란을 넣습니다."
+      "김치, 대파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4432,7 +4979,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
-      "두부와 계란을 함께 찝니다."
+      "두부, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "두부와 계란을 함께 찝니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -4457,7 +5006,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
-      "감자를 볶고 계란을 넣습니다."
+      "감자, 양파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4482,12 +5033,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 390,
     "instructions": [
-      "양파와 계란을 볶아 밥에 올립니다."
+      "양파을(를) 먹기 좋게 손질하고 따뜻한 밥을 준비해요.",
+      "팬에서 주재료를 익힌 뒤 레시피에 적힌 양념을 넣어 맛이 배도록 조리해요.",
+      "밥 위에 조리한 재료를 올리고 나머지 고명을 곁들여 완성해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "recipe-45"
   },
   {
     "id": "recipe-172",
@@ -4507,7 +5062,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 80,
     "instructions": [
-      "마늘종을 볶아 완성합니다."
+      "마늘종을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4532,7 +5089,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 70,
     "instructions": [
-      "콩나물을 볶아 완성합니다."
+      "대파, 마늘을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4557,7 +5116,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 100,
     "instructions": [
-      "시래기를 넣고 끓입니다."
+      "대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4582,7 +5143,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 120,
     "instructions": [
-      "북어를 넣고 끓입니다."
+      "대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4607,7 +5170,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 150,
     "instructions": [
-      "어묵을 넣고 끓입니다."
+      "어묵, 대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4632,7 +5197,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
-      "육수에 떡을 넣고 끓입니다."
+      "떡, 대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4657,7 +5224,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 120,
     "instructions": [
-      "김치를 넣고 끓입니다."
+      "김치, 대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4682,12 +5251,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "된장국에 계란을 풀어 넣습니다."
+      "두부, 대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "soybean-paste-stew"
   },
   {
     "id": "recipe-180",
@@ -4707,7 +5280,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 250,
     "instructions": [
-      "고추장에 재료를 넣고 끓입니다."
+      "고추장, 두부, 감자을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4732,7 +5307,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 300,
     "instructions": [
-      "김치와 참치를 넣고 끓입니다."
+      "김치, 두부, 대파을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4757,7 +5334,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
-      "스팸과 김치를 볶습니다."
+      "스팸, 김치, 고추장을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4782,7 +5361,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
-      "감자와 햄을 볶습니다."
+      "햄, 감자, 양파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4807,7 +5388,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 300,
     "instructions": [
-      "감자와 소시지를 볶습니다."
+      "소시지, 감자, 양파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 준비해요.",
+      "달군 팬에 익는 데 오래 걸리는 재료부터 넣어 볶고 주재료를 넣어요.",
+      "레시피에 적힌 양념을 넣고 센 불에서 고루 볶아 맛이 배면 완성해요."
     ],
     "tags": [
       "한식"
@@ -4832,7 +5415,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
-      "감자를 구워 치즈를 올립니다."
+      "감자을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "감자를 구워 치즈를 올립니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -4857,7 +5442,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
-      "감자와 라면을 함께 끓입니다."
+      "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
+      "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
+      "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
     ],
     "tags": [
       "한식"
@@ -4882,7 +5469,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 480,
     "instructions": [
-      "양파를 넣고 라면을 끓입니다."
+      "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
+      "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
+      "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
     ],
     "tags": [
       "한식"
@@ -4907,7 +5496,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 490,
     "instructions": [
-      "마늘을 넣고 라면을 끓입니다."
+      "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
+      "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
+      "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
     ],
     "tags": [
       "한식"
@@ -4932,7 +5523,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 510,
     "instructions": [
-      "김치와 치즈를 넣고 끓입니다."
+      "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
+      "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
+      "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
     ],
     "tags": [
       "한식"
@@ -4957,7 +5550,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 530,
     "instructions": [
-      "버터와 치즈를 넣고 끓입니다."
+      "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
+      "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
+      "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
     ],
     "tags": [
       "한식"
@@ -4982,7 +5577,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 500,
     "instructions": [
-      "라면에 참치마요를 곁들입니다."
+      "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
+      "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
+      "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
     ],
     "tags": [
       "한식"
@@ -5007,7 +5604,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
-      "국수에 계란을 곁들입니다."
+      "면은 제품 안내에 맞춰 삶은 뒤 물기를 빼 준비해요.",
+      "대파을(를) 먹기 좋게 준비하고 레시피에 적힌 재료를 익혀 국물이나 소스를 만들어요.",
+      "삶은 면을 넣어 맛이 어우러지도록 한 번 더 조리해 완성해요."
     ],
     "tags": [
       "한식"
@@ -5032,7 +5631,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 360,
     "instructions": [
-      "들기름과 간장에 비벼 완성합니다."
+      "면은 제품 안내에 맞춰 삶은 뒤 물기를 빼 준비해요.",
+      "국수을(를) 먹기 좋게 준비하고, 레시피에 적힌 양념 재료를 고루 섞어요.",
+      "삶은 면에 준비한 재료와 양념을 넣고 골고루 비벼 완성해요."
     ],
     "tags": [
       "한식"
@@ -5057,7 +5658,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 370,
     "instructions": [
-      "김치 양념에 비벼 완성합니다."
+      "면은 제품 안내에 맞춰 삶은 뒤 물기를 빼 준비해요.",
+      "김치, 고추장, 대파을(를) 먹기 좋게 준비하고 레시피에 적힌 재료를 익혀 국물이나 소스를 만들어요.",
+      "삶은 면을 넣어 맛이 어우러지도록 한 번 더 조리해 완성해요."
     ],
     "tags": [
       "한식"
@@ -5082,7 +5685,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
-      "섞어 주먹밥으로 만듭니다."
+      "밥을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "섞어 주먹밥으로 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5107,7 +5712,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 420,
     "instructions": [
-      "스팸을 넣어 주먹밥을 만듭니다."
+      "스팸을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "스팸을 넣어 주먹밥을 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5132,7 +5739,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
-      "김치를 넣어 주먹밥을 만듭니다."
+      "김치을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "김치를 넣어 주먹밥을 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5157,7 +5766,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
-      "치즈를 넣어 주먹밥을 만듭니다."
+      "밥을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "치즈를 넣어 주먹밥을 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5183,7 +5794,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
-      "계란을 지단으로 부쳐 김밥을 말습니다."
+      "밥을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "계란을 지단으로 부쳐 김밥을 말습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5209,7 +5822,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 380,
     "instructions": [
-      "참치마요를 넣어 김밥을 말습니다."
+      "밥을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "참치마요를 넣어 김밥을 말습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5235,7 +5850,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 400,
     "instructions": [
-      "스팸을 넣어 김밥을 말습니다."
+      "스팸을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "스팸을 넣어 김밥을 말습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5261,7 +5878,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 360,
     "instructions": [
-      "김치를 넣어 김밥을 말습니다."
+      "김치을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "김치를 넣어 김밥을 말습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5287,7 +5906,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
-      "나물을 넣어 김밥을 말습니다."
+      "당근을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "나물을 넣어 김밥을 말습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5313,7 +5934,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
-      "도시락을 싸듯 담아 완성합니다."
+      "햄을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "도시락을 싸듯 담아 완성합니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5338,7 +5961,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "쌈채에 참치를 싸 먹습니다."
+      "고추장을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "쌈채에 참치를 싸 먹습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5363,7 +5988,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 450,
     "instructions": [
-      "고기를 구워 쌈에 싸 먹습니다."
+      "마늘을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "고기를 구워 쌈에 싸 먹습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5388,7 +6015,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 180,
     "instructions": [
-      "두부를 구워 쌈에 싸 먹습니다."
+      "두부, 마늘을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "두부를 구워 쌈에 싸 먹습니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5399,7 +6028,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "recipe-208",
     "slug": "recipe-208",
     "title": "김치전병",
-    "image": null,
+    "image": "images/recipes/recipe-208.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "pancake",
@@ -5413,7 +6042,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 300,
     "instructions": [
-      "김치전을 더 얇게 부쳐 완성합니다."
+      "김치, 대파을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
+      "레시피에 적힌 재료를 반죽과 고루 섞은 뒤 달군 팬에 넓게 펼쳐요.",
+      "중불에서 앞뒤가 노릇하고 속까지 익도록 부쳐 완성해요."
     ],
     "tags": [
       "한식"
@@ -5438,7 +6069,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 220,
     "instructions": [
-      "호박을 넣어 전을 부칩니다."
+      "애호박을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
+      "레시피에 적힌 재료를 반죽과 고루 섞은 뒤 달군 팬에 넓게 펼쳐요.",
+      "중불에서 앞뒤가 노릇하고 속까지 익도록 부쳐 완성해요."
     ],
     "tags": [
       "한식"
@@ -5463,7 +6096,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "부추전을 부칩니다."
+      "부추을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
+      "레시피에 적힌 재료를 반죽과 고루 섞은 뒤 달군 팬에 넓게 펼쳐요.",
+      "중불에서 앞뒤가 노릇하고 속까지 익도록 부쳐 완성해요."
     ],
     "tags": [
       "한식"
@@ -5488,18 +6123,37 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
-      "대파를 넣어 전을 부칩니다."
+      "대파는 팬 크기에 맞게 길게 자르거나 먹기 좋은 크기로 썰어요.",
+      "밀가루와 계란을 섞어 묽은 반죽을 만들어요.",
+      "달군 팬에 식용유를 두르고 대파와 반죽을 고르게 펼쳐요.",
+      "앞뒤가 노릇하고 바삭해질 때까지 부쳐요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "variations": [
+      {
+        "ingredient": "해물",
+        "variantName": "해물파전",
+        "tip": "새우나 오징어 같은 해물을 더하면 더 푸짐한 해물파전으로 즐길 수 있어요.",
+        "stepOps": [
+          {
+            "text": "손질한 해물의 물기를 제거하고 대파 위에 고르게 올려요.",
+            "beforeStep": 3
+          }
+        ],
+        "absorbRecipeIds": [
+          "recipe-212"
+        ]
+      }
+    ]
   },
   {
     "id": "recipe-212",
     "slug": "recipe-212",
     "title": "해물파전",
-    "image": null,
+    "image": "images/recipes/recipe-212.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "pancake",
@@ -5513,12 +6167,16 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
-      "해물과 파를 넣어 전을 부칩니다."
+      "대파, 오징어을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
+      "레시피에 적힌 재료를 반죽과 고루 섞은 뒤 달군 팬에 넓게 펼쳐요.",
+      "중불에서 앞뒤가 노릇하고 속까지 익도록 부쳐 완성해요."
     ],
     "tags": [
       "한식"
     ],
-    "substitutions": []
+    "substitutions": [],
+    "hiddenAsVariation": true,
+    "baseRecipeId": "recipe-211"
   },
   {
     "id": "cheese-pancake",
@@ -5538,7 +6196,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
-      "치즈를 넣어 전을 부칩니다."
+      "치즈을(를) 먹기 좋게 손질하고 반죽에 들어갈 재료를 준비해요.",
+      "레시피에 적힌 재료를 반죽과 고루 섞은 뒤 달군 팬에 넓게 펼쳐요.",
+      "중불에서 앞뒤가 노릇하고 속까지 익도록 부쳐 완성해요."
     ],
     "tags": [
       "한식"
@@ -5563,7 +6223,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 300,
     "instructions": [
-      "고구마를 튀겨 시럽에 버무립니다."
+      "고구마을(를) 먹기 좋은 크기로 손질해요.",
+      "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
+      "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
     ],
     "tags": [
       "한식"
@@ -5587,7 +6249,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 280,
     "instructions": [
-      "고구마를 튀겨 완성합니다."
+      "고구마을(를) 먹기 좋게 손질하고 튀김옷에 필요한 재료를 준비해요.",
+      "주재료에 레시피에 적힌 튀김옷을 고르게 묻혀요.",
+      "달군 기름에서 노릇하고 속까지 익도록 튀긴 뒤 기름을 빼 완성해요."
     ],
     "tags": [
       "한식"
@@ -5611,7 +6275,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 260,
     "instructions": [
-      "고구마를 스틱 모양으로 튀깁니다."
+      "고구마을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "고구마를 스틱 모양으로 튀깁니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5635,7 +6301,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 200,
     "instructions": [
-      "고구마와 우유를 갈아 완성합니다."
+      "고구마을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "고구마와 우유를 갈아 완성합니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5660,7 +6328,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 250,
     "instructions": [
-      "고구마죽을 끓여 완성합니다."
+      "고구마을(를) 먹기 좋게 준비해요.",
+      "냄비에 레시피에 적힌 재료와 물 또는 국물 재료를 넣고 중약불에서 끓여요.",
+      "바닥이 눌지 않게 저어가며 원하는 농도가 될 때까지 익혀 완성해요."
     ],
     "tags": [
       "한식"
@@ -5703,7 +6373,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "spicy-pork",
     "slug": "spicy-pork",
     "title": "제육볶음",
-    "image": null,
+    "image": "images/recipes/spicy-pork.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "stir-fry",
@@ -5720,6 +6390,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 480,
     "instructions": [
+      "돼지고기, 양파, 대파을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "돼지고기를 양념에 재웁니다.",
       "팬에 고기와 채소를 볶아 완성합니다."
     ],
@@ -5732,7 +6403,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "curry-rice",
     "slug": "curry-rice",
     "title": "카레라이스",
-    "image": null,
+    "image": "images/recipes/curry-rice.webp",
     "cuisine": "일식",
     "category": "japanese",
     "dishType": "rice-bowl",
@@ -5761,7 +6432,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "japchae",
     "slug": "japchae",
     "title": "잡채",
-    "image": null,
+    "image": "images/recipes/japchae.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "stir-fry",
@@ -5778,6 +6449,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 380,
     "instructions": [
+      "당근, 양파, 버섯을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "당면을 삶습니다.",
       "채소와 함께 볶아 간을 맞춥니다."
     ],
@@ -5805,6 +6477,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 350,
     "instructions": [
+      "소시지, 양파, 고추장을(를) 먹기 좋은 크기로 손질하고 양념 재료를 미리 섞어 준비해요.",
       "소시지를 잘라 볶습니다.",
       "양념과 채소를 넣어 완성합니다."
     ],
@@ -5817,7 +6490,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "spicy-squid",
     "slug": "spicy-squid",
     "title": "오징어볶음",
-    "image": null,
+    "image": "images/recipes/spicy-squid.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "stir-fry",
@@ -5834,6 +6507,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 280,
     "instructions": [
       "오징어를 손질합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "채소와 함께 매콤하게 볶습니다."
     ],
     "tags": [
@@ -5845,7 +6519,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "bibimbap",
     "slug": "bibimbap",
     "title": "비빔밥",
-    "image": null,
+    "image": "images/recipes/bibimbap.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "rice-bowl",
@@ -5863,6 +6537,7 @@ window.BUILTIN_RECIPE_RAW = [
     "calories": 550,
     "instructions": [
       "나물을 준비합니다.",
+      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
       "밥 위에 재료를 올리고 고추장과 참기름을 넣어 비빕니다."
     ],
     "tags": [
@@ -5874,7 +6549,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "bulgogi",
     "slug": "bulgogi",
     "title": "불고기",
-    "image": null,
+    "image": "images/recipes/bulgogi.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "stir-fry",
@@ -5891,6 +6566,7 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "보통",
     "calories": 420,
     "instructions": [
+      "소고기, 양파, 대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
       "소고기를 양념에 재웁니다.",
       "양파와 함께 볶아 완성합니다."
     ],
@@ -5918,7 +6594,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 360,
     "instructions": [
-      "참치와 밥을 섞어 주먹밥으로 만듭니다."
+      "밥을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
+      "참치와 밥을 섞어 주먹밥으로 만듭니다.",
+      "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
     ],
     "tags": [
       "한식"
@@ -5985,7 +6663,7 @@ window.BUILTIN_RECIPE_RAW = [
       "태국",
       "볶음"
     ],
-    "image": null,
+    "image": "images/recipes/pad-kra-pao.webp",
     "substitutions": []
   },
   {
@@ -6048,7 +6726,7 @@ window.BUILTIN_RECIPE_RAW = [
       "태국",
       "샐러드"
     ],
-    "image": null,
+    "image": "images/recipes/yum-woon-sen.webp",
     "substitutions": []
   },
   {
@@ -6236,7 +6914,7 @@ window.BUILTIN_RECIPE_RAW = [
     "tags": [
       "베트남"
     ],
-    "image": null,
+    "image": "images/recipes/bun-cha.webp",
     "substitutions": []
   },
   {
@@ -6267,7 +6945,7 @@ window.BUILTIN_RECIPE_RAW = [
       "베트남",
       "샌드위치"
     ],
-    "image": null,
+    "image": "images/recipes/banh-mi.webp",
     "substitutions": []
   },
   {
@@ -6391,6 +7069,237 @@ window.BUILTIN_RECIPE_RAW = [
       "볶음"
     ],
     "image": null,
+    "substitutions": []
+  },
+  {
+    "id": "potato-jjageuli",
+    "slug": "potato-jjageuli",
+    "title": "감자짜글이",
+    "image": "images/recipes/potato-jjageuli.webp",
+    "cuisine": "한식",
+    "category": "korean",
+    "dishType": "stew",
+    "ingredients": [
+      "감자",
+      "양파",
+      "대파",
+      "고추장",
+      "고춧가루",
+      "간장",
+      "마늘"
+    ],
+    "cookingTime": 25,
+    "difficulty": "쉬움",
+    "calories": 280,
+    "instructions": [
+      "감자와 양파는 한입 크기로 썰고 대파는 송송 썰어 준비해요.",
+      "냄비에 감자와 양파를 담고 고추장, 고춧가루, 간장, 마늘을 넣어요.",
+      "재료가 자작하게 잠길 정도로 물을 붓고 중불에서 감자가 익을 때까지 끓여요.",
+      "국물이 걸쭉해지면 대파를 넣고 한소끔 더 끓여 완성해요."
+    ],
+    "tags": [
+      "한식",
+      "찌개",
+      "감자"
+    ],
+    "substitutions": []
+  },
+  {
+    "id": "carrot-rapee",
+    "slug": "carrot-rapee",
+    "title": "당근라페",
+    "image": "images/recipes/carrot-rapee.webp",
+    "cuisine": "프랑스",
+    "category": "western",
+    "dishType": "salad",
+    "ingredients": [
+      "당근",
+      "식초",
+      "올리브유",
+      "설탕",
+      "소금"
+    ],
+    "cookingTime": 10,
+    "difficulty": "쉬움",
+    "calories": 120,
+    "instructions": [
+      "당근은 깨끗이 씻어 가늘게 채 썰어요.",
+      "식초, 올리브유, 설탕, 소금을 섞어 새콤달콤한 드레싱을 만들어요.",
+      "채 썬 당근에 드레싱을 넣고 골고루 버무려요.",
+      "10분 정도 두어 맛이 배면 그대로 먹거나 샌드위치 곁들임으로 활용해요."
+    ],
+    "tags": [
+      "샐러드",
+      "당근",
+      "간단요리"
+    ],
+    "substitutions": []
+  },
+  {
+    "id": "bulgogi-taco",
+    "slug": "bulgogi-taco",
+    "title": "불고기타코",
+    "image": "images/recipes/bulgogi-taco.webp",
+    "cuisine": "퓨전",
+    "category": "western",
+    "dishType": "default",
+    "ingredients": [
+      "또띠아",
+      "소고기",
+      "양파",
+      "간장",
+      "설탕",
+      "마늘",
+      "양배추"
+    ],
+    "cookingTime": 25,
+    "difficulty": "보통",
+    "calories": 460,
+    "instructions": [
+      "소고기에 간장, 설탕, 마늘을 넣어 버무리고 양파와 양배추는 얇게 썰어요.",
+      "달군 팬에 양념한 소고기와 양파를 넣고 수분이 날아가도록 볶아요.",
+      "또띠아를 팬에 가볍게 데운 뒤 양배추와 불고기를 올려요.",
+      "먹기 좋게 접어 바로 즐겨요."
+    ],
+    "tags": [
+      "퓨전",
+      "타코",
+      "불고기"
+    ],
+    "substitutions": []
+  },
+  {
+    "id": "cabbage-steak",
+    "slug": "cabbage-steak",
+    "title": "양배추 스테이크",
+    "image": "images/recipes/cabbage-steak.webp",
+    "cuisine": "양식",
+    "category": "western",
+    "dishType": "default",
+    "ingredients": [
+      "양배추",
+      "올리브유",
+      "소금",
+      "후추",
+      "마늘"
+    ],
+    "cookingTime": 20,
+    "difficulty": "쉬움",
+    "calories": 140,
+    "instructions": [
+      "양배추는 심이 붙어 있도록 도톰한 웨지 모양으로 잘라요.",
+      "표면에 올리브유를 바르고 소금, 후추, 다진 마늘을 고루 올려요.",
+      "달군 팬에 양배추를 올려 중불에서 앞뒤로 노릇하게 구워요.",
+      "속까지 부드럽게 익으면 접시에 담아 완성해요."
+    ],
+    "tags": [
+      "양배추",
+      "채소요리",
+      "간단요리"
+    ],
+    "substitutions": []
+  },
+  {
+    "id": "osam-bulgogi",
+    "slug": "osam-bulgogi",
+    "title": "오삼불고기",
+    "image": "images/recipes/osam-bulgogi.webp",
+    "cuisine": "한식",
+    "category": "korean",
+    "dishType": "stir-fry",
+    "ingredients": [
+      "돼지고기",
+      "오징어",
+      "양파",
+      "대파",
+      "고추장",
+      "고춧가루",
+      "간장",
+      "마늘"
+    ],
+    "cookingTime": 25,
+    "difficulty": "보통",
+    "calories": 430,
+    "instructions": [
+      "돼지고기와 오징어는 먹기 좋은 크기로 썰고 양파와 대파도 손질해요.",
+      "고추장, 고춧가루, 간장, 마늘을 섞어 양념장을 만들어요.",
+      "달군 팬에 돼지고기와 양파를 먼저 볶다가 고기가 거의 익으면 오징어와 양념장을 넣어요.",
+      "센 불에서 오징어가 질겨지지 않도록 빠르게 볶고 대파를 넣어 마무리해요."
+    ],
+    "tags": [
+      "한식",
+      "볶음",
+      "오징어",
+      "돼지고기"
+    ],
+    "substitutions": []
+  },
+  {
+    "id": "taco",
+    "slug": "taco",
+    "title": "타코",
+    "image": "images/recipes/taco.webp",
+    "cuisine": "멕시코",
+    "category": "western",
+    "dishType": "default",
+    "ingredients": [
+      "또띠아",
+      "소고기",
+      "양파",
+      "양배추",
+      "토마토",
+      "치즈"
+    ],
+    "cookingTime": 20,
+    "difficulty": "쉬움",
+    "calories": 420,
+    "instructions": [
+      "양파, 양배추, 토마토는 먹기 좋은 크기로 썰고 소고기도 준비해요.",
+      "달군 팬에 소고기와 양파를 넣고 고기가 충분히 익을 때까지 볶아요.",
+      "또띠아를 따뜻하게 데운 뒤 양배추, 토마토, 볶은 고기와 치즈를 올려요.",
+      "또띠아를 반으로 접어 바로 즐겨요."
+    ],
+    "tags": [
+      "멕시코",
+      "타코",
+      "한끼"
+    ],
+    "substitutions": []
+  },
+  {
+    "id": "okonomiyaki",
+    "slug": "okonomiyaki",
+    "title": "오코노미야끼",
+    "image": "images/recipes/okonomiyaki.webp",
+    "cuisine": "일식",
+    "category": "japanese",
+    "dishType": "pan-fry",
+    "ingredients": [
+      "계란",
+      "간장",
+      "양배추"
+    ],
+    "optionalIngredients": [
+      "새우",
+      "베이컨"
+    ],
+    "cookingTime": 20,
+    "difficulty": "쉬움",
+    "calories": 280,
+    "instructions": [
+      "양배추 반 통을 깨끗이 씻은 뒤 가늘게 채 썰어 준비해요.",
+      "큰 볼에 계란 4~5개를 풀고 간장 4~5큰술을 넣어 잘 섞어요.",
+      "계란물에 채 썬 양배추를 넣고 골고루 섞어 반죽을 만들어요.",
+      "새우나 먹기 좋은 크기로 자른 베이컨이 있다면 취향에 따라 넣어 함께 섞어요. 둘 다 넣어도 좋아요.",
+      "중약불로 달군 팬에 반죽을 도톰하게 올리고 한쪽 면이 노릇하게 익을 때까지 구워요.",
+      "뒤집어서 반대쪽도 노릇하게 굽고, 속까지 충분히 익으면 완성이에요."
+    ],
+    "tags": [
+      "일식",
+      "양배추",
+      "계란",
+      "간단요리"
+    ],
     "substitutions": []
   }
 ];
