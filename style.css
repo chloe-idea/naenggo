@@ -1643,87 +1643,115 @@ body.view--profile .main {
   color: #5c4036;
 }
 
-.bug-report-modal {
-  max-width: 26rem;
-  max-height: min(92vh, 40rem);
+/* Bug report modal — reuses modal--center / form-field / recipe-photo-upload / form-actions */
+#bug-report-modal.modal.modal--center .modal__panel.bug-report-modal {
+  max-width: min(26rem, 100%);
+  max-height: min(88dvh, calc(100% - 2rem));
+  overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bug-report-modal__header {
-  margin-bottom: 1rem;
+  margin-bottom: 0.25rem;
+  padding-right: 1.75rem;
 }
 
-.bug-report-modal__title {
-  margin: 0 0 0.35rem;
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: var(--color-text);
+.bug-report-modal__title.form-modal__title {
+  margin-bottom: 0.5rem;
 }
 
 .bug-report-modal__desc {
-  margin: 0;
+  margin: 0 0 0.25rem;
   font-size: 0.875rem;
   line-height: 1.45;
   color: var(--color-text-muted);
 }
 
-.bug-report-modal__form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+.bug-report-modal__form.recipe-form {
+  gap: 0.875rem;
 }
 
-.bug-report-modal__label {
-  margin-top: 0.55rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
+#bug-report-modal .form-field__select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.25rem;
+  background-color: var(--color-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%238A8A8A' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  background-size: 0.75rem 0.5rem;
+  cursor: pointer;
 }
 
-.bug-report-modal__optional {
-  font-weight: 500;
-  color: var(--color-text-muted);
+#bug-report-modal .form-field__select:focus,
+#bug-report-modal .form-field__input:focus,
+#bug-report-modal .form-field__textarea:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: none;
 }
 
-.bug-report-modal__input,
-.bug-report-modal__textarea {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.bug-report-modal__textarea {
+#bug-report-modal .form-field__textarea {
+  min-height: 5.25rem;
   resize: vertical;
-  min-height: 6.5rem;
-  line-height: 1.45;
 }
 
-.bug-report-modal__file {
-  width: 100%;
-  font-size: 0.8125rem;
-}
-
-.bug-report-modal__file-name {
-  margin: 0.15rem 0 0;
+.form-field__error {
+  margin: 0;
   font-size: 0.75rem;
-  color: var(--color-text-muted);
-  word-break: break-all;
+  line-height: 1.35;
+  color: #dc3545;
 }
 
-.bug-report-modal__error {
-  margin-top: 0.75rem;
-  margin-bottom: 0;
+.form-field__error[hidden] {
+  display: none !important;
 }
 
-.bug-report-modal__actions {
+.bug-report-modal__textarea-meta {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 1.1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 1.1rem;
 }
 
-.bug-report-modal__actions .btn:disabled {
+.bug-report-modal__char-count {
+  margin-top: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-align: right;
+}
+
+#bug-report-modal .recipe-photo-upload__zone {
+  min-height: 7.5rem;
+  padding: 1.25rem 1rem;
+}
+
+#bug-report-modal .recipe-photo-upload__zone--filled {
+  min-height: 9rem;
+}
+
+#bug-report-modal .recipe-photo-upload__zone--filled img {
+  height: 9rem;
+}
+
+#bug-report-modal .photo-upload__actions {
+  margin-top: 0.5rem;
+}
+
+#bug-report-modal .form-actions {
+  margin-top: 1.25rem;
+}
+
+#bug-report-modal .form-actions .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+#bug-report-modal .form-error[hidden] {
+  display: none !important;
 }
 
 .account-delete-modal__confirm {

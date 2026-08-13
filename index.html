@@ -1074,66 +1074,104 @@
       >
         <button type="button" class="modal__close" data-close-modal="bug-report" aria-label="닫기">&times;</button>
         <div class="bug-report-modal__header">
-          <h2 id="bug-report-title" class="bug-report-modal__title">버그 신고하기</h2>
-          <p class="bug-report-modal__desc">발생한 문제를 알려주시면 확인 후 개선에 반영할게요.</p>
+          <h2 id="bug-report-title" class="form-modal__title bug-report-modal__title">버그 신고하기</h2>
+          <p class="bug-report-modal__desc">사용 중 불편했던 점을 알려주세요.<br>확인 후 개선에 반영할게요.</p>
         </div>
-        <form id="bug-report-form" class="bug-report-modal__form" novalidate>
-          <label class="bug-report-modal__label" for="bug-report-type">문제 유형</label>
-          <select id="bug-report-type" class="input bug-report-modal__input" required>
-            <option value="">선택해 주세요</option>
-            <option value="feature">기능 오류</option>
-            <option value="ui">화면/디자인 오류</option>
-            <option value="auth">로그인/계정</option>
-            <option value="recipe">레시피 오류</option>
-            <option value="other">기타</option>
-          </select>
+        <form id="bug-report-form" class="bug-report-modal__form recipe-form" novalidate>
+          <div class="form-field">
+            <label for="bug-report-type" class="form-field__label">문제 유형</label>
+            <select id="bug-report-type" class="form-field__select" aria-describedby="bug-report-type-error">
+              <option value="">문제 유형을 선택해 주세요</option>
+              <option value="feature">기능 오류</option>
+              <option value="ui">화면/디자인 오류</option>
+              <option value="auth">로그인/계정</option>
+              <option value="recipe">레시피 오류</option>
+              <option value="other">기타</option>
+            </select>
+            <p id="bug-report-type-error" class="form-field__error" hidden role="alert"></p>
+          </div>
 
-          <label class="bug-report-modal__label" for="bug-report-screen">버그가 발생한 화면</label>
-          <select id="bug-report-screen" class="input bug-report-modal__input" required>
-            <option value="홈/레시피 찾기">홈/레시피 찾기</option>
-            <option value="내 레시피">내 레시피</option>
-            <option value="냉장고/재료">냉장고/재료</option>
-            <option value="식단/장보기">식단/장보기</option>
-            <option value="캘린더">캘린더</option>
-            <option value="레시피 상세">레시피 상세</option>
-            <option value="프로필">프로필</option>
-            <option value="가족 공유">가족 공유</option>
-            <option value="기타">기타</option>
-          </select>
+          <div class="form-field">
+            <label for="bug-report-screen" class="form-field__label">문제가 발생한 화면</label>
+            <select id="bug-report-screen" class="form-field__select" aria-describedby="bug-report-screen-error">
+              <option value="홈/레시피 찾기">홈/레시피 찾기</option>
+              <option value="내 레시피">내 레시피</option>
+              <option value="냉장고/재료">냉장고/재료</option>
+              <option value="식단/장보기">식단/장보기</option>
+              <option value="캘린더">캘린더</option>
+              <option value="레시피 상세">레시피 상세</option>
+              <option value="프로필">프로필</option>
+              <option value="가족 공유">가족 공유</option>
+              <option value="기타">기타</option>
+            </select>
+            <p id="bug-report-screen-error" class="form-field__error" hidden role="alert"></p>
+          </div>
 
-          <label class="bug-report-modal__label" for="bug-report-description">문제 설명</label>
-          <textarea
-            id="bug-report-description"
-            class="input bug-report-modal__textarea"
-            rows="5"
-            maxlength="4000"
-            required
-            placeholder="어떤 상황에서 어떤 문제가 발생했는지 자세히 적어 주세요."
-          ></textarea>
+          <div class="form-field">
+            <label for="bug-report-description" class="form-field__label">문제 설명</label>
+            <textarea
+              id="bug-report-description"
+              class="form-field__textarea"
+              rows="4"
+              maxlength="4000"
+              placeholder="어떤 상황에서 문제가 발생했는지 알려주세요."
+              aria-describedby="bug-report-description-error bug-report-description-count"
+            ></textarea>
+            <div class="bug-report-modal__textarea-meta">
+              <p id="bug-report-description-error" class="form-field__error" hidden role="alert"></p>
+              <span id="bug-report-description-count" class="form-field__hint bug-report-modal__char-count">0 / 4000</span>
+            </div>
+          </div>
 
-          <label class="bug-report-modal__label" for="bug-report-reply-email">회신받을 이메일 <span class="bug-report-modal__optional">(선택)</span></label>
-          <input
-            id="bug-report-reply-email"
-            class="input bug-report-modal__input"
-            type="email"
-            autocomplete="email"
-            maxlength="120"
-            placeholder="답변을 받을 이메일"
-          >
+          <div class="form-field">
+            <label for="bug-report-reply-email" class="form-field__label">회신받을 이메일 <span class="optional">(선택)</span></label>
+            <input
+              id="bug-report-reply-email"
+              class="form-field__input"
+              type="email"
+              autocomplete="email"
+              maxlength="120"
+              placeholder="답변을 받을 이메일"
+              aria-describedby="bug-report-reply-email-error"
+            >
+            <p id="bug-report-reply-email-error" class="form-field__error" hidden role="alert"></p>
+          </div>
 
-          <label class="bug-report-modal__label" for="bug-report-screenshot">스크린샷 첨부 <span class="bug-report-modal__optional">(선택)</span></label>
-          <input
-            id="bug-report-screenshot"
-            class="bug-report-modal__file"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-          >
-          <p id="bug-report-screenshot-name" class="bug-report-modal__file-name" hidden></p>
+          <div class="form-field">
+            <span class="form-field__label">스크린샷 첨부 <span class="optional">(선택)</span></span>
+            <div id="bug-report-photo-upload" class="recipe-photo-upload">
+              <input
+                type="file"
+                id="bug-report-screenshot"
+                class="photo-upload__input"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+              >
+              <div class="recipe-photo-upload__frame">
+                <button
+                  type="button"
+                  id="bug-report-screenshot-zone"
+                  class="recipe-photo-upload__zone recipe-photo-upload__zone--empty"
+                  aria-label="스크린샷 첨부"
+                >
+                  <span class="recipe-photo-upload__title">＋ 스크린샷 첨부</span>
+                  <span class="recipe-photo-upload__hint">문제 화면을 첨부해 주세요</span>
+                </button>
+                <button type="button" id="bug-report-screenshot-remove" class="recipe-photo-upload__remove" hidden aria-label="스크린샷 삭제">&times;</button>
+              </div>
+              <div id="bug-report-screenshot-actions" class="photo-upload__actions" hidden>
+                <button type="button" id="bug-report-screenshot-change" class="btn btn--outline btn--sm">변경</button>
+                <button type="button" id="bug-report-screenshot-clear" class="btn btn--ghost btn--sm">삭제</button>
+              </div>
+              <p id="bug-report-screenshot-name" class="form-field__hint" hidden></p>
+            </div>
+            <p id="bug-report-screenshot-error" class="form-field__error" hidden role="alert"></p>
+          </div>
 
-          <p id="bug-report-error" class="profile-menu__error bug-report-modal__error" hidden role="alert"></p>
-          <div class="bug-report-modal__actions">
-            <button type="button" class="btn btn--ghost btn--full" data-close-modal="bug-report">취소</button>
-            <button type="submit" id="bug-report-submit-btn" class="btn btn--primary btn--full">신고 보내기</button>
+          <p id="bug-report-error" class="form-error" hidden role="alert"></p>
+          <div class="form-actions">
+            <button type="button" class="btn btn--ghost" data-close-modal="bug-report">취소</button>
+            <button type="submit" id="bug-report-submit-btn" class="btn btn--primary">신고 보내기</button>
           </div>
         </form>
       </div>
@@ -1325,6 +1363,6 @@
   <script src="js/login-required-modal.js?v=73"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
   <script src="js/lib/hangul-group.js?v=1"></script>
-  <script src="script.js?v=241" defer></script>
+  <script src="script.js?v=242" defer></script>
 </body>
 </html>

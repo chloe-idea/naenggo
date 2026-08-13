@@ -12009,6 +12009,16 @@ function uidHintForBugReport() {
   return uid.length <= 6 ? uid : `…${uid.slice(-6)}`;
 }
 
+const BUG_REPORT_FIELD_ERROR_IDS = {
+  type: 'bug-report-type-error',
+  screen: 'bug-report-screen-error',
+  description: 'bug-report-description-error',
+  replyEmail: 'bug-report-reply-email-error',
+  screenshot: 'bug-report-screenshot-error',
+};
+
+let bugReportScreenshotFileName = '';
+
 function setBugReportError(message = '') {
   const el = document.getElementById('bug-report-error');
   if (!el) return;
@@ -12016,18 +12026,97 @@ function setBugReportError(message = '') {
   el.hidden = !message;
 }
 
+function clearBugReportFieldErrors() {
+  Object.values(BUG_REPORT_FIELD_ERROR_IDS).forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = '';
+    el.hidden = true;
+  });
+}
+
+function setBugReportFieldError(field, message = '') {
+  const el = document.getElementById(BUG_REPORT_FIELD_ERROR_IDS[field]);
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function updateBugReportDescriptionCount() {
+  const textarea = document.getElementById('bug-report-description');
+  const countEl = document.getElementById('bug-report-description-count');
+  if (!countEl) return;
+  const len = String(textarea?.value || '').length;
+  countEl.textContent = `${len} / 4000`;
+}
+
+function renderBugReportScreenshotEmpty() {
+  const zone = document.getElementById('bug-report-screenshot-zone');
+  if (!zone) return;
+  zone.classList.add('recipe-photo-upload__zone--empty');
+  zone.classList.remove('recipe-photo-upload__zone--filled');
+  zone.innerHTML = [
+    '<span class="recipe-photo-upload__title">＋ 스크린샷 첨부</span>',
+    '<span class="recipe-photo-upload__hint">문제 화면을 첨부해 주세요</span>',
+  ].join('');
+}
+
+function syncBugReportScreenshotUi() {
+  const zone = document.getElementById('bug-report-screenshot-zone');
+  const actions = document.getElementById('bug-report-screenshot-actions');
+  const nameEl = document.getElementById('bug-report-screenshot-name');
+  const removeBtn = document.getElementById('bug-report-screenshot-remove');
+  const hasShot = Boolean(bugReportScreenshot?.base64);
+
+  if (!hasShot) {
+    renderBugReportScreenshotEmpty();
+    if (actions) actions.hidden = true;
+    if (removeBtn) removeBtn.hidden = true;
+    if (nameEl) {
+      nameEl.textContent = '';
+      nameEl.hidden = true;
+    }
+    return;
+  }
+
+  if (zone) {
+    zone.classList.remove('recipe-photo-upload__zone--empty');
+    zone.classList.add('recipe-photo-upload__zone--filled');
+    const src = `data:${bugReportScreenshot.contentType || 'image/jpeg'};base64,${bugReportScreenshot.base64}`;
+    zone.innerHTML = `<img src="${src}" alt="첨부된 스크린샷 미리보기">`;
+  }
+  if (actions) actions.hidden = false;
+  if (removeBtn) removeBtn.hidden = false;
+  if (nameEl) {
+    nameEl.textContent = bugReportScreenshotFileName || '스크린샷이 첨부되었습니다';
+    nameEl.hidden = false;
+  }
+}
+
+function clearBugReportScreenshot() {
+  bugReportScreenshot = null;
+  bugReportScreenshotFileName = '';
+  const fileInput = document.getElementById('bug-report-screenshot');
+  if (fileInput) fileInput.value = '';
+  syncBugReportScreenshotUi();
+  setBugReportFieldError('screenshot', '');
+}
+
+function triggerBugReportScreenshotPicker() {
+  document.getElementById('bug-report-screenshot')?.click();
+}
+
 function resetBugReportForm() {
   const form = document.getElementById('bug-report-form');
   form?.reset();
   bugReportScreenshot = null;
-  const nameEl = document.getElementById('bug-report-screenshot-name');
-  if (nameEl) {
-    nameEl.textContent = '';
-    nameEl.hidden = true;
-  }
+  bugReportScreenshotFileName = '';
+  clearBugReportFieldErrors();
   setBugReportError('');
   const fileInput = document.getElementById('bug-report-screenshot');
   if (fileInput) fileInput.value = '';
+  syncBugReportScreenshotUi();
+  updateBugReportDescriptionCount();
 }
 
 function openBugReportModal() {
@@ -12108,40 +12197,29 @@ function compressScreenshotFile(file) {
 
 async function handleBugReportScreenshotChange(event) {
   const file = event?.target?.files?.[0];
-  const nameEl = document.getElementById('bug-report-screenshot-name');
-  bugReportScreenshot = null;
   if (!file) {
-    if (nameEl) {
-      nameEl.textContent = '';
-      nameEl.hidden = true;
-    }
+    if (!bugReportScreenshot) clearBugReportScreenshot();
     return;
   }
   const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
   if (!allowed.has(file.type)) {
-    setBugReportError('스크린샷은 JPEG/PNG/WebP만 가능합니다.');
+    setBugReportFieldError('screenshot', '스크린샷은 JPEG/PNG/WebP만 가능합니다.');
     event.target.value = '';
-    if (nameEl) {
-      nameEl.textContent = '';
-      nameEl.hidden = true;
-    }
+    if (!bugReportScreenshot) syncBugReportScreenshotUi();
     return;
   }
   try {
+    setBugReportFieldError('screenshot', '');
     setBugReportError('');
     bugReportScreenshot = await compressScreenshotFile(file);
-    if (nameEl) {
-      nameEl.textContent = file.name;
-      nameEl.hidden = false;
-    }
+    bugReportScreenshotFileName = String(file.name || 'screenshot.jpg');
+    syncBugReportScreenshotUi();
   } catch (err) {
     bugReportScreenshot = null;
+    bugReportScreenshotFileName = '';
     event.target.value = '';
-    if (nameEl) {
-      nameEl.textContent = '';
-      nameEl.hidden = true;
-    }
-    setBugReportError(err?.message || '스크린샷 처리에 실패했습니다.');
+    syncBugReportScreenshotUi();
+    setBugReportFieldError('screenshot', err?.message || '스크린샷 처리에 실패했습니다.');
   }
 }
 
@@ -12169,23 +12247,27 @@ async function submitBugReportForm(event) {
   const description = String(document.getElementById('bug-report-description')?.value || '').trim();
   const replyEmail = String(document.getElementById('bug-report-reply-email')?.value || '').trim();
 
+  clearBugReportFieldErrors();
+  setBugReportError('');
+
+  let hasClientError = false;
   if (!type) {
-    setBugReportError('문제 유형을 선택해 주세요.');
-    return;
+    setBugReportFieldError('type', '문제 유형을 선택해 주세요.');
+    hasClientError = true;
   }
   if (!screen) {
-    setBugReportError('버그가 발생한 화면을 선택해 주세요.');
-    return;
+    setBugReportFieldError('screen', '문제가 발생한 화면을 선택해 주세요.');
+    hasClientError = true;
   }
   if (description.length < 10) {
-    setBugReportError('문제 설명을 10자 이상 입력해 주세요.');
-    return;
+    setBugReportFieldError('description', '문제 설명을 10자 이상 입력해 주세요.');
+    hasClientError = true;
   }
+  if (hasClientError) return;
 
   const apiUrl = window.APP_CONFIG?.videoExtract?.bugReportApiUrl || '/api/bug-report';
   const submitBtn = document.getElementById('bug-report-submit-btn');
   bugReportInFlight = true;
-  setBugReportError('');
   if (submitBtn) {
     submitBtn.disabled = true;
     submitBtn.textContent = '보내는 중…';
@@ -12232,6 +12314,11 @@ function initBugReportUi() {
   const modal = document.getElementById('bug-report-modal');
   const form = document.getElementById('bug-report-form');
   const fileInput = document.getElementById('bug-report-screenshot');
+  const zone = document.getElementById('bug-report-screenshot-zone');
+  const changeBtn = document.getElementById('bug-report-screenshot-change');
+  const clearBtn = document.getElementById('bug-report-screenshot-clear');
+  const removeBtn = document.getElementById('bug-report-screenshot-remove');
+  const description = document.getElementById('bug-report-description');
 
   openBtn?.addEventListener('click', () => openBugReportModal());
   modal?.querySelectorAll('[data-close-modal="bug-report"]').forEach((el) => {
@@ -12239,6 +12326,23 @@ function initBugReportUi() {
   });
   form?.addEventListener('submit', submitBugReportForm);
   fileInput?.addEventListener('change', handleBugReportScreenshotChange);
+  zone?.addEventListener('click', () => triggerBugReportScreenshotPicker());
+  changeBtn?.addEventListener('click', () => triggerBugReportScreenshotPicker());
+  clearBtn?.addEventListener('click', () => clearBugReportScreenshot());
+  removeBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    clearBugReportScreenshot();
+  });
+  description?.addEventListener('input', () => {
+    updateBugReportDescriptionCount();
+    setBugReportFieldError('description', '');
+  });
+  document.getElementById('bug-report-type')?.addEventListener('change', () => {
+    setBugReportFieldError('type', '');
+  });
+  document.getElementById('bug-report-screen')?.addEventListener('change', () => {
+    setBugReportFieldError('screen', '');
+  });
 
   window.addEventListener('error', (event) => {
     pushAppErrorCode(event?.error?.code || event?.error?.name || 'window.error');
