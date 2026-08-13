@@ -12,8 +12,10 @@ import userProfileRouter from './routes/user-profile.js';
 import coupangSearchRouter from './routes/coupang-search.js';
 import householdsRouter from './routes/households.js';
 import accountRouter from './routes/account.js';
+import bugReportRouter from './routes/bug-report.js';
 import { getFirebaseAdminStatus } from './lib/firebase-admin.js';
 import { describeOpenAiKeyConfig, logOpenAiKeyConfig } from './lib/openai-config.js';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -50,7 +52,11 @@ function getLanIPv4() {
   return null;
 }
 
-app.use(express.json({ limit: '32kb' }));
+app.use((req, res, next) => {
+  const pathOnly = String(req.originalUrl || req.url || '').split('?')[0];
+  const isBugReport = req.method === 'POST' && pathOnly === '/api/bug-report';
+  return express.json({ limit: isBugReport ? '1.5mb' : '32kb' })(req, res, next);
+});
 
 app.use('/api', extractVideoRecipeRouter);
 app.use('/api', extractYoutubeRecipeRouter);
@@ -61,6 +67,7 @@ app.use('/api', userProfileRouter);
 app.use('/api', coupangSearchRouter);
 app.use('/api', householdsRouter);
 app.use('/api', accountRouter);
+app.use('/api', bugReportRouter);
 
 app.use('/images/recipes', express.static(path.join(ROOT, 'public/images/recipes'), {
   maxAge: '7d',

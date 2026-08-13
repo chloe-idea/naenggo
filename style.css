@@ -1643,6 +1643,89 @@ body.view--profile .main {
   color: #5c4036;
 }
 
+.bug-report-modal {
+  max-width: 26rem;
+  max-height: min(92vh, 40rem);
+  overflow-y: auto;
+}
+
+.bug-report-modal__header {
+  margin-bottom: 1rem;
+}
+
+.bug-report-modal__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bug-report-modal__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
+.bug-report-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.bug-report-modal__label {
+  margin-top: 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.bug-report-modal__optional {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.bug-report-modal__input,
+.bug-report-modal__textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bug-report-modal__textarea {
+  resize: vertical;
+  min-height: 6.5rem;
+  line-height: 1.45;
+}
+
+.bug-report-modal__file {
+  width: 100%;
+  font-size: 0.8125rem;
+}
+
+.bug-report-modal__file-name {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+
+.bug-report-modal__error {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+
+.bug-report-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+}
+
+.bug-report-modal__actions .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .account-delete-modal__confirm {
   margin-top: 1.2rem;
 }

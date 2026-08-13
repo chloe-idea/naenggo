@@ -57,6 +57,7 @@
       instagramRecipeApiUrl: buildApiUrl('/api/extract-instagram-recipe'),
       aiUsageApiUrl: buildApiUrl('/api/ai-usage'),
       coupangSearchApiUrl: buildApiUrl('/api/coupang-search'),
+      bugReportApiUrl: buildApiUrl('/api/bug-report'),
       dailyLimit: 5,
       weeklyLimit: 5,
       enableMock: false,
@@ -66,6 +67,7 @@
       isVercel,
       hostname,
       origin,
+      appVersion: '2026.08.13',
     },
   };
 })();

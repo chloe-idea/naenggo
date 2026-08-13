@@ -17,6 +17,7 @@
     "firebase": "^12.15.0",
     "firebase-admin": "^13.10.0",
     "get-youtube-transcript": "^1.0.0",
+    "resend": "^4.8.0",
     "youtubei.js": "^17.2.0"
   },
   "devDependencies": {

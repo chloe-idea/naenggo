@@ -2223,6 +2223,15 @@ function applyRecipeVariationSteps(baseSteps, variation) {
   return result;
 }
 
+/** variation trigger 재료 목록 — ingredient(단일) 또는 ingredients[](OR) */
+function getVariationTriggerIngredients(variation) {
+  if (Array.isArray(variation?.ingredients) && variation.ingredients.length) {
+    return variation.ingredients.map((s) => String(s || '').trim()).filter(Boolean);
+  }
+  const single = String(variation?.ingredient || '').trim();
+  return single ? [single] : [];
+}
+
 function normalizeBuiltinVariations(rawVariations) {
   if (!Array.isArray(rawVariations)) return [];
   return rawVariations.map((v) => {
@@ -2230,8 +2239,16 @@ function normalizeBuiltinVariations(rawVariations) {
       ? v.addSteps.map((s) => String(s || '').trim()).filter(Boolean)
       : [];
     const stepOps = normalizeVariationStepOps(v);
+    const ingredients = Array.isArray(v?.ingredients)
+      ? v.ingredients.map((s) => String(s || '').trim()).filter(Boolean)
+      : [];
+    const ingredient = String(v?.ingredient || '').trim()
+      || (ingredients.length === 1 ? ingredients[0] : '');
     return {
-      ingredient: String(v?.ingredient || '').trim(),
+      ingredient,
+      ingredients: ingredients.length
+        ? ingredients
+        : (ingredient ? [ingredient] : []),
       variantName: String(v?.variantName || '').trim(),
       tip: String(v?.tip || '').trim(),
       addSteps,
@@ -2240,7 +2257,7 @@ function normalizeBuiltinVariations(rawVariations) {
         ? v.absorbRecipeIds.map((id) => toBuiltinRuntimeId(id)).filter(Boolean)
         : [],
     };
-  }).filter((v) => v.ingredient && v.variantName);
+  }).filter((v) => v.variantName && getVariationTriggerIngredients(v).length);
 }
 
 function seed(id, data) {
@@ -4723,22 +4740,30 @@ const MatchService = {
     const substitutionAdvices = this.getSubstitutionAdvices(missing);
     return { exact, substituted, missing, matched, matchedPantryNames, matchPercent, substitutionAdvices };
   },
-  /** variation 재료는 매칭률에 넣지 않고, 보유 시에만 tip용으로 반환 */
+  /** variation 재료는 매칭률에 넣지 않고, 보유 시에만 tip용으로 반환.
+   *  trigger: ingredient(단일) 또는 ingredients[](OR — 하나라도 보유 시 매칭) */
   findMatchedVariations(pantryNames, variations = []) {
     if (!Array.isArray(variations) || !variations.length) return [];
+    const names = Array.isArray(pantryNames) ? pantryNames : [];
     const matched = [];
     for (const variation of variations) {
-      const ingredient = String(variation?.ingredient || '').trim();
-      if (!ingredient) continue;
-      const owned = isAlwaysAvailableIngredient(ingredient)
-        ? '기본 재료'
-        : IngredientAliasService.findOwned(ingredient, pantryNames);
-      if (!owned) continue;
+      const triggers = getVariationTriggerIngredients(variation);
+      if (!triggers.length) continue;
+      const matchedTriggers = triggers.filter((ingredient) => (
+        isAlwaysAvailableIngredient(ingredient)
+          ? true
+          : Boolean(IngredientAliasService.findOwned(ingredient, names))
+      ));
+      if (!matchedTriggers.length) continue;
+      const primary = matchedTriggers[0];
       matched.push({
         ...variation,
-        owned,
+        ingredient: primary,
+        ingredients: triggers,
+        matchedTriggers,
+        owned: primary,
         tip: variation.tip
-          || `${ingredient}도 있으니 ${variation.variantName || ingredient}으로 만들어보세요`,
+          || `${primary}도 있으니 ${variation.variantName || primary}으로 만들어보세요`,
       });
     }
     return matched;
@@ -4900,7 +4925,11 @@ const RecommendationService = {
     const q = normalizeIngredient(query);
     if (!q) return true;
     const categoryLabel = CATEGORY_MAP[recipe.category]?.tags?.join(' ') || '';
-    const variationNames = (recipe.variations || []).flatMap((v) => [v.variantName, v.ingredient]);
+    const variationNames = (recipe.variations || []).flatMap((v) => [
+      v.variantName,
+      v.ingredient,
+      ...getVariationTriggerIngredients(v),
+    ]);
     const haystack = [
       recipe.name,
       ...(recipe.ingredients || []).map(formatIngredientDisplay),
@@ -5627,6 +5656,8 @@ function recipeCardImageHTML(recipe) {
 }
 
 function recipeHeroHTML(recipe) {
+  // variation 적용 여부와 무관하게 원본 recipe.image / id / slug 만 사용
+  // (absorbRecipeIds 대상 레시피 이미지로 절대 교체하지 않음)
   if (typeof RecipeImageService !== 'undefined') {
     return RecipeImageService.renderImg(recipe, { variant: 'hero', zoomable: true });
   }
@@ -10333,13 +10364,26 @@ function openRecipeDetail(result) {
 function getActiveRecipeVariation(recipe) {
   const key = String(state.detailActiveVariationIngredient || '').trim();
   if (!key || !Array.isArray(recipe?.variations)) return null;
-  return recipe.variations.find((v) => MatchService.normalize(v.ingredient) === MatchService.normalize(key)) || null;
+  const norm = MatchService.normalize(key);
+  return recipe.variations.find((v) => {
+    if (MatchService.normalize(v.variantName) === norm) return true;
+    if (MatchService.normalize(v.ingredient) === norm) return true;
+    return getVariationTriggerIngredients(v).some((t) => MatchService.normalize(t) === norm);
+  }) || null;
 }
 
-function recipeVariationOwnedLead(ingredient) {
-  const name = String(ingredient || '').trim();
-  if (!name) return '이 재료를 가지고 있어요';
-  return `${name}${koreanObjectParticle(name)} 가지고 있어요`;
+function recipeVariationOwnedLead(matchedTriggers) {
+  const list = (Array.isArray(matchedTriggers) ? matchedTriggers : [matchedTriggers])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean);
+  if (!list.length) return '이 재료를 가지고 있어요';
+  if (list.length === 1) {
+    const name = list[0];
+    return `${name}${koreanObjectParticle(name)} 가지고 있어요`;
+  }
+  const head = list.slice(0, -1).join(', ');
+  const last = list[list.length - 1];
+  return `${head}, ${last}${koreanObjectParticle(last)} 가지고 있어요`;
 }
 
 function recipeVariationsSectionHTML(recipe, pantryNames = []) {
@@ -10350,19 +10394,25 @@ function recipeVariationsSectionHTML(recipe, pantryNames = []) {
   if (!matched.length) return '';
   const active = getActiveRecipeVariation(recipe);
   const items = matched.map((variation) => {
-    const isActive = active
-      && MatchService.normalize(active.ingredient) === MatchService.normalize(variation.ingredient);
-    const emoji = pantryItemEmoji(variation.ingredient);
+    const ownedTriggers = Array.isArray(variation.matchedTriggers) && variation.matchedTriggers.length
+      ? variation.matchedTriggers
+      : [variation.ingredient].filter(Boolean);
+    const primary = ownedTriggers[0] || variation.ingredient || variation.variantName;
+    const isActive = Boolean(active
+      && MatchService.normalize(active.variantName) === MatchService.normalize(variation.variantName));
+    const emoji = pantryItemEmoji(primary);
     const tip = String(variation.tip || '').trim();
     const variantName = String(variation.variantName || '').trim();
+    // toggle key: variantName (복수 trigger여도 동일 variation으로 식별)
+    const toggleKey = variantName || primary;
     return `
       <button type="button"
         class="recipe-variation-card${isActive ? ' recipe-variation-card--active' : ''}"
-        data-variation-ingredient="${esc(variation.ingredient)}"
+        data-variation-ingredient="${esc(toggleKey)}"
         aria-pressed="${isActive ? 'true' : 'false'}">
         <span class="recipe-variation-card__lead">
           <span class="recipe-variation-card__emoji" aria-hidden="true">${esc(emoji)}</span>
-          <span class="recipe-variation-card__owned">${esc(recipeVariationOwnedLead(variation.ingredient))}</span>
+          <span class="recipe-variation-card__owned">${esc(recipeVariationOwnedLead(ownedTriggers))}</span>
         </span>
         <span class="recipe-variation-card__name">${esc(variantName)}${esc(koreanInstrumentalParticle(variantName))} 바꿔보세요</span>
         ${tip ? `<span class="recipe-variation-card__tip">${esc(tip)}</span>` : ''}
@@ -10476,10 +10526,13 @@ function recipeDetailContentHTML(recipe, analysis) {
     ? `<span class="recipe-detail__variation-step-label">${esc(activeVariation.variantName)} 방식</span>`
     : '';
 
+  // hero 이미지는 항상 원본 recipe (id/slug/image). variation merge로 덮어쓰지 않음.
+  const heroRecipe = recipe;
+
   return `
     <article class="recipe-detail">
       <div class="recipe-detail__hero">
-        ${recipeHeroHTML(recipe)}
+        ${recipeHeroHTML(heroRecipe)}
         <div class="recipe-detail__hero-overlay"></div>
         <h1 class="recipe-detail__hero-title">${esc(displayTitle)}</h1>
       </div>
@@ -10502,7 +10555,7 @@ function recipeDetailContentHTML(recipe, analysis) {
           <h3 class="recipe-detail__section-title">재료 ${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${analysis.matchPercent}%</span>` : ''}</h3>
           ${ingredientsHtml}
           ${optionalIngredientsHtml}
-          ${activeVariation ? `<p class="recipe-variation-extra-ing">함께 넣을 재료: <strong>${esc(activeVariation.ingredient)}</strong></p>` : ''}
+          ${activeVariation ? `<p class="recipe-variation-extra-ing">함께 넣을 재료: <strong>${esc(getVariationTriggerIngredients(activeVariation).join(', ') || activeVariation.ingredient || '')}</strong></p>` : ''}
           ${showAffiliateDisclosure ? affiliateDisclosureHTML() : ''}
         </section>
         ${recipeVariationsSectionHTML(recipe, names)}
@@ -10529,6 +10582,31 @@ function recipeDetailContentHTML(recipe, analysis) {
         </div>
       </div>
     </article>`;
+}
+
+/** variation 토글 시 hero 이미지 DOM은 유지하고 제목·본문만 갱신 */
+function applyRecipeDetailVariationView(recipe) {
+  const analysis = MatchService.analyze(RecommendationService.getPantryNames(), recipe.ingredients);
+  updateRecipeDetailHeader(recipe);
+  const root = dom.recipeDetailContent;
+  if (!root) return;
+
+  const activeVariation = getActiveRecipeVariation(recipe);
+  const displayTitle = activeVariation?.variantName || recipe.name || '';
+  const heroTitle = root.querySelector('.recipe-detail__hero-title');
+  if (heroTitle) heroTitle.textContent = displayTitle;
+
+  const wrap = document.createElement('div');
+  wrap.innerHTML = recipeDetailContentHTML(recipe, analysis);
+  const nextContent = wrap.querySelector('.recipe-detail__content');
+  const prevContent = root.querySelector('.recipe-detail__content');
+  if (nextContent && prevContent && root.querySelector('.recipe-detail__hero')) {
+    // hero(img)는 그대로 두고 content만 교체 → 이미지 재로딩/placeholder 깜빡임 방지
+    prevContent.replaceWith(nextContent);
+  } else {
+    root.innerHTML = wrap.innerHTML;
+  }
+  bindRecipeDetailActions(recipe);
 }
 
 function updateRecipeDetailSaveIcon(saved) {
@@ -10594,10 +10672,8 @@ function bindRecipeDetailActions(recipe) {
       state.detailActiveVariationIngredient = MatchService.normalize(current) === MatchService.normalize(ingredient)
         ? null
         : ingredient;
-      const analysis = MatchService.analyze(RecommendationService.getPantryNames(), recipe.ingredients);
-      updateRecipeDetailHeader(recipe);
-      dom.recipeDetailContent.innerHTML = recipeDetailContentHTML(recipe, analysis);
-      bindRecipeDetailActions(recipe);
+      // 원본 recipe.image 유지 + hero img DOM 보존 (absorbRecipe 이미지로 교체하지 않음)
+      applyRecipeDetailVariationView(recipe);
     });
   });
   root.querySelector('.recipe-card-author[data-author-id]')?.addEventListener('click', (e) => {
@@ -11755,6 +11831,8 @@ async function handleQuickAdd(e) {
 
 // ===== Modals =====
 function updateBodyScrollLock() {
+  const bugReportModal = document.getElementById('bug-report-modal');
+  const accountDeleteModal = document.getElementById('account-delete-modal');
   const anyOpen = !dom.recipeFormModal.hidden
     || !dom.pantryModal.hidden
     || !dom.mealModal.hidden
@@ -11767,7 +11845,9 @@ function updateBodyScrollLock() {
     || (dom.plannerRecipeSheet && !dom.plannerRecipeSheet.hidden)
     || (dom.myRecipesSortSheet && !dom.myRecipesSortSheet.hidden)
     || (dom.loginPromptModal && !dom.loginPromptModal.hidden)
-    || (dom.profileMenuModal && !dom.profileMenuModal.hidden);
+    || (dom.profileMenuModal && !dom.profileMenuModal.hidden)
+    || (bugReportModal && !bugReportModal.hidden)
+    || (accountDeleteModal && !accountDeleteModal.hidden);
   document.body.style.overflow = anyOpen ? 'hidden' : '';
   document.body.classList.toggle('modal-open', anyOpen);
 }
@@ -11821,6 +11901,7 @@ function closeAllModals() {
   closeGrocerySpendSheet();
   if (window.LoginRequiredModal?.isOpen()) window.LoginRequiredModal.close(true);
   closeImageLightbox();
+  closeBugReportModal();
 }
 
 // ===== PWA =====
@@ -11898,6 +11979,276 @@ async function registerServiceWorker() {
   }
 }
 
+// ===== Bug report =====
+const BUG_REPORT_SCREEN_BY_VIEW = {
+  main: '홈/레시피 찾기',
+  'my-recipes': '내 레시피',
+  pantry: '냉장고/재료',
+  planner: '식단/장보기',
+  calendar: '캘린더',
+  'recipe-detail': '레시피 상세',
+  profile: '프로필',
+  'author-profile': '기타',
+};
+const recentAppErrorCodes = [];
+let bugReportScreenshot = null;
+let bugReportInFlight = false;
+
+function pushAppErrorCode(code) {
+  const normalized = String(code || '').trim().slice(0, 80);
+  if (!normalized) return;
+  recentAppErrorCodes.unshift(normalized);
+  if (recentAppErrorCodes.length > 5) recentAppErrorCodes.length = 5;
+}
+
+window.__NAENGJANGGO_PUSH_ERROR = pushAppErrorCode;
+
+function uidHintForBugReport() {
+  const uid = String(window.FirebaseServices?.auth?.currentUser?.uid || '').trim();
+  if (!uid) return '';
+  return uid.length <= 6 ? uid : `…${uid.slice(-6)}`;
+}
+
+function setBugReportError(message = '') {
+  const el = document.getElementById('bug-report-error');
+  if (!el) return;
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function resetBugReportForm() {
+  const form = document.getElementById('bug-report-form');
+  form?.reset();
+  bugReportScreenshot = null;
+  const nameEl = document.getElementById('bug-report-screenshot-name');
+  if (nameEl) {
+    nameEl.textContent = '';
+    nameEl.hidden = true;
+  }
+  setBugReportError('');
+  const fileInput = document.getElementById('bug-report-screenshot');
+  if (fileInput) fileInput.value = '';
+}
+
+function openBugReportModal() {
+  const modal = document.getElementById('bug-report-modal');
+  if (!modal) return;
+  resetBugReportForm();
+  const viewHint = state.profileReturnView || state.view || 'main';
+  const screenSelect = document.getElementById('bug-report-screen');
+  if (screenSelect) {
+    const label = BUG_REPORT_SCREEN_BY_VIEW[viewHint] || '기타';
+    if ([...screenSelect.options].some((opt) => opt.value === label)) {
+      screenSelect.value = label;
+    }
+  }
+  const replyEmail = document.getElementById('bug-report-reply-email');
+  const authEmail = String(window.FirebaseServices?.auth?.currentUser?.email || '').trim();
+  if (replyEmail && authEmail) replyEmail.value = authEmail;
+  bugReportInFlight = false;
+  const submitBtn = document.getElementById('bug-report-submit-btn');
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = '신고 보내기';
+  }
+  modal.hidden = false;
+  modal.setAttribute('aria-hidden', 'false');
+  updateBodyScrollLock();
+  document.getElementById('bug-report-type')?.focus();
+}
+
+function closeBugReportModal() {
+  const modal = document.getElementById('bug-report-modal');
+  if (!modal || modal.hidden) return;
+  if (bugReportInFlight) return;
+  modal.hidden = true;
+  modal.setAttribute('aria-hidden', 'true');
+  resetBugReportForm();
+  updateBodyScrollLock();
+}
+
+function compressScreenshotFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const maxSide = 1280;
+        let { width, height } = img;
+        if (width > maxSide || height > maxSide) {
+          const scale = maxSide / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
+        if (base64.length > 1_200_000) {
+          reject(new Error('스크린샷이 너무 큽니다. 더 작은 이미지로 첨부해 주세요.'));
+          return;
+        }
+        resolve({ contentType: 'image/jpeg', base64 });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('스크린샷 처리에 실패했습니다.'));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('스크린샷 이미지를 열 수 없습니다.'));
+    };
+    img.src = url;
+  });
+}
+
+async function handleBugReportScreenshotChange(event) {
+  const file = event?.target?.files?.[0];
+  const nameEl = document.getElementById('bug-report-screenshot-name');
+  bugReportScreenshot = null;
+  if (!file) {
+    if (nameEl) {
+      nameEl.textContent = '';
+      nameEl.hidden = true;
+    }
+    return;
+  }
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowed.has(file.type)) {
+    setBugReportError('스크린샷은 JPEG/PNG/WebP만 가능합니다.');
+    event.target.value = '';
+    if (nameEl) {
+      nameEl.textContent = '';
+      nameEl.hidden = true;
+    }
+    return;
+  }
+  try {
+    setBugReportError('');
+    bugReportScreenshot = await compressScreenshotFile(file);
+    if (nameEl) {
+      nameEl.textContent = file.name;
+      nameEl.hidden = false;
+    }
+  } catch (err) {
+    bugReportScreenshot = null;
+    event.target.value = '';
+    if (nameEl) {
+      nameEl.textContent = '';
+      nameEl.hidden = true;
+    }
+    setBugReportError(err?.message || '스크린샷 처리에 실패했습니다.');
+  }
+}
+
+function buildBugReportMeta() {
+  const loggedIn = isLoggedInAppUser();
+  const currentView = String(state.view || '');
+  return {
+    currentView,
+    path: String(location.pathname || '') + String(location.search || ''),
+    appVersion: String(window.APP_CONFIG?.runtime?.appVersion || ''),
+    userAgent: String(navigator.userAgent || '').slice(0, 300),
+    occurredAt: new Date().toISOString(),
+    loggedIn,
+    uidHint: loggedIn ? uidHintForBugReport() : '',
+    recentErrorCodes: recentAppErrorCodes.slice(0, 5),
+  };
+}
+
+async function submitBugReportForm(event) {
+  event?.preventDefault?.();
+  if (bugReportInFlight) return;
+
+  const type = String(document.getElementById('bug-report-type')?.value || '').trim();
+  const screen = String(document.getElementById('bug-report-screen')?.value || '').trim();
+  const description = String(document.getElementById('bug-report-description')?.value || '').trim();
+  const replyEmail = String(document.getElementById('bug-report-reply-email')?.value || '').trim();
+
+  if (!type) {
+    setBugReportError('문제 유형을 선택해 주세요.');
+    return;
+  }
+  if (!screen) {
+    setBugReportError('버그가 발생한 화면을 선택해 주세요.');
+    return;
+  }
+  if (description.length < 10) {
+    setBugReportError('문제 설명을 10자 이상 입력해 주세요.');
+    return;
+  }
+
+  const apiUrl = window.APP_CONFIG?.videoExtract?.bugReportApiUrl || '/api/bug-report';
+  const submitBtn = document.getElementById('bug-report-submit-btn');
+  bugReportInFlight = true;
+  setBugReportError('');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = '보내는 중…';
+  }
+
+  try {
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        screen,
+        description,
+        replyEmail,
+        screenshot: bugReportScreenshot,
+        meta: buildBugReportMeta(),
+      }),
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.message || '신고 접수에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
+    bugReportInFlight = false;
+    closeBugReportModal();
+    showToast(data.message || '문의가 접수되었습니다');
+  } catch (err) {
+    setBugReportError(err?.message || '신고 접수에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+  } finally {
+    bugReportInFlight = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '신고 보내기';
+    }
+  }
+}
+
+function initBugReportUi() {
+  const openBtn = document.getElementById('profile-bug-report-btn');
+  const modal = document.getElementById('bug-report-modal');
+  const form = document.getElementById('bug-report-form');
+  const fileInput = document.getElementById('bug-report-screenshot');
+
+  openBtn?.addEventListener('click', () => openBugReportModal());
+  modal?.querySelectorAll('[data-close-modal="bug-report"]').forEach((el) => {
+    el.addEventListener('click', () => closeBugReportModal());
+  });
+  form?.addEventListener('submit', submitBugReportForm);
+  fileInput?.addEventListener('change', handleBugReportScreenshotChange);
+
+  window.addEventListener('error', (event) => {
+    pushAppErrorCode(event?.error?.code || event?.error?.name || 'window.error');
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason;
+    pushAppErrorCode(reason?.code || reason?.name || 'unhandledrejection');
+  });
+}
+
 // ===== Init =====
 function init() {
   purgeLegacyUserDataFromLocalStorage();
@@ -11923,6 +12274,7 @@ function init() {
   initHomeSearchDock();
   initMyRecipesSortUi();
   initRecipeDetailRouting();
+  initBugReportUi();
   window.addEventListener('resize', scheduleFitMobileHomeCardMissingStatuses);
   window.addEventListener('resize', schedulePantryChipsRelayout);
 

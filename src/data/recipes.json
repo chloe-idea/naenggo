@@ -2456,33 +2456,6 @@
       "substitutions": []
     },
     {
-      "id": "recipe-79",
-      "slug": "recipe-79",
-      "title": "잔치면",
-      "image": "images/recipes/recipe-79.webp",
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "국수",
-        "간장",
-        "대파",
-        "계란"
-      ],
-      "cookingTime": 12,
-      "difficulty": "쉬움",
-      "calories": 400,
-      "instructions": [
-        "대파을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
-        "면을 삶습니다.",
-        "양념과 함께 비벼 완성합니다."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
       "id": "recipe-80",
       "slug": "recipe-80",
       "title": "쫄면",
@@ -3396,33 +3369,6 @@
       "substitutions": []
     },
     {
-      "id": "egg-white-omelet",
-      "slug": "egg-white-omelet",
-      "title": "계란흰자오믈렛",
-      "image": "images/recipes/egg-white-omelet.webp",
-      "cuisine": "한식",
-      "category": "diet",
-      "dishType": "default",
-      "ingredients": [
-        "계란",
-        "우유",
-        "소금",
-        "식용유"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 120,
-      "instructions": [
-        "계란, 우유, 소금을(를) 먹기 좋게 준비하고 계란은 필요한 경우 미리 풀어두어요.",
-        "계란을 풀어 지집니다.",
-        "완성합니다."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
       "id": "tuna-salad",
       "slug": "tuna-salad",
       "title": "참치샐러드",
@@ -3504,33 +3450,6 @@
       "substitutions": []
     },
     {
-      "id": "recipe-118",
-      "slug": "recipe-118",
-      "title": "계란찜샐러드",
-      "image": null,
-      "cuisine": "한식",
-      "category": "diet",
-      "dishType": "salad",
-      "ingredients": [
-        "계란",
-        "양상추",
-        "오이",
-        "간장"
-      ],
-      "cookingTime": 12,
-      "difficulty": "쉬움",
-      "calories": 160,
-      "instructions": [
-        "오이을(를) 먹기 좋게 손질한 뒤 물기를 가볍게 제거해요.",
-        "계란찜을 만듭니다.",
-        "채소와 함께 담습니다."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
       "id": "recipe-119",
       "slug": "recipe-119",
       "title": "고단백죽",
@@ -3578,33 +3497,6 @@
         "두부, 김치, 대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
         "김치를 볶아 끓입니다.",
         "두부를 넣어 완성합니다."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "egg-soup-diet",
-      "slug": "egg-soup-diet",
-      "title": "계란국다이어트",
-      "image": "images/recipes/egg-soup-diet.webp",
-      "cuisine": "한식",
-      "category": "diet",
-      "dishType": "soup",
-      "ingredients": [
-        "계란",
-        "대파",
-        "멸치육수",
-        "소금"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 90,
-      "instructions": [
-        "대파을(를) 먹기 좋은 크기로 손질하고 국물에 들어갈 양념을 준비해요.",
-        "육수를 끓입니다.",
-        "계란을 넣어 완성합니다."
       ],
       "tags": [
         "한식"
@@ -4631,7 +4523,7 @@
     {
       "id": "recipe-157",
       "slug": "recipe-157",
-      "title": "계란베네딕트",
+      "title": "에그베네딕트",
       "image": null,
       "cuisine": "양식",
       "category": "western",
@@ -5178,33 +5070,6 @@
       "substitutions": []
     },
     {
-      "id": "recipe-177",
-      "slug": "recipe-177",
-      "title": "라면국물떡국",
-      "image": "images/recipes/recipe-177.webp",
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "떡",
-        "라면스프",
-        "계란",
-        "대파"
-      ],
-      "cookingTime": 12,
-      "difficulty": "쉬움",
-      "calories": 400,
-      "instructions": [
-        "떡, 대파을(를) 먹기 좋은 크기로 손질해요.",
-        "냄비에 레시피에 적힌 국물 재료와 양념을 넣고 끓인 뒤 단단한 재료부터 넣어 익혀요.",
-        "나머지 재료를 넣고 한소끔 더 끓여 재료가 익고 국물 맛이 어우러지면 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
       "id": "recipe-178",
       "slug": "recipe-178",
       "title": "김치국",
@@ -5443,168 +5308,6 @@
         "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
         "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
         "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "recipe-187",
-      "slug": "recipe-187",
-      "title": "양파라면",
-      "image": null,
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "라면",
-        "양파",
-        "계란",
-        "치즈"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 480,
-      "instructions": [
-        "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
-        "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
-        "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "recipe-188",
-      "slug": "recipe-188",
-      "title": "마늘라면",
-      "image": null,
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "라면",
-        "마늘",
-        "계란",
-        "대파"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 490,
-      "instructions": [
-        "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
-        "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
-        "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "recipe-189",
-      "slug": "recipe-189",
-      "title": "김치치즈라면",
-      "image": null,
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "라면",
-        "김치",
-        "치즈",
-        "계란"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 510,
-      "instructions": [
-        "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
-        "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
-        "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "recipe-190",
-      "slug": "recipe-190",
-      "title": "버터치즈라면",
-      "image": null,
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "라면",
-        "버터",
-        "치즈",
-        "우유"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 530,
-      "instructions": [
-        "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
-        "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
-        "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "recipe-191",
-      "slug": "recipe-191",
-      "title": "참치마요라면",
-      "image": null,
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "라면",
-        "참치",
-        "마요네즈",
-        "김"
-      ],
-      "cookingTime": 10,
-      "difficulty": "쉬움",
-      "calories": 500,
-      "instructions": [
-        "냄비에 레시피에 적힌 양의 물을 끓이고 추가 재료를 먹기 좋게 준비해요.",
-        "물이 끓으면 면과 스프, 익는 데 시간이 필요한 재료를 넣어 끓여요.",
-        "나머지 재료를 넣고 면이 알맞게 익을 때까지 끓여 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
-      "id": "recipe-192",
-      "slug": "recipe-192",
-      "title": "계란국수",
-      "image": "images/recipes/recipe-192.webp",
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "noodle",
-      "ingredients": [
-        "국수",
-        "계란",
-        "대파",
-        "간장"
-      ],
-      "cookingTime": 12,
-      "difficulty": "쉬움",
-      "calories": 380,
-      "instructions": [
-        "면은 제품 안내에 맞춰 삶은 뒤 물기를 빼 준비해요.",
-        "대파을(를) 먹기 좋게 준비하고 레시피에 적힌 재료를 익혀 국물이나 소스를 만들어요.",
-        "삶은 면을 넣어 맛이 어우러지도록 한 번 더 조리해 완성해요."
       ],
       "tags": [
         "한식"
@@ -5914,34 +5617,6 @@
       "substitutions": []
     },
     {
-      "id": "recipe-204",
-      "slug": "recipe-204",
-      "title": "계란프라이도시락",
-      "image": null,
-      "cuisine": "한식",
-      "category": "korean",
-      "dishType": "default",
-      "ingredients": [
-        "밥",
-        "계란",
-        "햄",
-        "김",
-        "간장"
-      ],
-      "cookingTime": 15,
-      "difficulty": "쉬움",
-      "calories": 450,
-      "instructions": [
-        "햄을(를) 먹기 좋은 크기로 손질하고 필요한 재료를 준비해요.",
-        "도시락을 싸듯 담아 완성합니다.",
-        "재료가 고르게 익고 맛이 어우러지면 불에서 내려 완성해요."
-      ],
-      "tags": [
-        "한식"
-      ],
-      "substitutions": []
-    },
-    {
       "id": "recipe-205",
       "slug": "recipe-205",
       "title": "참치쌈",
@@ -6132,7 +5807,10 @@
       "substitutions": [],
       "variations": [
         {
-          "ingredient": "해물",
+          "ingredients": [
+            "새우",
+            "오징어"
+          ],
           "variantName": "해물파전",
           "tip": "새우나 오징어 같은 해물을 더하면 더 푸짐한 해물파전으로 즐길 수 있어요.",
           "stepOps": [

@@ -1029,6 +1029,14 @@
           <button type="button" id="profile-family-sharing-btn" class="btn btn--ghost btn--full">👨‍👩‍👧‍👦 가족 공유</button>
         </section>
 
+        <section class="profile-manage__card" aria-labelledby="profile-section-support">
+          <h2 id="profile-section-support" class="profile-manage__section-title">고객지원</h2>
+          <button type="button" id="profile-bug-report-btn" class="profile-manage__link-row">
+            <span>버그 신고하기</span>
+            <span class="profile-manage__link-chevron" aria-hidden="true">›</span>
+          </button>
+        </section>
+
         <section class="profile-manage__card" aria-labelledby="profile-section-legal">
           <h2 id="profile-section-legal" class="profile-manage__section-title">약관 및 정책</h2>
           <a class="profile-manage__link-row" href="/privacy" target="_blank" rel="noopener noreferrer">
@@ -1053,6 +1061,81 @@
 
       <div class="profile-manage__footer">
         <button type="button" id="profile-save-btn" class="btn btn--primary btn--full">프로필 저장</button>
+      </div>
+    </div>
+
+    <div id="bug-report-modal" class="modal modal--center profile-menu-modal" hidden aria-hidden="true">
+      <div class="modal__backdrop" data-close-modal="bug-report"></div>
+      <div
+        class="modal__panel profile-menu bug-report-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bug-report-title"
+      >
+        <button type="button" class="modal__close" data-close-modal="bug-report" aria-label="닫기">&times;</button>
+        <div class="bug-report-modal__header">
+          <h2 id="bug-report-title" class="bug-report-modal__title">버그 신고하기</h2>
+          <p class="bug-report-modal__desc">발생한 문제를 알려주시면 확인 후 개선에 반영할게요.</p>
+        </div>
+        <form id="bug-report-form" class="bug-report-modal__form" novalidate>
+          <label class="bug-report-modal__label" for="bug-report-type">문제 유형</label>
+          <select id="bug-report-type" class="input bug-report-modal__input" required>
+            <option value="">선택해 주세요</option>
+            <option value="feature">기능 오류</option>
+            <option value="ui">화면/디자인 오류</option>
+            <option value="auth">로그인/계정</option>
+            <option value="recipe">레시피 오류</option>
+            <option value="other">기타</option>
+          </select>
+
+          <label class="bug-report-modal__label" for="bug-report-screen">버그가 발생한 화면</label>
+          <select id="bug-report-screen" class="input bug-report-modal__input" required>
+            <option value="홈/레시피 찾기">홈/레시피 찾기</option>
+            <option value="내 레시피">내 레시피</option>
+            <option value="냉장고/재료">냉장고/재료</option>
+            <option value="식단/장보기">식단/장보기</option>
+            <option value="캘린더">캘린더</option>
+            <option value="레시피 상세">레시피 상세</option>
+            <option value="프로필">프로필</option>
+            <option value="가족 공유">가족 공유</option>
+            <option value="기타">기타</option>
+          </select>
+
+          <label class="bug-report-modal__label" for="bug-report-description">문제 설명</label>
+          <textarea
+            id="bug-report-description"
+            class="input bug-report-modal__textarea"
+            rows="5"
+            maxlength="4000"
+            required
+            placeholder="어떤 상황에서 어떤 문제가 발생했는지 자세히 적어 주세요."
+          ></textarea>
+
+          <label class="bug-report-modal__label" for="bug-report-reply-email">회신받을 이메일 <span class="bug-report-modal__optional">(선택)</span></label>
+          <input
+            id="bug-report-reply-email"
+            class="input bug-report-modal__input"
+            type="email"
+            autocomplete="email"
+            maxlength="120"
+            placeholder="답변을 받을 이메일"
+          >
+
+          <label class="bug-report-modal__label" for="bug-report-screenshot">스크린샷 첨부 <span class="bug-report-modal__optional">(선택)</span></label>
+          <input
+            id="bug-report-screenshot"
+            class="bug-report-modal__file"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+          >
+          <p id="bug-report-screenshot-name" class="bug-report-modal__file-name" hidden></p>
+
+          <p id="bug-report-error" class="profile-menu__error bug-report-modal__error" hidden role="alert"></p>
+          <div class="bug-report-modal__actions">
+            <button type="button" class="btn btn--ghost btn--full" data-close-modal="bug-report">취소</button>
+            <button type="submit" id="bug-report-submit-btn" class="btn btn--primary btn--full">신고 보내기</button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -1233,7 +1316,7 @@
   <script src="js/ingredient-normalizer.js?v=3"></script>
   <script type="module" src="js/firebase-bootstrap.js?v=92"></script>
   <script src="js/video-extract-platform.js?v=55"></script>
-  <script src="app-config.js?v=57"></script>
+  <script src="app-config.js?v=58"></script>
   <script src="nav-icons.js?v=47"></script>
   <script src="recipe-placeholders.js?v=47"></script>
   <script src="recipe-images.js?v=51"></script>
@@ -1242,6 +1325,6 @@
   <script src="js/login-required-modal.js?v=73"></script>
   <script src="js/auth-gate-ui.js?v=65"></script>
   <script src="js/lib/hangul-group.js?v=1"></script>
-  <script src="script.js?v=240" defer></script>
+  <script src="script.js?v=241" defer></script>
 </body>
 </html>
