@@ -12,7 +12,15 @@ window.RECIPE_IMAGE_MAP = {};
 
 const RECIPE_IMAGES_BASE = 'images/recipes/';
 const DEFAULT_RECIPE_IMAGE = `${RECIPE_IMAGES_BASE}default-recipe.webp`;
-const RECIPE_IMAGE_VERSION = '3';
+
+/** APP_CONFIG.runtime.recipeImageVersion 단일 소스 (fallback은 동일 값 1회만) */
+function getRecipeImageVersion() {
+  const fromConfig = window.APP_CONFIG?.runtime?.recipeImageVersion
+    || window.APP_CONFIG?.runtime?.appVersion;
+  const raw = String(fromConfig || '20260816').trim();
+  const digits = raw.replace(/\D/g, '');
+  return digits || '20260816';
+}
 
 /** public/images/recipes 에 실제로 있는 파일 (default 제외) */
 const EXISTING_RECIPE_IMAGE_FILES = new Set([
@@ -192,18 +200,25 @@ function isUnsplashUrl(url) {
   return String(url || '').includes('images.unsplash.com');
 }
 
-/** 기존 ?v= / &v= 제거 후 단일 버전만 부여 (?v=2&v=2 방지) */
+/** 기존 ?v= / &v= 제거 후 단일 버전만 부여 (?v=2&v=2 방지). 렌더링용. */
 function withRecipeImageVersion(url) {
   if (!url || typeof url !== 'string') return url;
   if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
   const pathOnly = url.split('?')[0].split('#')[0];
   if (!pathOnly) return url;
-  return `${pathOnly}?v=${RECIPE_IMAGE_VERSION}`;
+  return `${pathOnly}?v=${getRecipeImageVersion()}`;
+}
+
+/** 저장·데이터용 — query 없이 경로만 */
+function stripRecipeImageVersion(url) {
+  if (!url || typeof url !== 'string') return url;
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+  return url.split('?')[0].split('#')[0];
 }
 
 function stripToRecipeImageFilename(url) {
   if (!url || typeof url !== 'string') return null;
-  const pathOnly = url.split('?')[0].split('#')[0].replace(/^\/+/, '');
+  const pathOnly = stripRecipeImageVersion(url).replace(/^\/+/, '');
   const normalized = pathOnly.replace(/^public\//, '');
   if (!normalized.startsWith(RECIPE_IMAGES_BASE)) return null;
   return normalized.slice(RECIPE_IMAGES_BASE.length) || null;
@@ -223,15 +238,15 @@ function normalizeRecipePhotoUrl(url) {
   if (trimmed.startsWith('data:') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-  let path = trimmed.replace(/^\/+/, '').replace(/^public\//, '');
+  let path = stripRecipeImageVersion(trimmed).replace(/^\/+/, '').replace(/^public\//, '');
   if (path.startsWith(RECIPE_IMAGES_BASE) || path.startsWith('images/recipes/')) {
     if (!path.startsWith(RECIPE_IMAGES_BASE)) path = path.replace(/^images\/recipes\//, RECIPE_IMAGES_BASE);
-    return withRecipeImageVersion(path.split('?')[0]);
+    return path;
   }
-  if (path.startsWith('src/assets/')) return path.split('?')[0];
+  if (path.startsWith('src/assets/')) return path;
   // 파일명만 온 경우 — allowlist에 있을 때만
   if (!path.includes('/') && EXISTING_RECIPE_IMAGE_FILES.has(path)) {
-    return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${path}`);
+    return `${RECIPE_IMAGES_BASE}${path}`;
   }
   return null;
 }
@@ -337,8 +352,8 @@ window.RecipeImageService = {
       if (normalized.startsWith(RECIPE_IMAGES_BASE)) {
         const file = stripToRecipeImageFilename(normalized);
         if (!file || /^default-recipe\./i.test(file)) continue;
-        // 레시피 데이터에 명시된 번들 경로 → allowlist 여부와 무관하게 표시
-        return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${file}`);
+        // 레시피 데이터에 명시된 번들 경로 → allowlist 여부와 무관하게 표시 (저장용 경로는 version 없음)
+        return `${RECIPE_IMAGES_BASE}${file}`;
       }
     }
 
@@ -346,7 +361,7 @@ window.RecipeImageService = {
     if (recipe.hasImage === true) {
       const slug = inferRecipeSlug(recipe);
       if (slug && EXISTING_RECIPE_IMAGE_FILES.has(`${slug}.webp`)) {
-        return withRecipeImageVersion(`${RECIPE_IMAGES_BASE}${slug}.webp`);
+        return `${RECIPE_IMAGES_BASE}${slug}.webp`;
       }
     }
     return null;
@@ -361,18 +376,24 @@ window.RecipeImageService = {
     return photo ? [photo] : [];
   },
 
+  /** 화면 표시용 — cache-busting ?v= 포함 */
   resolveSrc(recipe) {
-    return this.pickPhoto(recipe);
+    const photo = this.pickPhoto(recipe);
+    return photo ? withRecipeImageVersion(photo) : null;
   },
 
-  /** 저장용 — 실제 사진만. 없으면 빈 문자열 (가짜 /images/recipes/recipe-xxx.webp 생성 금지) */
+  /** 저장용 — 실제 사진 경로만. query 없음 (가짜 /images/recipes/recipe-xxx.webp 생성 금지) */
   resolveForStorage(recipe) {
-    return this.pickPhoto(recipe) || '';
+    const photo = this.pickPhoto(recipe);
+    return photo ? stripRecipeImageVersion(photo) : '';
   },
 
   resolveCategoryAssetSrc(recipe) {
     return resolveLegacyCategoryAsset(recipe);
   },
+
+  withVersion: withRecipeImageVersion,
+  getVersion: getRecipeImageVersion,
 
   handleImgError(img) {
     if (!img) return;
@@ -391,7 +412,7 @@ window.RecipeImageService = {
       lazy = true,
     } = options;
 
-    const src = this.pickPhoto(recipe);
+    const src = this.resolveSrc(recipe);
     if (!src) {
       return renderPlaceholderMarkup(recipe, variant);
     }

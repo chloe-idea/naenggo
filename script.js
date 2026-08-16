@@ -5573,7 +5573,12 @@ function hasPhoto(img) {
 
 function getRecipeDisplayImage(recipe) {
   if (typeof RecipeImageService !== 'undefined') return RecipeImageService.resolveSrc(recipe);
-  if (hasPhoto(recipe?.image)) return recipe.image;
+  if (hasPhoto(recipe?.image)) {
+    const raw = String(recipe.image);
+    return typeof RecipeImageService?.withVersion === 'function'
+      ? RecipeImageService.withVersion(raw)
+      : raw;
+  }
   return null;
 }
 function formatMoney(value, currencyCode = null) {
@@ -12072,7 +12077,7 @@ async function registerServiceWorker() {
   };
 
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js?v=58');
+    const reg = await navigator.serviceWorker.register('./sw.js?v=59');
     reg.update();
     activateWaitingWorker(reg);
     reg.addEventListener('updatefound', () => {

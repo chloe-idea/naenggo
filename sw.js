@@ -2,7 +2,7 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v263';
+const CACHE_NAME = 'naengjanggo-v264';
 
 const RECIPE_IMAGE_SLUGS = [
   'sweet-potato-fries', 'potato-fries', 'sweet-potato-sticks', 'egg-white-omelet', 'potato-pancake', 'potato-cheese-bake', 'egg-in-hell',
@@ -18,15 +18,15 @@ const ASSETS = [
   'legal/privacy-content.js?v=2',
   'legal/terms-content.js?v=2',
   'js/legal-page.js?v=2',
-  'app-config.js?v=57',
+  'app-config.js?v=59',
   'style.css?v=199',
-  'script.js?v=240',
+  'script.js?v=244',
   'js/lib/budget-by-month.js',
   'js/lib/display-name.js',
   'js/lib/hangul-group.js?v=1',
   'js/firebase.js',
   'js/firebase-config.js',
-  'js/firebase-bootstrap.js?v=92',
+  'js/firebase-bootstrap.js?v=93',
   'js/ingredient-normalizer.js?v=3',
   'public/data/ingredient-aliases.json?v=1',
   'public/data/default-ingredients.json?v=1',
@@ -37,10 +37,10 @@ const ASSETS = [
   'js/services/pantry-local-migration.js',
   'js/services/auth-gate-controller.js',
   'js/ingredient-emoji.js?v=1',
-  'js/login-required-modal.js?v=73',
+  'js/login-required-modal.js?v=74',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
-  'recipe-images.js?v=51',
+  'recipe-images.js?v=52',
   'js/data/builtin-recipes.js?v=1',
   'manifest.json',
   'icons/icon-192.png',
@@ -112,8 +112,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 레시피 이미지: 네트워크 우선 + 성공 시 캐시 갱신 (변환 직후 옛 WebP 고정 방지)
+  // 레시피 이미지: 네트워크 우선 (?v= 포함 URL 그대로 매칭).
+  // caches.match에 ignoreSearch 옵션을 쓰지 않음 — query 없는 옛 캐시로 새 버전 요청을 채우지 않음.
   const isRecipeImage = url.pathname.includes('/images/recipes/');
+  if (isRecipeImage) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-cache' })
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request).then((cached) => {
+          if (cached) return cached;
+          // 오프라인 fallback만 기본 이미지 (path-only precache)
+          return caches.match(assetUrl('images/recipes/default-recipe.webp'));
+        })),
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)
@@ -124,12 +143,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        if (isRecipeImage) {
-          return caches.match(assetUrl('images/recipes/default-recipe.webp'));
-        }
-        return undefined;
-      })),
+      .catch(() => caches.match(event.request)),
   );
 });
