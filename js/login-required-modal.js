@@ -115,6 +115,9 @@
       if (!err) return;
       err.hidden = true;
       err.textContent = '';
+      if (typeof window.hideErrorReportButton === 'function') {
+        window.hideErrorReportButton(err);
+      }
     },
 
     showError(message) {
@@ -122,6 +125,15 @@
       if (!err || !message) return;
       err.hidden = false;
       err.textContent = message;
+      if (typeof window.attachErrorReportButton === 'function') {
+        window.attachErrorReportButton(err, {
+          problemType: 'auth',
+          sourceFeature: 'auth-login-prompt',
+          errorCode: 'auth-login-prompt',
+          userMessage: message,
+          currentScreen: '로그인/계정',
+        });
+      }
     },
 
     syncUi() {

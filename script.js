@@ -2554,7 +2554,12 @@ function assertVideoAnalysisQuotaAvailable() {
 
 function reportVideoExtractFailure(err, fallbackMessage = '레시피 추출에 실패했어요. 잠시 후 다시 시도해 주세요.') {
   const message = err?.message || fallbackMessage;
-  showVideoFormError(message);
+  const errorCode = err?.code || err?.apiResponse?.failureReason || err?.apiResponse?.error || '';
+  showVideoFormError(message, {
+    errorCode,
+    sourceFeature: resolveVideoExtractSourceFeature(),
+    problemType: 'recipe',
+  });
   return message;
 }
 
@@ -4591,6 +4596,16 @@ function handlePantryFirestoreError(error) {
     ? '로그인 후 재료를 추가할 수 있습니다.'
     : `재료 저장에 실패했습니다.${error?.code ? ` (${error.code})` : ''}\n${error?.message || '콘솔에서 상세 오류를 확인해 주세요.'}`;
   alert(msg);
+  // alert에는 버튼을 붙일 수 없어, 직후 신고 컨텍스트만 준비 (토스트 CTA)
+  showToast('문제가 계속되면 프로필 > 고객지원에서 신고할 수 있어요.');
+  if (typeof window.rememberErrorReportContext === 'function') {
+    window.rememberErrorReportContext({
+      problemType: 'feature',
+      sourceFeature: 'firestore-pantry-save',
+      errorCode: error?.code || 'pantry-save-failed',
+      userMessage: msg.split('\n')[0],
+    });
+  }
 }
 
 const RecipePickerService = {
@@ -6115,6 +6130,11 @@ function closeProfileManagePage() {
 window.openProfileManagePage = openProfileManagePage;
 window.closeProfileManagePage = closeProfileManagePage;
 window.showToast = showToast;
+window.openBugReportModal = openBugReportModal;
+window.openBugReportFromError = openBugReportFromError;
+window.attachErrorReportButton = attachErrorReportButton;
+window.hideErrorReportButton = hideErrorReportButton;
+window.rememberErrorReportContext = rememberErrorReportContext;
 
 function openVideoRecipeForm() {
   if (!isLoggedInAppUser()) {
@@ -10459,8 +10479,18 @@ function renderRecipeDetailLoading(message = '레시피를 불러오는 중이�
 
 function renderRecipeDetailUnavailable(message = '레시피를 찾을 수 없습니다') {
   if (!dom.recipeDetailContent) return;
-  dom.recipeDetailContent.innerHTML = `<div class="recipe-detail-page__state"><span class="material-symbols-outlined" aria-hidden="true">menu_book</span><p>${esc(message)}</p><button type="button" class="btn btn--outline" data-detail-back>레시피 탐색으로</button></div>`;
+  dom.recipeDetailContent.innerHTML = `<div class="recipe-detail-page__state"><span class="material-symbols-outlined" aria-hidden="true">menu_book</span><p>${esc(message)}</p><button type="button" class="btn btn--outline" data-detail-back>레시피 탐색으로</button><div class="error-report-actions" data-detail-report-host></div></div>`;
   dom.recipeDetailContent.querySelector('[data-detail-back]')?.addEventListener('click', leaveRecipeDetail);
+  const reportHost = dom.recipeDetailContent.querySelector('[data-detail-report-host]');
+  if (reportHost && typeof attachErrorReportButton === 'function') {
+    attachErrorReportButton(reportHost, {
+      problemType: 'recipe',
+      sourceFeature: 'recipe-detail-load',
+      errorCode: /불러오지|실패|못/.test(message) ? 'recipe-detail-load-failed' : 'recipe-detail-unavailable',
+      userMessage: message,
+      currentScreen: '레시피 상세',
+    });
+  }
 }
 
 /**
@@ -10861,6 +10891,16 @@ function showVideoFallback(message = VIDEO_EXTRACT_FALLBACK_MSG, options = {}) {
   if (options.showPartialWarning) {
     showVideoExtractWarning(options.partialWarning || VIDEO_EXTRACT_PARTIAL_WARNING);
   }
+  if (options.reportable === false) {
+    hideErrorReportButton(dom.videoFallbackSection);
+  } else {
+    attachErrorReportButton(dom.videoFallbackSection, {
+      problemType: options.problemType || 'recipe',
+      sourceFeature: options.sourceFeature || 'video-recipe-extract-fallback',
+      errorCode: options.errorCode || 'VIDEO_EXTRACT_FALLBACK',
+      userMessage: message,
+    });
+  }
 }
 
 function showAiDailyLimitAlert(message) {
@@ -10985,22 +11025,42 @@ async function updateVideoLinkPreview() {
   }
 }
 
-function showVideoFormError(msg) {
+function showVideoFormError(msg, options = {}) {
   if (!msg) return;
-  showToast(msg);
+  if (options.toast !== false) showToast(msg);
   const textEl = dom.videoFormErrorText || dom.videoFormError?.querySelector?.('.video-form-error-card__text');
   if (textEl) textEl.textContent = msg;
   if (dom.videoFormError) {
     dom.videoFormError.hidden = false;
+    if (options.reportable === false) {
+      hideErrorReportButton(dom.videoFormError);
+    } else {
+      attachErrorReportButton(dom.videoFormError, {
+        problemType: options.problemType || 'recipe',
+        sourceFeature: options.sourceFeature || resolveVideoExtractSourceFeature(),
+        errorCode: options.errorCode || '',
+        userMessage: msg,
+      });
+    }
     dom.videoFormError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
-function showVideoReviewError(msg) {
-  const textEl = dom.videoReviewErrorText || dom.videoReviewError;
+function showVideoReviewError(msg, options = {}) {
+  const textEl = dom.videoReviewErrorText || dom.videoReviewError?.querySelector?.('.video-form-error-card__text');
   if (textEl) textEl.textContent = msg;
   if (dom.videoReviewError) {
     dom.videoReviewError.hidden = false;
+    if (options.reportable === false) {
+      hideErrorReportButton(dom.videoReviewError);
+    } else {
+      attachErrorReportButton(dom.videoReviewError, {
+        problemType: options.problemType || 'recipe',
+        sourceFeature: options.sourceFeature || 'video-recipe-save',
+        errorCode: options.errorCode || '',
+        userMessage: msg,
+      });
+    }
     dom.videoReviewError.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
@@ -11066,7 +11126,11 @@ async function handleVideoExtract() {
     await ensureVideoAuthReady();
   } catch (err) {
     setVideoExtractLoading(false);
-    showVideoFormError('로그인 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    showVideoFormError('로그인 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.', {
+      errorCode: 'AUTH_TOKEN_UNAVAILABLE',
+      sourceFeature: 'video-recipe-extract',
+      problemType: 'auth',
+    });
     return;
   }
   setVideoExtractLoading(false);
@@ -11086,13 +11150,13 @@ async function handleVideoExtract() {
 
   const sourceUrl = dom.videoSourceUrl?.value?.trim() || '';
   if (!sourceUrl) {
-    showVideoFormError('영상 링크를 입력해 주세요.');
+    showVideoFormError('영상 링크를 입력해 주세요.', { reportable: false });
     return;
   }
 
   const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
   if (!check.ok) {
-    showVideoFormError(check.error);
+    showVideoFormError(check.error, { reportable: false });
     return;
   }
 
@@ -11143,10 +11207,19 @@ async function handleVideoExtract() {
     if (mapped.showFallback || err.code === 'FALLBACK') {
       if (err.warning) showVideoExtractWarning(err.warning);
       else if (err.infoHint) showVideoExtractWarning(err.infoHint);
-      showVideoFallback(mapped.message);
+      showVideoFallback(mapped.message, {
+        errorCode: mapped.failureReason || err?.code || 'VIDEO_EXTRACT_FALLBACK',
+        sourceFeature: resolveVideoExtractSourceFeature(),
+      });
       showToast(mapped.message);
     } else {
-      showVideoFormError(mapped.message);
+      showVideoFormError(mapped.message, {
+        errorCode: mapped.failureReason || err?.code || err?.apiResponse?.error || '',
+        sourceFeature: resolveVideoExtractSourceFeature(),
+        problemType: 'recipe',
+        toast: false,
+      });
+      showToast(mapped.message);
     }
   } finally {
     setVideoExtractLoading(false);
@@ -11159,7 +11232,11 @@ async function handleVideoFallbackAnalyze() {
     await ensureVideoAuthReady();
   } catch {
     setVideoExtractLoading(false);
-    showVideoFormError('로그인 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    showVideoFormError('로그인 상태를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.', {
+      errorCode: 'AUTH_TOKEN_UNAVAILABLE',
+      sourceFeature: 'video-recipe-extract',
+      problemType: 'auth',
+    });
     return;
   }
   setVideoExtractLoading(false);
@@ -11178,11 +11255,11 @@ async function handleVideoFallbackAnalyze() {
   const textPayload = VideoRecipeAnalysisService.collectVideoTextPayload(sourceUrl);
 
   if (!textPayload.pastedText || textPayload.pastedText.length < 20) {
-    return showVideoFormError('영상 설명글이나 캡션을 20자 이상 붙여넣어 주세요.');
+    return showVideoFormError('영상 설명글이나 캡션을 20자 이상 붙여넣어 주세요.', { reportable: false });
   }
 
   const check = VideoRecipeAnalysisService.validateUrl(sourceUrl);
-  if (!check.ok) return showVideoFormError(check.error);
+  if (!check.ok) return showVideoFormError(check.error, { reportable: false });
 
   const duplicateResult = checkVideoSourceDuplicate(sourceUrl);
   if (duplicateResult.isDuplicate) {
@@ -11217,7 +11294,10 @@ async function handleVideoFallbackAnalyze() {
       return;
     }
     const mapped = mapVideoExtractUserError(err, err.apiResponse);
-    showVideoFormError(mapped.message);
+    showVideoFormError(mapped.message, {
+      errorCode: mapped.failureReason || err?.code || err?.apiResponse?.error || '',
+      sourceFeature: resolveVideoExtractSourceFeature(),
+    });
   } finally {
     setVideoExtractLoading(false);
   }
@@ -11233,7 +11313,7 @@ function handleVideoRecipeSave() {
   }
   dom.videoReviewError.hidden = true;
   const draft = state.videoReviewDraft;
-  if (!draft?.sourceUrl) return showVideoReviewError('영상 링크 정보가 없습니다. 다시 입력해 주세요.');
+  if (!draft?.sourceUrl) return showVideoReviewError('영상 링크 정보가 없습니다. 다시 입력해 주세요.', { reportable: false });
 
   const name = dom.videoReviewName.value.trim();
   const requiredIngredients = parseIngredientList(dom.videoReviewIngredients.value);
@@ -11249,9 +11329,9 @@ function handleVideoRecipeSave() {
   const category = dom.videoReviewCategory.value;
   const visibility = dom.videoVisibilityPublic.checked ? 'public' : 'private';
 
-  if (!name) return showVideoReviewError('레시피 이름을 입력해 주세요.');
-  if (!requiredIngredients.length) return showVideoReviewError('재료를 입력해 주세요.');
-  if (!steps.length) return showVideoReviewError('조리 순서를 입력해 주세요.');
+  if (!name) return showVideoReviewError('레시피 이름을 입력해 주세요.', { reportable: false });
+  if (!requiredIngredients.length) return showVideoReviewError('재료를 입력해 주세요.', { reportable: false });
+  if (!steps.length) return showVideoReviewError('조리 순서를 입력해 주세요.', { reportable: false });
 
   if (draft.dishNameMismatch && !draft._dishMismatchAcknowledged) {
     const detected = draft.sourceDetectedDishName || draft.detectedDishName || draft.videoTitle || '';
@@ -11260,7 +11340,11 @@ function handleVideoRecipeSave() {
       `영상은 "${detectedLabel}"(으)로 보이는데, 저장하려는 레시피는 "${name}"입니다. 그래도 저장할까요?`
     );
     if (!saveAnyway) {
-      return showVideoReviewError('영상 내용과 추출 결과가 달라 보여요. 레시피 이름을 확인하거나 다시 추출해 주세요.');
+      return showVideoReviewError('영상 내용과 추출 결과가 달라 보여요. 레시피 이름을 확인하거나 다시 추출해 주세요.', {
+        reportable: true,
+        errorCode: 'VIDEO_TITLE_MISMATCH',
+        sourceFeature: 'video-recipe-save',
+      });
     }
     draft._dishMismatchAcknowledged = true;
   }
@@ -11316,7 +11400,10 @@ function handleVideoRecipeSave() {
           message: err.message,
         });
       }
-      showVideoReviewError(err.message || '저장에 실패했습니다.');
+      showVideoReviewError(err.message || '저장에 실패했습니다.', {
+        errorCode: err?.code || 'video-recipe-save-failed',
+        sourceFeature: 'video-recipe-save',
+      });
     });
 }
 
@@ -11568,10 +11655,31 @@ function handleRecipeFormSubmit(e) {
         showToast(`${slotLabel}에 ${saved.name || data.name}을(를) 추가했어요`);
       }
     })
-    .catch((err) => showError(err.message || '레시피 저장에 실패했습니다.'));
+    .catch((err) => showError(err.message || '레시피 저장에 실패했습니다.', {
+      reportable: true,
+      errorCode: err?.code || 'manual-recipe-save-failed',
+      sourceFeature: 'manual-recipe-save',
+      problemType: 'recipe',
+    }));
 }
 
-function showError(msg) { dom.formError.textContent = msg; dom.formError.hidden = false; }
+function showError(msg, options = {}) {
+  if (!dom.formError) return;
+  dom.formError.textContent = msg;
+  dom.formError.hidden = false;
+  const reportable = options.reportable === true
+    || (options.reportable !== false && /실패|오류|못했어요|못했습니다/.test(String(msg || '')));
+  if (reportable) {
+    attachErrorReportButton(dom.formError, {
+      problemType: options.problemType || 'feature',
+      sourceFeature: options.sourceFeature || 'manual-recipe-form',
+      errorCode: options.errorCode || 'form-error',
+      userMessage: msg,
+    });
+  } else {
+    hideErrorReportButton(dom.formError);
+  }
+}
 
 const RECIPE_PHOTO_EMPTY_HTML = `
   <span class="recipe-photo-upload__icon" aria-hidden="true">
@@ -11607,7 +11715,7 @@ function updatePhotoPreview(src) {
 function handleRecipePhotoFile(file) {
   if (!file) return;
   if (!file.type?.startsWith('image/')) {
-    showError('이미지 파일만 업로드할 수 있어요.');
+    showError('이미지 파일만 업로드할 수 있어요.', { reportable: false });
     return;
   }
   compressImage(file)
@@ -11615,7 +11723,12 @@ function handleRecipePhotoFile(file) {
       state.formImage = dataUrl;
       updatePhotoPreview(dataUrl);
     })
-    .catch((err) => showError(err.message || '이미지를 불러오지 못했어요.'));
+    .catch((err) => showError(err.message || '이미지를 불러오지 못했어요.', {
+      reportable: true,
+      errorCode: err?.code || 'recipe-image-load-failed',
+      sourceFeature: 'manual-recipe-image',
+      problemType: 'ui',
+    }));
 }
 
 function initRecipePhotoUpload() {
@@ -12018,6 +12131,127 @@ const BUG_REPORT_FIELD_ERROR_IDS = {
 };
 
 let bugReportScreenshotFileName = '';
+/** @type {null | Record<string, string>} */
+let bugReportPrefill = null;
+/** @type {null | Record<string, string>} */
+let rememberedErrorReportContext = null;
+
+function resolveVideoExtractSourceFeature() {
+  const platform = String(state.videoLinkMeta?.platform || state.videoReviewDraft?.sourcePlatform || '').toLowerCase();
+  if (platform.includes('instagram')) return 'instagram-recipe-extract';
+  if (platform.includes('tiktok')) return 'tiktok-recipe-extract';
+  if (platform.includes('youtube')) return 'youtube-recipe-extract';
+  return 'video-recipe-extract';
+}
+
+function sanitizeBugReportContextValue(value, maxLen = 80) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .trim()
+    .slice(0, maxLen);
+}
+
+function rememberErrorReportContext(context = {}) {
+  rememberedErrorReportContext = {
+    problemType: sanitizeBugReportContextValue(context.problemType || context.type || 'feature', 32),
+    sourceFeature: sanitizeBugReportContextValue(context.sourceFeature, 80),
+    errorCode: sanitizeBugReportContextValue(context.errorCode, 80),
+    userMessage: sanitizeBugReportContextValue(context.userMessage, 200),
+    currentScreen: sanitizeBugReportContextValue(context.currentScreen, 80),
+    currentPath: sanitizeBugReportContextValue(context.currentPath, 200),
+    occurredAt: sanitizeBugReportContextValue(context.occurredAt || new Date().toISOString(), 40),
+  };
+  if (rememberedErrorReportContext.errorCode) {
+    pushAppErrorCode(rememberedErrorReportContext.errorCode);
+  }
+}
+
+function hideErrorReportButton(hostEl) {
+  if (!hostEl) return;
+  const wrap = hostEl.matches?.('.error-report-actions')
+    ? hostEl
+    : hostEl.querySelector?.(':scope > .error-report-actions')
+      || (hostEl.nextElementSibling?.classList?.contains('error-report-actions')
+        ? hostEl.nextElementSibling
+        : null);
+  if (wrap) wrap.hidden = true;
+}
+
+function attachErrorReportButton(hostEl, context = {}) {
+  if (!hostEl) return;
+  let wrap;
+  if (hostEl.matches?.('.error-report-actions')) {
+    wrap = hostEl;
+  } else if (hostEl.querySelector?.(':scope > .error-report-actions')) {
+    wrap = hostEl.querySelector(':scope > .error-report-actions');
+  } else if (hostEl.tagName === 'P' || hostEl.tagName === 'SPAN') {
+    wrap = hostEl.nextElementSibling?.classList?.contains('error-report-actions')
+      ? hostEl.nextElementSibling
+      : null;
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'error-report-actions';
+      hostEl.insertAdjacentElement('afterend', wrap);
+    }
+  } else {
+    wrap = hostEl.querySelector(':scope > .error-report-actions');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'error-report-actions';
+      hostEl.appendChild(wrap);
+    }
+  }
+
+  let btn = wrap.querySelector('.error-report-btn');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn--text error-report-btn';
+    btn.textContent = '문제 신고하기';
+    wrap.appendChild(btn);
+  }
+  wrap.hidden = false;
+  const ctx = {
+    problemType: context.problemType || 'feature',
+    sourceFeature: context.sourceFeature || '',
+    errorCode: context.errorCode || '',
+    userMessage: context.userMessage || '',
+    currentScreen: context.currentScreen || '',
+    currentPath: context.currentPath || '',
+    occurredAt: context.occurredAt || new Date().toISOString(),
+  };
+  hostEl._errorReportContext = ctx;
+  rememberErrorReportContext(ctx);
+  btn.onclick = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openBugReportFromError(hostEl._errorReportContext || ctx);
+  };
+}
+
+/**
+ * 오류 UI에서 기존 버그 신고 모달을 연다.
+ * @param {object} [context]
+ */
+function openBugReportFromError(context = {}) {
+  const merged = {
+    ...(rememberedErrorReportContext || {}),
+    ...(context || {}),
+  };
+  const userMessage = sanitizeBugReportContextValue(merged.userMessage, 200);
+  const seed = userMessage
+    ? `이 오류가 발생했어요:\n${userMessage}`
+    : '이 오류가 발생했어요:';
+  openBugReportModal({
+    type: merged.problemType || merged.type || 'feature',
+    screen: merged.currentScreen || '',
+    errorCode: merged.errorCode || '',
+    sourceFeature: merged.sourceFeature || '',
+    path: merged.currentPath || '',
+    occurredAt: merged.occurredAt || new Date().toISOString(),
+    description: seed,
+  });
+}
 
 function setBugReportError(message = '') {
   const el = document.getElementById('bug-report-error');
@@ -12119,18 +12353,46 @@ function resetBugReportForm() {
   updateBugReportDescriptionCount();
 }
 
-function openBugReportModal() {
+/**
+ * @param {object} [prefill]
+ */
+function openBugReportModal(prefill = null) {
   const modal = document.getElementById('bug-report-modal');
   if (!modal) return;
   resetBugReportForm();
-  const viewHint = state.profileReturnView || state.view || 'main';
-  const screenSelect = document.getElementById('bug-report-screen');
-  if (screenSelect) {
-    const label = BUG_REPORT_SCREEN_BY_VIEW[viewHint] || '기타';
-    if ([...screenSelect.options].some((opt) => opt.value === label)) {
-      screenSelect.value = label;
+
+  bugReportPrefill = prefill && typeof prefill === 'object' ? { ...prefill } : null;
+
+  const typeSelect = document.getElementById('bug-report-type');
+  if (typeSelect && bugReportPrefill?.type) {
+    const type = String(bugReportPrefill.type);
+    if ([...typeSelect.options].some((opt) => opt.value === type)) {
+      typeSelect.value = type;
     }
   }
+
+  const screenSelect = document.getElementById('bug-report-screen');
+  if (screenSelect) {
+    const preferred = String(bugReportPrefill?.screen || '').trim()
+      || BUG_REPORT_SCREEN_BY_VIEW[state.profileReturnView || state.view || 'main']
+      || '기타';
+    if ([...screenSelect.options].some((opt) => opt.value === preferred)) {
+      screenSelect.value = preferred;
+    } else {
+      screenSelect.value = '기타';
+    }
+  }
+
+  const description = document.getElementById('bug-report-description');
+  if (description && bugReportPrefill?.description != null) {
+    description.value = String(bugReportPrefill.description);
+    updateBugReportDescriptionCount();
+  }
+
+  if (bugReportPrefill?.errorCode) {
+    pushAppErrorCode(bugReportPrefill.errorCode);
+  }
+
   const replyEmail = document.getElementById('bug-report-reply-email');
   const authEmail = String(window.FirebaseServices?.auth?.currentUser?.email || '').trim();
   if (replyEmail && authEmail) replyEmail.value = authEmail;
@@ -12152,6 +12414,7 @@ function closeBugReportModal() {
   if (bugReportInFlight) return;
   modal.hidden = true;
   modal.setAttribute('aria-hidden', 'true');
+  bugReportPrefill = null;
   resetBugReportForm();
   updateBodyScrollLock();
 }
@@ -12226,15 +12489,25 @@ async function handleBugReportScreenshotChange(event) {
 function buildBugReportMeta() {
   const loggedIn = isLoggedInAppUser();
   const currentView = String(state.view || '');
+  const prefill = bugReportPrefill || {};
+  const errorCode = sanitizeBugReportContextValue(prefill.errorCode, 80);
+  const sourceFeature = sanitizeBugReportContextValue(prefill.sourceFeature, 80);
+  const codes = recentAppErrorCodes.slice(0, 5);
+  if (errorCode && !codes.includes(errorCode)) codes.unshift(errorCode);
   return {
     currentView,
-    path: String(location.pathname || '') + String(location.search || ''),
+    path: sanitizeBugReportContextValue(
+      prefill.path || (String(location.pathname || '') + String(location.search || '')),
+      200,
+    ),
     appVersion: String(window.APP_CONFIG?.runtime?.appVersion || ''),
     userAgent: String(navigator.userAgent || '').slice(0, 300),
-    occurredAt: new Date().toISOString(),
+    occurredAt: sanitizeBugReportContextValue(prefill.occurredAt || new Date().toISOString(), 40),
     loggedIn,
     uidHint: loggedIn ? uidHintForBugReport() : '',
-    recentErrorCodes: recentAppErrorCodes.slice(0, 5),
+    recentErrorCodes: codes.slice(0, 5),
+    sourceFeature,
+    errorCode,
   };
 }
 

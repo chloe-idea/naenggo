@@ -153,6 +153,8 @@ function validatePayload(body = {}) {
         ? meta.recentErrorCodes.map((c) => sanitizeText(c, 80)).filter(Boolean).slice(0, 5)
         : [],
       path: sanitizeText(meta.path, 200),
+      sourceFeature: sanitizeText(meta.sourceFeature, 80),
+      errorCode: sanitizeText(meta.errorCode, 80),
     },
   };
 }
@@ -174,6 +176,8 @@ function buildEmailText(report) {
     `발생 시각: ${report.meta.occurredAt || '-'}`,
     `로그인: ${report.meta.loggedIn ? '예' : '아니오'}`,
     `UID 힌트: ${report.meta.uidHint || '-'}`,
+    `기능(sourceFeature): ${report.meta.sourceFeature || '-'}`,
+    `오류 코드: ${report.meta.errorCode || '-'}`,
     `User-Agent: ${report.meta.userAgent || '-'}`,
     `최근 오류 코드: ${report.meta.recentErrorCodes.length ? report.meta.recentErrorCodes.join(', ') : '-'}`,
     '',

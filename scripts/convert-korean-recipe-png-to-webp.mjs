@@ -6,6 +6,7 @@
  * - 스크립트는 slug를 생성하지 않음 (recipe-143 / --152 등도 JSON에 있으면 그대로 사용)
  * - 매칭 우선순위: slug → id → title → alias
  * - 출력: public/images/recipes/{recipe.slug}.webp (q85)
+ * - 대상 .webp가 이미 있어도 source PNG/JPG가 있으면 항상 overwrite (skip 없음)
  * - 원본 파일 유지
  *
  * 사용법:
@@ -227,6 +228,7 @@ async function main() {
   console.log(`  ${RECIPES_JSON} (${recipes.length}개)`);
   console.log(`QUALITY: webp q${WEBP_QUALITY}`);
   console.log('NOTE: slug는 recipes.json 값을 그대로 사용합니다 (스크립트가 생성하지 않음).');
+  console.log('NOTE: 기존 {slug}.webp 가 있어도 source가 있으면 항상 overwrite 합니다.');
   console.log('');
 
   let converted = 0;
@@ -316,20 +318,16 @@ async function main() {
     console.log(`output: ${outRel}`);
 
     try {
+      // 기존 {slug}.webp 존재 여부와 무관하게 항상 변환·overwrite
       const st = await convertOne(srcPath, outPath);
 
       if (existed) {
         overwritten += 1;
-        console.log('[OVERWRITE]');
-        console.log(`title: ${recipe.title}`);
-        console.log(`slug: ${slug}`);
-        console.log(`source: ${srcPath}`);
-        console.log(`destination: ${outPath}`);
-        console.log(`old size: ${formatBytes(oldStat.size)} (${oldStat.size} bytes)`);
-        console.log(`new size: ${formatBytes(st.size)} (${st.size} bytes)`);
+        console.log(`[OVERWRITE] ${displayName} → ${outName}`);
+        console.log(`old size: ${formatBytes(oldStat.size)} → new size: ${formatBytes(st.size)} (${st.size} bytes)`);
         console.log(`mtime: ${st.mtime.toISOString()}`);
       } else {
-        console.log(`[OK] size=${st.size} mtime=${st.mtime.toISOString()}`);
+        console.log(`[OK] ${displayName} → ${outName} size=${st.size} mtime=${st.mtime.toISOString()}`);
       }
 
       converted += 1;

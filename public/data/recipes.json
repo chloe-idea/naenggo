@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-10",
+  "updatedAt": "2026-08-13",
   "recipes": [
     {
       "id": "kimchi-stew",
@@ -3794,7 +3794,7 @@
       "id": "onion-stir-fry",
       "slug": "onion-stir-fry",
       "title": "양파볶음",
-      "image": "images/recipes/onion-stir-fry.webp",
+      "image": null,
       "cuisine": "중식",
       "category": "chinese",
       "dishType": "stir-fry",
@@ -4334,7 +4334,7 @@
       "id": "aglio-olio",
       "slug": "aglio-olio",
       "title": "알리오 올리오",
-      "image": "images/recipes/aglio-olio.webp",
+      "image": null,
       "cuisine": "양식",
       "category": "western",
       "dishType": "default",
@@ -4416,7 +4416,7 @@
       "id": "--153",
       "slug": "--153",
       "title": "봉골레 파스타",
-      "image": "images/recipes/--153.webp",
+      "image": null,
       "cuisine": "양식",
       "category": "western",
       "dishType": "noodle",
@@ -6682,7 +6682,7 @@
         "베트남",
         "면요리"
       ],
-      "image": "images/recipes/bun-bo-hue.webp",
+      "image": null,
       "substitutions": []
     },
     {

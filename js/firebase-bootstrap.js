@@ -172,6 +172,15 @@ function showAuthError(formatted) {
 
   el.hidden = false;
   el.textContent = message;
+  if (typeof window.attachErrorReportButton === 'function') {
+    window.attachErrorReportButton(el, {
+      problemType: 'auth',
+      sourceFeature: 'auth-login',
+      errorCode: formatted?.code || 'auth-error',
+      userMessage: message,
+      currentScreen: '로그인/계정',
+    });
+  }
   if (typeof window.syncLoginPromptError === 'function') {
     window.syncLoginPromptError(message);
   }
@@ -182,6 +191,9 @@ function clearAuthError() {
   if (!el) return;
   el.hidden = true;
   el.textContent = '';
+  if (typeof window.hideErrorReportButton === 'function') {
+    window.hideErrorReportButton(el);
+  }
   el.classList.remove('auth-bar__error--domain');
 }
 
@@ -1379,6 +1391,19 @@ function setFamilyError(message = '') {
   if (!el) return;
   el.textContent = message;
   el.hidden = !message;
+  if (!message) {
+    if (typeof window.hideErrorReportButton === 'function') window.hideErrorReportButton(el);
+    return;
+  }
+  if (typeof window.attachErrorReportButton === 'function') {
+    window.attachErrorReportButton(el, {
+      problemType: 'feature',
+      sourceFeature: 'family-sharing',
+      errorCode: 'family-sharing-error',
+      userMessage: message,
+      currentScreen: '가족 공유',
+    });
+  }
 }
 
 function escapeFamilyHtml(value) {

@@ -3796,7 +3796,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "onion-stir-fry",
     "slug": "onion-stir-fry",
     "title": "양파볶음",
-    "image": "images/recipes/onion-stir-fry.webp",
+    "image": null,
     "cuisine": "중식",
     "category": "chinese",
     "dishType": "stir-fry",
@@ -4336,7 +4336,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "aglio-olio",
     "slug": "aglio-olio",
     "title": "알리오 올리오",
-    "image": "images/recipes/aglio-olio.webp",
+    "image": null,
     "cuisine": "양식",
     "category": "western",
     "dishType": "default",
@@ -4418,7 +4418,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "--153",
     "slug": "--153",
     "title": "봉골레 파스타",
-    "image": "images/recipes/--153.webp",
+    "image": null,
     "cuisine": "양식",
     "category": "western",
     "dishType": "noodle",
@@ -6684,7 +6684,7 @@ window.BUILTIN_RECIPE_RAW = [
       "베트남",
       "면요리"
     ],
-    "image": "images/recipes/bun-bo-hue.webp",
+    "image": null,
     "substitutions": []
   },
   {

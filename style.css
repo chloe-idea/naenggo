@@ -7132,13 +7132,20 @@ body.home-search-keyboard-active .home-search-dock {
 
 .video-form-error-card {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   padding: 0.75rem 0.875rem;
   background: #fff5f5;
   border: 1px solid rgba(192, 57, 43, 0.25);
   border-radius: var(--radius-md);
+}
+
+.video-form-error-card__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 .video-form-error-card__icon {
@@ -7152,6 +7159,52 @@ body.home-search-keyboard-active .home-search-dock {
   font-size: 0.8125rem;
   line-height: 1.45;
   color: #c0392b;
+}
+
+.btn--text {
+  padding: 0.25rem 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+.btn--text:hover,
+.btn--text:focus-visible {
+  color: var(--color-primary);
+  outline: none;
+}
+
+.error-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.15rem;
+}
+
+.error-report-actions[hidden] {
+  display: none !important;
+}
+
+.error-report-actions .error-report-btn {
+  margin: 0;
+}
+
+.auth-bar__error .error-report-actions,
+.profile-menu__error .error-report-actions,
+.form-error .error-report-actions,
+.login-prompt__error .error-report-actions {
+  margin-top: 0.35rem;
+}
+
+.recipe-detail-page__state .error-report-actions {
+  justify-content: center;
+  margin-top: 0.75rem;
 }
 
 .video-extract-actions {
