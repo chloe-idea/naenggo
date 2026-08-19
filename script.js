@@ -54,6 +54,14 @@ const CATEGORY_MAP = {
   chinese: { cuisine: 'chinese', tags: ['중식'], dietTags: [] },
   diet: { cuisine: 'korean', tags: ['다이어트'], dietTags: ['diet'] },
   'high-protein': { cuisine: 'korean', tags: ['고단백'], dietTags: ['high-protein'] },
+  // beginner-friendly JSON 확장 category — 미등록 시에도 crash 없이 태그 fallback
+  mexican: { cuisine: 'mexican', tags: ['멕시칸'], dietTags: [] },
+  thai: { cuisine: 'thai', tags: ['태국'], dietTags: [] },
+  vietnamese: { cuisine: 'vietnamese', tags: ['베트남'], dietTags: [] },
+  'southeast-asian': { cuisine: 'southeast-asian', tags: ['동남아'], dietTags: [] },
+  taiwanese: { cuisine: 'taiwanese', tags: ['대만'], dietTags: [] },
+  fusion: { cuisine: 'fusion', tags: ['퓨전'], dietTags: [] },
+  indonesian: { cuisine: 'indonesian', tags: ['인도네시아'], dietTags: [] },
 };
 
 const FILTERS = [
@@ -2061,9 +2069,17 @@ const StorageAdapter = {
 
 // ===== Dish Type Placeholders =====
 const DishTypeService = {
-  infer(name, explicitType) {
+  knownTypes() {
     const svgs = typeof DISH_PLACEHOLDER_SVGS !== 'undefined' ? DISH_PLACEHOLDER_SVGS : {};
-    if (explicitType && svgs[explicitType]) return explicitType;
+    return svgs;
+  },
+  isKnownType(type) {
+    const key = String(type || '').trim();
+    if (!key) return false;
+    return Boolean(this.knownTypes()[key]);
+  },
+  infer(name, explicitType) {
+    if (this.isKnownType(explicitType)) return explicitType;
     const n = name || '';
     const rules = [
       ['fried-rice', /볶음밥/],
@@ -2085,12 +2101,16 @@ const DishTypeService = {
     }
     return 'default';
   },
+  /** UI용 — 알 수 없는 dishType은 default 로 fallback */
   resolve(recipe) {
-    return recipe.dishType || this.infer(recipe.name);
+    const explicit = recipe?.dishType;
+    if (this.isKnownType(explicit)) return explicit;
+    const inferred = this.infer(recipe?.name || recipe?.title || '', explicit);
+    return this.isKnownType(inferred) ? inferred : 'default';
   },
   placeholderSVG(recipe, sizeClass = '') {
     const type = this.resolve(recipe);
-    const svgs = typeof DISH_PLACEHOLDER_SVGS !== 'undefined' ? DISH_PLACEHOLDER_SVGS : {};
+    const svgs = this.knownTypes();
     const svg = svgs[type] || svgs.default || '';
     if (!sizeClass) return svg;
     return svg.replace('class="recipe-placeholder-svg"', `class="recipe-placeholder-svg ${sizeClass}"`);
@@ -2098,7 +2118,7 @@ const DishTypeService = {
   label(recipe) {
     const type = this.resolve(recipe);
     const labels = typeof DISH_TYPE_LABELS !== 'undefined' ? DISH_TYPE_LABELS : {};
-    return labels[type] || '요리';
+    return labels[type] || labels.default || '요리';
   },
 };
 
@@ -2244,7 +2264,14 @@ function normalizeBuiltinVariations(rawVariations) {
       : [];
     const ingredient = String(v?.ingredient || '').trim()
       || (ingredients.length === 1 ? ingredients[0] : '');
+    const instructionsOverride = Array.isArray(v?.instructionsOverride)
+      ? v.instructionsOverride.map((s) => String(s || '').trim()).filter(Boolean)
+      : [];
+    const instructionDetailsOverride = Array.isArray(v?.instructionDetailsOverride)
+      ? v.instructionDetailsOverride.map(normalizeInstructionDetail).filter(Boolean)
+      : [];
     return {
+      id: String(v?.id || '').trim(),
       ingredient,
       ingredients: ingredients.length
         ? ingredients
@@ -2253,11 +2280,195 @@ function normalizeBuiltinVariations(rawVariations) {
       tip: String(v?.tip || '').trim(),
       addSteps,
       stepOps,
+      instructionsOverride,
+      instructionDetailsOverride,
+      ingredientChanges: v?.ingredientChanges && typeof v.ingredientChanges === 'object'
+        ? v.ingredientChanges
+        : null,
       absorbRecipeIds: Array.isArray(v?.absorbRecipeIds)
         ? v.absorbRecipeIds.map((id) => toBuiltinRuntimeId(id)).filter(Boolean)
         : [],
     };
   }).filter((v) => v.variantName && getVariationTriggerIngredients(v).length);
+}
+
+function normalizeIngredientDetail(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    const name = raw.trim();
+    return name ? { name, amount: null, unit: '', prep: '' } : null;
+  }
+  if (typeof raw !== 'object') return null;
+  const name = String(raw.name || '').trim();
+  if (!name) return null;
+  return {
+    name,
+    amount: raw.amount == null || raw.amount === '' ? null : raw.amount,
+    unit: String(raw.unit || '').trim(),
+    prep: raw.prep == null || raw.prep === '' ? '' : String(raw.prep).trim(),
+    matchRequired: raw.matchRequired !== false,
+  };
+}
+
+function normalizeInstructionDetail(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    return text ? { title: '', text } : null;
+  }
+  if (typeof raw !== 'object') return null;
+  const title = String(raw.title || '').trim();
+  const text = String(raw.text || raw.instruction || '').trim();
+  if (!title && !text) return null;
+  return {
+    title,
+    text,
+    heat: String(raw.heat || '').trim(),
+    timeMinutes: Number.isFinite(Number(raw.timeMinutes)) ? Number(raw.timeMinutes) : null,
+  };
+}
+
+/** 표시용 소수 → 분수 (데이터 amount는 변경하지 않음) */
+function formatRecipeAmountForDisplay(amount) {
+  if (amount == null || amount === '') return '';
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return String(amount);
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const whole = Math.floor(abs + 1e-9);
+  const frac = abs - whole;
+  const pairs = [
+    [0.25, '1/4'],
+    [1 / 3, '1/3'],
+    [0.33, '1/3'],
+    [0.34, '1/3'],
+    [0.5, '1/2'],
+    [2 / 3, '2/3'],
+    [0.66, '2/3'],
+    [0.67, '2/3'],
+    [0.75, '3/4'],
+  ];
+  let fracLabel = '';
+  for (const [val, label] of pairs) {
+    if (Math.abs(frac - val) < 0.02) {
+      fracLabel = label;
+      break;
+    }
+  }
+  if (fracLabel) {
+    if (whole === 0) return `${sign}${fracLabel}`;
+    return `${sign}${whole} ${fracLabel}`;
+  }
+  if (Math.abs(abs - Math.round(abs)) < 1e-9) return `${sign}${Math.round(abs)}`;
+  const trimmed = String(Number(abs.toFixed(2)));
+  return `${sign}${trimmed}`;
+}
+
+function formatIngredientDetailDisplay(detail) {
+  if (detail == null) return '';
+  if (typeof detail === 'string') return formatIngredientDisplay(detail);
+  const name = String(detail.name || '').trim();
+  if (!name) return '';
+  const unit = String(detail.unit || '').trim();
+  const prep = String(detail.prep || '').trim();
+  const amountStr = formatRecipeAmountForDisplay(detail.amount);
+  let qty = '';
+  if (amountStr !== '') qty = `${amountStr}${unit}`;
+  else if (unit) qty = unit;
+  let out = name;
+  if (qty) out += ` ${qty}`;
+  if (prep) out += ` (${prep})`;
+  return out;
+}
+
+function formatInstructionDetailDisplay(detail) {
+  if (detail == null) return '';
+  if (typeof detail === 'string') return detail.trim();
+  // 부제/title을 UI에 붙이지 않음 — text만 사용
+  return String(detail.text || detail.instruction || '').trim();
+}
+
+/** variation.ingredientChanges → 상세 재료 목록에 반영 (표시용 복사본만) */
+function applyIngredientChangesToDetails(details, changes) {
+  if (!changes || typeof changes !== 'object') return details;
+  let list = (Array.isArray(details) ? details : []).map((d) => ({ ...d }));
+  const removeSet = new Set(
+    (Array.isArray(changes.remove) ? changes.remove : [])
+      .map((n) => MatchService.normalize(typeof n === 'string' ? n : n?.name))
+      .filter(Boolean),
+  );
+  if (removeSet.size) {
+    list = list.filter((d) => !removeSet.has(MatchService.normalize(d.name)));
+  }
+  for (const mod of (Array.isArray(changes.modify) ? changes.modify : [])) {
+    const key = MatchService.normalize(mod?.name);
+    if (!key) continue;
+    const idx = list.findIndex((d) => MatchService.normalize(d.name) === key);
+    if (idx < 0) continue;
+    list[idx] = {
+      ...list[idx],
+      amount: mod.amount != null && mod.amount !== '' ? mod.amount : list[idx].amount,
+      unit: mod.unit != null && String(mod.unit).trim() !== '' ? String(mod.unit).trim() : list[idx].unit,
+      prep: mod.prep != null ? String(mod.prep || '').trim() : list[idx].prep,
+    };
+  }
+  for (const add of (Array.isArray(changes.add) ? changes.add : [])) {
+    const detail = normalizeIngredientDetail(typeof add === 'string' ? { name: add } : add);
+    if (!detail) continue;
+    const key = MatchService.normalize(detail.name);
+    if (list.some((d) => MatchService.normalize(d.name) === key)) continue;
+    list.push(detail);
+  }
+  return list;
+}
+
+/** 상세 화면용 재료 표시 목록 — ingredientDetails 우선, 없으면 ingredients */
+function getRecipeDetailIngredientDisplays(recipe, activeVariation = null) {
+  let details = Array.isArray(recipe?.ingredientDetails)
+    ? recipe.ingredientDetails.map((d) => ({ ...d }))
+    : [];
+  if (!details.length && Array.isArray(recipe?.ingredients)) {
+    details = recipe.ingredients.map((ing) => normalizeIngredientDetail(
+      typeof ing === 'string' ? { name: getIngredientMatchName(ing) || formatIngredientDisplay(ing) } : ing,
+    )).filter(Boolean);
+  }
+  if (activeVariation?.ingredientChanges) {
+    details = applyIngredientChangesToDetails(details, activeVariation.ingredientChanges);
+  }
+  return details.map((d) => ({
+    matchName: String(d.name || '').trim(),
+    display: formatIngredientDetailDisplay(d),
+  })).filter((x) => x.matchName && x.display);
+}
+
+/**
+ * 상세 조리 순서 — recipe.instructions 사용 (부제 생성 금지).
+ * variation.instructionsOverride 우선, 없으면 stepOps, 없으면 기본 instructions.
+ */
+function getRecipeDetailSteps(recipe, activeVariation = null) {
+  if (activeVariation) {
+    const textOverride = Array.isArray(activeVariation.instructionsOverride)
+      ? activeVariation.instructionsOverride
+      : [];
+    if (textOverride.length) {
+      return textOverride
+        .map((text) => ({ text: String(text || '').trim(), fromVariation: true }))
+        .filter((s) => s.text);
+    }
+  }
+
+  const baseStepTexts = (
+    Array.isArray(recipe?.instructions) && recipe.instructions.length
+      ? recipe.instructions
+      : (Array.isArray(recipe?.steps) ? recipe.steps : [])
+  )
+    .map((s) => String(s || '').trim())
+    .filter(Boolean);
+
+  if (activeVariation) {
+    return applyRecipeVariationSteps(baseStepTexts, activeVariation);
+  }
+  return baseStepTexts.map((text) => ({ text, fromVariation: false }));
 }
 
 function seed(id, data) {
@@ -2268,12 +2479,34 @@ function seed(id, data) {
   const cookTime = Number(data.cookTime ?? data.cookingTime) || 20;
   const tags = Array.isArray(data.tags) && data.tags.length ? data.tags : [...cat.tags];
   const baseRecipeId = data.baseRecipeId ? toBuiltinRuntimeId(data.baseRecipeId) : null;
+  const ingredientDetails = Array.isArray(data.ingredientDetails)
+    ? data.ingredientDetails.map(normalizeIngredientDetail).filter(Boolean)
+    : [];
+  const instructionDetails = Array.isArray(data.instructionDetails)
+    ? data.instructionDetails.map(normalizeInstructionDetail).filter(Boolean)
+    : [];
+  const optionalIngredients = Array.isArray(data.optionalIngredients)
+    ? data.optionalIngredients.map((ing) => {
+      if (typeof ing === 'string') return ing.trim();
+      return normalizeIngredientDetail(ing);
+    }).filter((ing) => {
+      if (!ing) return false;
+      if (typeof ing === 'string') return Boolean(ing);
+      return Boolean(String(ing.name || '').trim());
+    })
+    : [];
+
   return {
     id: `builtin-${slug}`,
     slug,
     name,
     ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
-    optionalIngredients: Array.isArray(data.optionalIngredients) ? data.optionalIngredients : [],
+    optionalIngredients,
+    ingredientDetails,
+    instructionDetails,
+    instructions: Array.isArray(data.instructions) ? data.instructions : steps,
+    servings: data.servings ?? null,
+    measurementStatus: data.measurementStatus || null,
     variations: normalizeBuiltinVariations(data.variations),
     hiddenAsVariation: Boolean(data.hiddenAsVariation),
     baseRecipeId,
@@ -6931,7 +7164,7 @@ function bindRecipeCards(container, results) {
 
 // ===== Render: Home =====
 function homeHeroImageHTML(recipe) {
-  const dishType = recipe.dishType || DishTypeService.infer(recipe.name);
+  const dishType = DishTypeService.resolve(recipe);
   const hasPhoto = typeof RecipeImageService !== 'undefined' && RecipeImageService.pickPhoto(recipe);
   if (hasPhoto) {
     return `<div class="home-today-hero__image-frame">${RecipeImageService.renderImg(recipe, { variant: 'home-hero', alt: '' })}</div>`;
@@ -10499,15 +10732,22 @@ function renderRecipeDetailUnavailable(message = '레시피를 찾을 수 없습
 }
 
 /**
- * 선택 재료 목록 HTML — 모든 레시피 공통, recipe.optionalIngredients 데이터 기반.
- * 일치율/부족 재료/추천 점수에는 포함하지 않음 (표시·구매 편의만).
+ * 선택 재료 목록 HTML — recipe.optionalIngredients 표시 전용.
+ * 일치율/부족 재료/추천/장보기 자동추가에는 포함하지 않음.
  */
 function recipeOptionalIngredientsHTML(recipe, pantryNames = []) {
   if (!Array.isArray(recipe?.optionalIngredients) || !recipe.optionalIngredients.length) return '';
   const names = Array.isArray(pantryNames) ? pantryNames : [];
   const items = recipe.optionalIngredients.map((ing) => {
-    const display = formatIngredientDisplay(ing);
-    const matchName = getIngredientMatchName(ing) || display;
+    const detail = typeof ing === 'string'
+      ? normalizeIngredientDetail({ name: ing })
+      : (ing && typeof ing === 'object' ? normalizeIngredientDetail(ing) : null);
+    const display = detail
+      ? formatIngredientDetailDisplay(detail)
+      : formatIngredientDisplay(ing);
+    const matchName = (detail?.name && String(detail.name).trim())
+      || getIngredientMatchName(ing)
+      || display;
     if (!matchName) return '';
     const owned = isAlwaysAvailableIngredient(matchName)
       ? '기본 재료'
@@ -10532,34 +10772,63 @@ function recipeOptionalIngredientsHTML(recipe, pantryNames = []) {
     </div>`;
 }
 
+function recipeDetailIngredientsHTML(recipe, analysis, hasPantry, activeVariation = null) {
+  const displays = getRecipeDetailIngredientDisplays(recipe, activeVariation);
+  if (!hasPantry) {
+    return `<ul class="ingredient-list">${displays.map(({ matchName, display }) => `
+      <li class="ingredient-list__item ingredient-list__item--buy">
+        <span>${esc(display)}</span>
+        ${AffiliateService.buyButtonHTML(matchName, { compact: true })}
+      </li>`).join('')}</ul>`;
+  }
+
+  // 매칭은 ingredients 기준(analysis), 표시 문구만 ingredientDetails(+variation 계량)로 보강
+  const byNorm = new Map();
+  for (const item of displays) {
+    byNorm.set(MatchService.normalize(item.matchName), item.display);
+  }
+  const enrichLabel = (label) => {
+    const matchName = getIngredientMatchName(label) || String(label || '').trim();
+    return byNorm.get(MatchService.normalize(matchName)) || formatIngredientDisplay(label);
+  };
+  const enriched = {
+    ...analysis,
+    exact: (analysis.exact || []).map((e) => ({ ...e, required: enrichLabel(e.required) })),
+    substituted: (analysis.substituted || []).map((s) => ({ ...s, required: enrichLabel(s.required) })),
+    missing: (analysis.missing || []).map((m) => enrichLabel(m)),
+  };
+  return MatchService.renderMatchDetailHTML(enriched);
+}
+
+function recipeDetailServingsLabelHTML(recipe) {
+  const n = Number(recipe?.servings);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const label = Number.isInteger(n) ? String(n) : String(n);
+  return `<span class="recipe-detail__optional-hint">· ${esc(label)}인분</span>`;
+}
+
 function recipeDetailContentHTML(recipe, analysis) {
   const names = RecommendationService.getPantryNames();
   const hasPantry = names.length > 0;
   const owned = RecipeRepository.isOwned(recipe);
   const activeVariation = getActiveRecipeVariation(recipe);
   const displayTitle = activeVariation?.variantName || recipe.name;
-  const displaySteps = applyRecipeVariationSteps(recipe.steps || [], activeVariation);
+  const displaySteps = getRecipeDetailSteps(recipe, activeVariation);
   const substitutionAdvices = analysis.substitutionAdvices?.length
     ? analysis.substitutionAdvices
     : MatchService.getSubstitutionAdvices(hasPantry ? analysis.missing : recipe.ingredients);
-  const ingredientsHtml = hasPantry
-    ? MatchService.renderMatchDetailHTML(analysis)
-    : `<ul class="ingredient-list">${(recipe.ingredients || []).map((ing) => {
-      const name = getIngredientMatchName(ing);
-      return `<li class="ingredient-list__item ingredient-list__item--buy">
-        <span>${esc(formatIngredientDisplay(ing))}</span>
-        ${AffiliateService.buyButtonHTML(name, { compact: true })}
-      </li>`;
-    }).join('')}</ul>`;
+  const ingredientsHtml = recipeDetailIngredientsHTML(recipe, analysis, hasPantry, activeVariation);
   const optionalIngredientsHtml = recipeOptionalIngredientsHTML(recipe, names);
+  const detailIngredientCount = getRecipeDetailIngredientDisplays(recipe, activeVariation).length;
   const showAffiliateDisclosure = AffiliateService.isEnabled() && (
     (hasPantry && analysis.missing?.length > 0)
     || (optionalIngredientsHtml.includes('btn-buy'))
-    || (!hasPantry && (recipe.ingredients || []).length > 0)
+    || (!hasPantry && detailIngredientCount > 0)
   );
   const stepsTitleExtra = activeVariation
     ? `<span class="recipe-detail__variation-step-label">${esc(activeVariation.variantName)} 방식</span>`
     : '';
+  const servingsLabel = recipeDetailServingsLabelHTML(recipe);
 
   // hero 이미지는 항상 원본 recipe (id/slug/image). variation merge로 덮어쓰지 않음.
   const heroRecipe = recipe;
@@ -10587,7 +10856,7 @@ function recipeDetailContentHTML(recipe, analysis) {
           <div class="stat"><span class="stat__label">일치율</span><span class="stat__value">${analysis.matchPercent}%</span></div>
         </div>
         <section class="recipe-detail__section">
-          <h3 class="recipe-detail__section-title">재료 ${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${analysis.matchPercent}%</span>` : ''}</h3>
+          <h3 class="recipe-detail__section-title">재료 ${servingsLabel}${hasPantry ? `<span class="recipe-detail__match-rate">일치율 ${analysis.matchPercent}%</span>` : ''}</h3>
           ${ingredientsHtml}
           ${optionalIngredientsHtml}
           ${activeVariation ? `<p class="recipe-variation-extra-ing">함께 넣을 재료: <strong>${esc(getVariationTriggerIngredients(activeVariation).join(', ') || activeVariation.ingredient || '')}</strong></p>` : ''}
