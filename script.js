@@ -183,8 +183,10 @@ function formatIngredientDisplay(ing) {
     if (ing.optional && !/\(선택\)/.test(ing.originalText)) return `${ing.originalText} (선택)`;
     return ing.originalText;
   }
-  const amountPart = ing.amount
-    ? (ing.unit ? `${ing.amount}${ing.unit}` : String(ing.amount))
+  const hasAmount = ing.amount != null && ing.amount !== '';
+  const amountStr = hasAmount ? formatRecipeAmountForDisplay(ing.amount) : '';
+  const amountPart = amountStr
+    ? (ing.unit ? `${amountStr}${ing.unit}` : amountStr)
     : (ing.unit || '');
   const alternativeText = Array.isArray(ing.alternatives) && ing.alternatives.length
     ? ` (${ing.alternatives.join(', ')})`
@@ -2328,7 +2330,7 @@ function normalizeInstructionDetail(raw) {
   };
 }
 
-/** 표시용 소수 → 분수 (데이터 amount는 변경하지 않음) */
+/** 표시용 소수 → Unicode 분수 (데이터 amount는 변경하지 않음) */
 function formatRecipeAmountForDisplay(amount) {
   if (amount == null || amount === '') return '';
   const n = Number(amount);
@@ -2337,27 +2339,22 @@ function formatRecipeAmountForDisplay(amount) {
   const abs = Math.abs(n);
   const whole = Math.floor(abs + 1e-9);
   const frac = abs - whole;
+  // 정확히 ¼·½·¾만 Unicode 분수. 그 외(0.3 등)는 decimal 유지. 정수와 분수 사이 공백 없음.
   const pairs = [
-    [0.25, '1/4'],
-    [1 / 3, '1/3'],
-    [0.33, '1/3'],
-    [0.34, '1/3'],
-    [0.5, '1/2'],
-    [2 / 3, '2/3'],
-    [0.66, '2/3'],
-    [0.67, '2/3'],
-    [0.75, '3/4'],
+    [0.25, '¼'],
+    [0.5, '½'],
+    [0.75, '¾'],
   ];
   let fracLabel = '';
   for (const [val, label] of pairs) {
-    if (Math.abs(frac - val) < 0.02) {
+    if (Math.abs(frac - val) < 1e-6) {
       fracLabel = label;
       break;
     }
   }
   if (fracLabel) {
     if (whole === 0) return `${sign}${fracLabel}`;
-    return `${sign}${whole} ${fracLabel}`;
+    return `${sign}${whole}${fracLabel}`;
   }
   if (Math.abs(abs - Math.round(abs)) < 1e-9) return `${sign}${Math.round(abs)}`;
   const trimmed = String(Number(abs.toFixed(2)));
