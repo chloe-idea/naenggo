@@ -67,9 +67,9 @@
       isVercel,
       hostname,
       origin,
-      appVersion: '2026.08.16',
+      appVersion: '2026.08.23',
       /** 레시피 이미지 URL cache-bust (?v=). 렌더링 시에만 사용. 파일명/데이터 경로는 변경하지 않음. */
-      recipeImageVersion: '20260816',
+      recipeImageVersion: '20260823-1',
     },
   };
 })();
