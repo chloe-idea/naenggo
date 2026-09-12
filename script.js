@@ -4983,7 +4983,15 @@ const MatchService = {
       : 100;
 
     const substitutionAdvices = this.getSubstitutionAdvices(missing);
-    return { exact, substituted, missing, matched, matchedPantryNames, matchPercent, substitutionAdvices };
+    // 조리 가능 여부 — missing만 기준 (대체·alwaysAvailable로 충족된 경우 포함). matchPercent와 분리.
+    const canCookNow = missing.length === 0;
+    return { exact, substituted, missing, matched, matchedPantryNames, matchPercent, substitutionAdvices, canCookNow };
+  },
+  /** 바로 가능 판정 — matchPercent와 독립. optional은 analyze에서 이미 missing 제외. */
+  canCookNow(analysisOrResult) {
+    if (!analysisOrResult) return false;
+    if (typeof analysisOrResult.canCookNow === 'boolean') return analysisOrResult.canCookNow;
+    return !Array.isArray(analysisOrResult.missing) || analysisOrResult.missing.length === 0;
   },
   /** variation 재료는 매칭률에 넣지 않고, 보유 시에만 tip용으로 반환.
    *  trigger: ingredient(단일) 또는 ingredients[](OR — 하나라도 보유 시 매칭) */
@@ -5134,7 +5142,7 @@ const RecommendationService = {
     return ['snack', 'toast', 'dessert'].includes(recipe.dishType) || /간식|토스트|프렌치토스트|감자전|떡볶이|핫도그|맛탕/.test(recipe.name);
   },
   reasonFor(result) {
-    if (result.missing.length === 0 && result.substituted.length === 0) return '🔥 바로 가능';
+    if (MatchService.canCookNow(result)) return '🔥 바로 가능';
     const missingNames = getUniqueIngredientDisplayNames(result.missing);
     if (missingNames.length === 1) return `🛒 ${missingNames[0]}만 있으면 가능`;
     if (missingNames.length === 2) {
@@ -5247,7 +5255,7 @@ const RecommendationService = {
     let count = 0;
     for (const recipe of recipes) {
       const analysis = MatchService.analyze(names, recipe.ingredients);
-      if (analysis.missing.length === 0 && analysis.substituted.length === 0) count += 1;
+      if (MatchService.canCookNow(analysis)) count += 1;
     }
     return count;
   },
@@ -5299,7 +5307,7 @@ const RecommendationService = {
     if (!activeFilters?.size) return true;
     const recipe = result.recipe;
     for (const filter of activeFilters) {
-      if (filter === 'available' && !(result.missing.length === 0 && result.substituted.length === 0)) return false;
+      if (filter === 'available' && !MatchService.canCookNow(result)) return false;
       if (filter === 'expiring' && result.expiryBoost <= 0) return false;
       if (filter === 'one-missing' && result.missing.length !== 1) return false;
       if (filter === 'high-protein' && !this.isHighProtein(recipe)) return false;

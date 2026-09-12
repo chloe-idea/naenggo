@@ -1849,17 +1849,14 @@ body.view--calendar .calendar-view:not([hidden]) {
   gap: 1.5rem; /* ~24px section gap */
   background: #fff;
   padding-top: 0.75rem; /* header와의 간격 12px (헤더 padding-bottom 포함 시 ~16px) */
-  /* .main의 --tab-bar-space 위에, floating search 높이만큼 추가 예약 */
-  padding-bottom: var(--home-search-reserved-space);
-  transition: padding-bottom 0.25s ease;
+  /*
+   * 하단 여백: .main 의 --tab-bar-space 가 탭바 겹침을 이미 처리.
+   * 검색은 home-search-dock--inline(문서 흐름)이므로 floating 예약 패딩을 두지 않음.
+   */
+  padding-bottom: 0.75rem; /* 12px — 마지막 카드 ↔ 탭바 클리어런스 위 최소 여백 */
   --color-primary: var(--color-primary-home);
   overflow-x: hidden;
   max-width: 100%;
-}
-
-body.home-search-filter-open #view-main:not([hidden]),
-body.home-search-expanded #view-main:not([hidden]) {
-  padding-bottom: var(--home-search-expanded-reserved);
 }
 
 body.view--main .header {
@@ -3375,6 +3372,11 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 /* ===== 내 레시피 페이지 섹션 헤더 / 정렬 ===== */
+#view-my-recipes {
+  /* 홈/식단과 동일: .main 탭바 클리어런스 위 최소 여백 12px */
+  padding-bottom: 0.75rem;
+}
+
 #view-my-recipes .section--my-recipes-top {
   margin-bottom: 0.25rem;
 }
@@ -8754,7 +8756,8 @@ body.home-search-keyboard-active .home-search-dock {
 }
 
 #view-planner {
-  padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
+  /* .main 의 --tab-bar-space 가 탭바(+safe-area) 클리어런스. 추가 120px는 중복이므로 최소 여백만. */
+  padding-bottom: 0.75rem; /* 12px */
 }
 
 .planner-grid {
