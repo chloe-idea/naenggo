@@ -19,7 +19,7 @@ function getRecipeImageVersion() {
     || window.APP_CONFIG?.runtime?.appVersion;
   const raw = String(fromConfig || '20260912').trim();
   const digits = raw.replace(/\D/g, '');
-  return digits || '20260912';
+  return digits || '202609122';
 }
 
 /** public/images/recipes 에 실제로 있는 파일 (default 제외) */

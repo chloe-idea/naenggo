@@ -12543,7 +12543,7 @@ async function registerServiceWorker() {
   };
 
   try {
-    const reg = await navigator.serviceWorker.register('./sw.js?v=59');
+    const reg = await navigator.serviceWorker.register('./sw.js?v=60');
     reg.update();
     activateWaitingWorker(reg);
     reg.addEventListener('updatefound', () => {

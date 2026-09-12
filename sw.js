@@ -2,7 +2,7 @@
  * 냉장GO Service Worker — 오프라인 정적 자산 캐시
  * JS/CSS 요청에는 HTML을 절대 반환하지 않습니다.
  */
-const CACHE_NAME = 'naengjanggo-v274';
+const CACHE_NAME = 'naengjanggo-v275';
 
 const RECIPE_IMAGE_SLUGS = [
   'sweet-potato-fries', 'potato-fries', 'sweet-potato-sticks', 'egg-white-omelet', 'potato-pancake', 'potato-cheese-bake', 'egg-in-hell',
@@ -18,9 +18,9 @@ const ASSETS = [
   'legal/privacy-content.js?v=2',
   'legal/terms-content.js?v=2',
   'js/legal-page.js?v=2',
-  'app-config.js?v=60',
+  'app-config.js?v=61',
   'style.css?v=203',
-  'script.js?v=252',
+  'script.js?v=253',
   'js/lib/budget-by-month.js',
   'js/lib/display-name.js',
   'js/lib/hangul-group.js?v=1',
@@ -40,7 +40,7 @@ const ASSETS = [
   'js/login-required-modal.js?v=74',
   'nav-icons.js?v=30',
   'recipe-placeholders.js?v=30',
-  'recipe-images.js?v=53',
+  'recipe-images.js?v=54',
   'js/data/builtin-recipes.js?v=7',
   'manifest.json',
   'icons/icon-192.png',
@@ -78,7 +78,12 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(
+        keys
+          // 이전 버전 캐시 전부 제거 (naengjanggo-* 포함, 현재 CACHE_NAME만 유지)
+          .filter((k) => k !== CACHE_NAME)
+          .map((k) => caches.delete(k)),
+      ))
       .then(() => self.clients.claim()),
   );
 });

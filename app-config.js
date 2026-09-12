@@ -69,7 +69,7 @@
       origin,
       appVersion: '2026.09.12',
       /** 레시피 이미지 URL cache-bust (?v=). 렌더링 시에만 사용. 파일명/데이터 경로는 변경하지 않음. */
-      recipeImageVersion: '20260912-1',
+      recipeImageVersion: '20260912-2',
     },
   };
 })();
