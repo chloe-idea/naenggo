@@ -18,7 +18,7 @@ const ASSETS = [
   'legal/privacy-content.js?v=2',
   'legal/terms-content.js?v=2',
   'js/legal-page.js?v=2',
-  'app-config.js?v=61',
+  'app-config.js?v=62',
   'style.css?v=203',
   'script.js?v=253',
   'js/lib/budget-by-month.js',
