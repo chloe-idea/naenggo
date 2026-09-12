@@ -2119,64 +2119,6 @@ window.BUILTIN_RECIPE_RAW = [
     "variations": []
   },
   {
-    "id": "recipe-80",
-    "slug": "recipe-80",
-    "title": "쫄면",
-    "image": "images/recipes/recipe-80.webp",
-    "cuisine": "한식",
-    "category": "korean",
-    "dishType": "noodle",
-    "ingredients": [
-      "쫄면",
-      "고추장",
-      "오이",
-      "계란"
-    ],
-    "cookingTime": 15,
-    "difficulty": "쉬움",
-    "calories": 390,
-    "instructions": [
-      "쫄면, 고추장, 오이, 계란 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "면을 삶습니다.",
-      "양념에 비벼 완성합니다.",
-      "면과 소스가 고르게 섞였는지 확인하고 맛을 본 뒤 필요하면 간을 조금씩 보충합니다."
-    ],
-    "tags": [
-      "한식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "쫄면",
-        "amount": 100,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "고추장",
-        "amount": 1.5,
-        "unit": "큰술",
-        "prep": null
-      },
-      {
-        "name": "오이",
-        "amount": 1,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "계란",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [],
-    "variations": []
-  },
-  {
     "id": "kalguksu",
     "slug": "kalguksu",
     "title": "칼국수",
@@ -3129,71 +3071,6 @@ window.BUILTIN_RECIPE_RAW = [
     "variations": []
   },
   {
-    "id": "recipe-40",
-    "slug": "recipe-40",
-    "title": "두부덮밥",
-    "image": "images/recipes/recipe-40.webp",
-    "cuisine": "한식",
-    "category": "korean",
-    "dishType": "rice-bowl",
-    "ingredients": [
-      "밥",
-      "두부",
-      "간장",
-      "대파",
-      "참기름"
-    ],
-    "cookingTime": 15,
-    "difficulty": "쉬움",
-    "calories": 350,
-    "instructions": [
-      "밥, 두부, 간장, 대파 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "두부를 구워 양념합니다.",
-      "밥 위에 올립니다.",
-      "완성 직전에 재료가 속까지 익었는지 확인하고 맛을 본 뒤, 부족한 간은 소금이나 간장을 조금씩 추가해 맞춥니다."
-    ],
-    "tags": [
-      "한식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "밥",
-        "amount": 400,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "두부",
-        "amount": 150,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "간장",
-        "amount": 1.5,
-        "unit": "큰술",
-        "prep": null
-      },
-      {
-        "name": "대파",
-        "amount": 0.5,
-        "unit": "대",
-        "prep": null
-      },
-      {
-        "name": "참기름",
-        "amount": 1,
-        "unit": "큰술",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [],
-    "variations": []
-  },
-  {
     "id": "recipe-35",
     "slug": "recipe-35",
     "title": "불고기덮밥",
@@ -3831,64 +3708,6 @@ window.BUILTIN_RECIPE_RAW = [
     "variations": []
   },
   {
-    "id": "tofu-salad",
-    "slug": "tofu-salad",
-    "title": "두부샐러드",
-    "image": "images/recipes/tofu-salad.webp",
-    "cuisine": "한식",
-    "category": "diet",
-    "dishType": "salad",
-    "ingredients": [
-      "두부",
-      "양상추",
-      "토마토",
-      "올리브유"
-    ],
-    "cookingTime": 10,
-    "difficulty": "쉬움",
-    "calories": 180,
-    "instructions": [
-      "두부, 양상추, 토마토, 올리브유 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "두부를 구워 줍니다.",
-      "채소와 함께 담습니다.",
-      "완성 직전에 재료가 속까지 익었는지 확인하고 맛을 본 뒤, 부족한 간은 소금이나 간장을 조금씩 추가해 맞춥니다."
-    ],
-    "tags": [
-      "한식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "두부",
-        "amount": 150,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "양상추",
-        "amount": 100,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "토마토",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "올리브유",
-        "amount": 1.5,
-        "unit": "큰술",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [],
-    "variations": []
-  },
-  {
     "id": "tuna-salad",
     "slug": "tuna-salad",
     "title": "참치샐러드",
@@ -4217,8 +4036,7 @@ window.BUILTIN_RECIPE_RAW = [
       "양념물이 끓으면 떡을 넣고 중불로 줄입니다.",
       "떡이 바닥에 붙지 않도록 중간중간 저어가며 5분 정도 끓입니다.",
       "어묵을 사용할 경우 넣고 3~5분 더 끓여 소스가 걸쭉해질 때까지 졸입니다.",
-      "떡을 하나 먹어보고 속까지 말랑하게 익었는지 확인한 뒤 대파를 넣습니다.",
-      "치즈 variation은 불을 약하게 줄인 뒤 치즈를 올리고 뚜껑을 덮어 1분 정도 녹여 완성합니다."
+      "떡을 하나 먹어보고 속까지 말랑하게 익었는지 확인한 뒤 대파를 넣습니다."
     ],
     "tags": [
       "한식"
@@ -4263,7 +4081,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "cheese",
         "ingredient": "치즈",
         "variantName": "치즈떡볶이",
-        "tip": "",
+        "tip": "치즈를 추가하면 고소하게 즐길 수 있어요.",
         "ingredientChanges": {
           "add": [
             {
@@ -4276,7 +4094,12 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 6,
+            "text": "불을 약하게 줄인 뒤 치즈를 올리고 뚜껑을 덮어 1분 정도 녹여 완성합니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       },
@@ -4284,7 +4107,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "jjajang",
         "ingredient": "춘장",
         "variantName": "짜장떡볶이",
-        "tip": "",
+        "tip": "춘장을 넣으면 짜장떡볶이 맛으로 즐길 수 있어요.",
         "ingredientChanges": {
           "add": [
             {
@@ -4304,7 +4127,12 @@ window.BUILTIN_RECIPE_RAW = [
             }
           ]
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 2,
+            "text": "고추장과 함께 춘장을 풀어 양념물에 고루 섞습니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       }
@@ -5387,7 +5215,7 @@ window.BUILTIN_RECIPE_RAW = [
       "끓기 시작하면 중불로 줄여 감자가 반쯤 익을 때까지 약 10분 끓입니다.",
       "스팸을 넣고 감자가 젓가락으로 쉽게 찔릴 정도가 될 때까지 7~10분 더 끓입니다.",
       "국물이 너무 많으면 뚜껑을 열고 2~3분 더 끓여 자작하게 졸입니다.",
-      "대파와 선택 재료인 청양고추를 넣고 1분 끓인 뒤 밥과 함께 먹습니다."
+      "대파를 넣고 1분 끓인 뒤 밥과 함께 먹습니다."
     ],
     "tags": [
       "한식"
@@ -5677,7 +5505,6 @@ window.BUILTIN_RECIPE_RAW = [
       "물 400ml와 고춧가루, 간장, 다진 마늘을 넣고 센 불에서 끓입니다.",
       "끓기 시작하면 중불로 줄여 김치가 부드러워질 때까지 약 10분 끓입니다.",
       "두부를 넣고 부서지지 않도록 숟가락으로 국물을 끼얹어가며 5~7분 더 끓입니다.",
-      "라면사리를 넣고 싶다면 이때 국물이 너무 적지 않은지 확인하고, 필요하면 물 100~150ml를 추가한 뒤 면을 넣어 익힙니다.",
       "국물이 자작해지면 대파를 넣고 1분 더 끓여 완성합니다."
     ],
     "tags": [
@@ -5765,12 +5592,11 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 320,
     "instructions": [
-      "김치는 한입 크기로 썰고, 대파는 송송 썹니다. 두부를 넣는다면 1.5~2cm 두께로 썰어 준비합니다.",
+      "김치는 한입 크기로 썰고, 대파는 송송 썹니다.",
       "냄비를 중불로 달군 뒤 식용유를 약간 두르고 김치를 넣어 3~4분 볶습니다. 김치가 부드러워지고 향이 올라올 때까지 볶으면 국물 맛이 더 좋아집니다.",
-      "돼지고기 variation을 선택했다면 김치와 함께 고기를 넣고 겉면의 붉은색이 거의 없어질 때까지 볶습니다.",
       "물 또는 쌀뜨물을 붓고 고춧가루와 다진 마늘 등 양념을 넣은 뒤 센 불에서 끓입니다.",
       "국물이 끓기 시작하면 중불로 줄여 12~15분 끓여 김치 맛이 국물에 충분히 우러나게 합니다.",
-      "두부를 넣는다면 마지막 5분에 넣고, 대파는 불을 끄기 1~2분 전에 넣습니다.",
+      "대파는 불을 끄기 1~2분 전에 넣습니다.",
       "국물 맛을 본 뒤 싱거우면 국간장이나 소금을 조금씩 추가합니다. 김치가 짠 경우에는 추가 간을 하지 않아도 됩니다."
     ],
     "tags": [
@@ -5816,7 +5642,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "pork",
         "ingredient": "돼지고기",
         "variantName": "돼지고기 김치찌개",
-        "tip": "",
+        "tip": "돼지고기를 넣으면 국물이 더 진해져요.",
         "ingredientChanges": {
           "add": [
             {
@@ -5829,7 +5655,12 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 2,
+            "text": "김치와 함께 돼지고기를 넣고 겉면의 붉은색이 거의 없어질 때까지 볶습니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       },
@@ -5837,7 +5668,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "tuna",
         "ingredient": "참치",
         "variantName": "참치 김치찌개",
-        "tip": "",
+        "tip": "참치를 넣으면 간단하게 깊은 맛을 낼 수 있어요.",
         "ingredientChanges": {
           "add": [
             {
@@ -5850,7 +5681,12 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 4,
+            "text": "참치는 기름을 뺀 뒤 넣고 한소끔 더 끓여 맛을 배게 합니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       }
@@ -5996,8 +5832,8 @@ window.BUILTIN_RECIPE_RAW = [
       "냄비에 물 또는 멸치육수를 넣고 된장을 체에 풀거나 국물에 잘 풀어줍니다.",
       "감자처럼 오래 익는 재료를 먼저 넣고 센 불에서 끓입니다.",
       "끓기 시작하면 중불로 줄이고 양파와 애호박을 넣어 7~8분 끓입니다.",
-      "두부와 다진 마늘을 넣고 3~4분 더 끓입니다. 차돌이나 바지락 variation은 각각 충분히 익도록 이 단계 전후에 넣습니다.",
-      "마지막에 대파와 선택 재료인 청양고추를 넣고 1분 정도 끓입니다.",
+      "두부와 다진 마늘을 넣고 3~4분 더 끓입니다.",
+      "마지막에 대파를 넣고 1분 정도 끓입니다.",
       "맛을 본 뒤 된장 자체가 짜므로 소금은 바로 넣지 말고, 부족할 때만 된장을 아주 조금 추가합니다."
     ],
     "tags": [
@@ -6009,7 +5845,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "chadol",
         "ingredient": "차돌박이",
         "variantName": "차돌 된장찌개",
-        "tip": "",
+        "tip": "차돌박이를 넣으면 고소한 국물 맛이 나요.",
         "ingredientChanges": {
           "add": [
             {
@@ -6022,7 +5858,12 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "beforeStep": 5,
+            "text": "차돌박이를 넣고 겉면이 익을 때까지 끓입니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       },
@@ -6030,7 +5871,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "clam",
         "ingredient": "바지락",
         "variantName": "바지락 된장찌개",
-        "tip": "",
+        "tip": "바지락을 넣으면 시원한 국물이 돼요.",
         "ingredientChanges": {
           "add": [
             {
@@ -6043,7 +5884,12 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "beforeStep": 5,
+            "text": "바지락을 넣고 입을 벌릴 때까지 끓입니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       }
@@ -8456,9 +8302,9 @@ window.BUILTIN_RECIPE_RAW = [
     "difficulty": "쉬움",
     "calories": 430,
     "instructions": [
-      "양배추는 3~5mm 정도로 가늘게 채썰고 대파는 송송 썹니다. 해물 variation은 물기를 충분히 닦아 준비합니다.",
+      "양배추는 3~5mm 정도로 가늘게 채썰고 대파는 송송 썹니다.",
       "큰 볼에 밀가루와 물 120ml, 계란을 넣고 가루가 거의 보이지 않을 정도로만 섞습니다. 너무 오래 저으면 반죽이 질겨질 수 있습니다.",
-      "반죽에 양배추와 대파를 넣고 가볍게 섞습니다. 해물이나 돼지고기 variation을 선택했다면 함께 준비합니다.",
+      "반죽에 양배추와 대파를 넣고 가볍게 섞습니다.",
       "팬에 식용유를 두르고 중불로 예열한 뒤 반죽을 2~3cm 두께의 원형으로 올립니다.",
       "중약불에서 4~5분 익혀 바닥이 노릇하고 형태가 잡히면 넓은 뒤집개로 조심스럽게 뒤집습니다.",
       "반대쪽도 4~5분 익힙니다. 가운데를 눌렀을 때 묽은 반죽이 나오지 않으면 익은 것입니다.",
@@ -8527,7 +8373,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "seafood",
         "ingredient": "오징어",
         "variantName": "해물 오코노미야끼",
-        "tip": "",
+        "tip": "해물을 넣으면 풍미가 풍부해져요.",
         "ingredientChanges": {
           "add": [
             {
@@ -8546,7 +8392,16 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 1,
+            "text": "오징어와 새우는 물기를 충분히 닦아 준비합니다."
+          },
+          {
+            "replaceStep": 3,
+            "text": "반죽에 양배추, 대파와 해물을 넣고 가볍게 섞습니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       },
@@ -8554,7 +8409,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "pork",
         "ingredient": "돼지고기",
         "variantName": "돼지고기 오코노미야끼",
-        "tip": "",
+        "tip": "돼지고기를 올리면 든든하게 즐길 수 있어요.",
         "ingredientChanges": {
           "add": [
             {
@@ -8567,7 +8422,12 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 3,
+            "text": "팬에 반죽을 올린 뒤 돼지고기를 위에 펴 올립니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       }
@@ -8704,71 +8564,6 @@ window.BUILTIN_RECIPE_RAW = [
       {
         "name": "설탕",
         "amount": 1,
-        "unit": "큰술",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [],
-    "variations": []
-  },
-  {
-    "id": "recipe-143",
-    "slug": "recipe-143",
-    "title": "돈까스덮밥",
-    "image": "images/recipes/recipe-143.webp",
-    "cuisine": "일식",
-    "category": "japanese",
-    "dishType": "rice-bowl",
-    "ingredients": [
-      "밥",
-      "돈까스",
-      "계란",
-      "양파",
-      "간장"
-    ],
-    "cookingTime": 25,
-    "difficulty": "보통",
-    "calories": 550,
-    "instructions": [
-      "밥, 돈까스, 계란, 양파 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "팬이나 냄비를 알맞게 달군 뒤 레시피에 적힌 순서대로 재료를 넣어 조리해요.",
-      "덮밥으로 완성합니다.",
-      "완성 직전에 재료가 속까지 익었는지 확인하고 맛을 본 뒤, 부족한 간은 소금이나 간장을 조금씩 추가해 맞춥니다."
-    ],
-    "tags": [
-      "일식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "밥",
-        "amount": 400,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "돈까스",
-        "amount": 100,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "계란",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "양파",
-        "amount": 0.5,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "간장",
-        "amount": 1.5,
         "unit": "큰술",
         "prep": null
       }
@@ -8934,72 +8729,6 @@ window.BUILTIN_RECIPE_RAW = [
         "absorbRecipeIds": []
       }
     ]
-  },
-  {
-    "id": "recipe-138",
-    "slug": "recipe-138",
-    "title": "오야코덮밥",
-    "image": "images/recipes/recipe-138.webp",
-    "cuisine": "일식",
-    "category": "japanese",
-    "dishType": "rice-bowl",
-    "ingredients": [
-      "밥",
-      "닭고기",
-      "계란",
-      "양파",
-      "간장"
-    ],
-    "cookingTime": 20,
-    "difficulty": "보통",
-    "calories": 450,
-    "instructions": [
-      "밥, 닭고기, 계란, 양파 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "팬을 중불로 충분히 달군 뒤 식용유를 두르고 재료를 넣습니다.",
-      "닭과 양파를 볶습니다.",
-      "계란을 올려 밥에 담습니다.",
-      "밥알이 뭉치지 않도록 주걱으로 눌러 풀어가며 볶고, 전체가 고르게 뜨거워지면 불을 끕니다."
-    ],
-    "tags": [
-      "일식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "밥",
-        "amount": 400,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "닭고기",
-        "amount": 250,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "계란",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "양파",
-        "amount": 0.5,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "간장",
-        "amount": 1.5,
-        "unit": "큰술",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [],
-    "variations": []
   },
   {
     "id": "oyakodon",
@@ -10280,12 +10009,12 @@ window.BUILTIN_RECIPE_RAW = [
     ],
     "instructions": [
       "쌀국수면은 제품 안내에 따라 미지근한 물에 불려 손으로 구부렸을 때 휘어질 정도로 준비합니다. 너무 부드럽게 불리지 않습니다.",
-      "팟타이 소스에 들어가는 양념은 작은 그릇에 미리 섞어둡니다. 새우·닭고기·두부 variation도 한입 크기로 준비합니다.",
-      "넓은 팬이나 웍을 중강불로 달군 뒤 기름을 두르고 선택한 단백질 재료를 먼저 거의 익을 때까지 볶습니다.",
+      "팟타이 소스에 들어가는 양념은 작은 그릇에 미리 섞어둡니다.",
+      "넓은 팬이나 웍을 중강불로 달군 뒤 기름을 두릅니다.",
       "팬 한쪽에 재료를 밀고 계란을 깨 넣어 크게 저어 스크램블합니다.",
       "불린 면과 소스를 넣고 집게나 주걱으로 빠르게 섞습니다. 면이 단단하면 물을 2~3큰술씩 추가합니다.",
       "면이 부드러워지고 소스를 대부분 흡수하면 숙주나 부추가 있다면 넣어 30초~1분만 볶습니다.",
-      "불을 끄고 땅콩과 라임 같은 optional 재료를 곁들입니다."
+      "불을 끄고 접시에 옮깁니다. 땅콩이나 라임이 있다면 곁들입니다."
     ],
     "tags": [
       "태국",
@@ -10364,7 +10093,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "shrimp",
         "ingredient": "새우",
         "variantName": "새우 팟타이",
-        "tip": "",
+        "tip": "새우를 넣으면 감칠맛이 살아나요.",
         "ingredientChanges": {
           "add": [
             {
@@ -10377,7 +10106,16 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 1,
+            "text": "새우는 한입 크기로 준비합니다."
+          },
+          {
+            "afterStep": 3,
+            "text": "새우를 먼저 거의 익을 때까지 볶습니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       },
@@ -10385,7 +10123,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "chicken",
         "ingredient": "닭고기",
         "variantName": "치킨 팟타이",
-        "tip": "",
+        "tip": "닭고기를 넣으면 든든한 한 끼가 돼요.",
         "ingredientChanges": {
           "add": [
             {
@@ -10398,7 +10136,16 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 1,
+            "text": "닭고기는 한입 크기로 준비합니다."
+          },
+          {
+            "afterStep": 3,
+            "text": "닭고기를 먼저 거의 익을 때까지 볶습니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       },
@@ -10406,7 +10153,7 @@ window.BUILTIN_RECIPE_RAW = [
         "id": "tofu",
         "ingredient": "두부",
         "variantName": "두부 팟타이",
-        "tip": "",
+        "tip": "두부를 넣으면 담백하게 즐길 수 있어요.",
         "ingredientChanges": {
           "add": [
             {
@@ -10419,7 +10166,16 @@ window.BUILTIN_RECIPE_RAW = [
           "remove": [],
           "modify": []
         },
-        "stepOps": [],
+        "stepOps": [
+          {
+            "afterStep": 1,
+            "text": "두부는 한입 크기로 준비합니다."
+          },
+          {
+            "afterStep": 3,
+            "text": "두부를 먼저 거의 익을 때까지 볶습니다."
+          }
+        ],
         "instructionsOverride": [],
         "absorbRecipeIds": []
       }
@@ -12442,64 +12198,6 @@ window.BUILTIN_RECIPE_RAW = [
     "variations": []
   },
   {
-    "id": "recipe-156",
-    "slug": "recipe-156",
-    "title": "감자수프",
-    "image": null,
-    "cuisine": "양식",
-    "category": "western",
-    "dishType": "default",
-    "ingredients": [
-      "감자",
-      "우유",
-      "양파",
-      "버터"
-    ],
-    "cookingTime": 25,
-    "difficulty": "보통",
-    "calories": 200,
-    "instructions": [
-      "감자, 우유, 양파, 버터 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "감자를 삶습니다.",
-      "갈아 끓여 완성합니다.",
-      "완성 직전에 재료가 속까지 익었는지 확인하고 맛을 본 뒤, 부족한 간은 소금이나 간장을 조금씩 추가해 맞춥니다."
-    ],
-    "tags": [
-      "양식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "감자",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "우유",
-        "amount": 200,
-        "unit": "ml",
-        "prep": null
-      },
-      {
-        "name": "양파",
-        "amount": 0.5,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "버터",
-        "amount": 15,
-        "unit": "g",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [],
-    "variations": []
-  },
-  {
     "id": "aglio-olio",
     "slug": "aglio-olio",
     "title": "알리오 올리오",
@@ -13670,102 +13368,6 @@ window.BUILTIN_RECIPE_RAW = [
         "name": "파슬리",
         "amount": 0.5,
         "unit": "작은술",
-        "prep": null
-      }
-    ],
-    "variations": []
-  },
-  {
-    "id": "egg-in-hell",
-    "slug": "egg-in-hell",
-    "title": "에그인헬",
-    "image": "images/recipes/egg-in-hell.webp",
-    "cuisine": "양식",
-    "category": "western",
-    "dishType": "stew",
-    "ingredients": [
-      "계란",
-      "토마토",
-      "양파",
-      "마늘",
-      "올리브오일",
-      "소금",
-      "후추",
-      "파슬리 (선택)"
-    ],
-    "cookingTime": 20,
-    "difficulty": "쉬움",
-    "calories": 290,
-    "instructions": [
-      "계란, 토마토, 양파, 마늘 등 필요한 재료를 먼저 계량해 준비합니다.",
-      "양파와 마늘을 다져 올리브오일에 볶습니다.",
-      "처음에는 센 불로 끓이고, 국물이 끓기 시작하면 중불로 줄여 재료가 속까지 익도록 끓입니다.",
-      "토마토를 넣고 으깨며 끓입니다. 소금, 후추로 간합니다.",
-      "중앙에 계란을 넣고 뚜껑을 덮어 반숙 상태로 익힙니다.",
-      "파슬리를 뿌려 완성합니다.",
-      "마지막으로 국물 맛을 보고 부족하면 소금이나 간장을 조금씩 추가해 간을 맞춘 뒤 불을 끕니다."
-    ],
-    "tags": [
-      "양식"
-    ],
-    "substitutions": [],
-    "servings": 2,
-    "ingredientDetails": [
-      {
-        "name": "계란",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "토마토",
-        "amount": 2,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "양파",
-        "amount": 0.5,
-        "unit": "개",
-        "prep": null
-      },
-      {
-        "name": "마늘",
-        "amount": 1,
-        "unit": "큰술",
-        "prep": null
-      },
-      {
-        "name": "올리브오일",
-        "amount": 100,
-        "unit": "g",
-        "prep": null
-      },
-      {
-        "name": "소금",
-        "amount": 0.25,
-        "unit": "작은술",
-        "prep": null
-      },
-      {
-        "name": "후추",
-        "amount": 0.25,
-        "unit": "작은술",
-        "prep": null
-      },
-      {
-        "name": "파슬리 (선택)",
-        "amount": 100,
-        "unit": "g",
-        "prep": null
-      }
-    ],
-    "measurementStatus": "complete",
-    "optionalIngredients": [
-      {
-        "name": "식빵",
-        "amount": 4,
-        "unit": "장",
         "prep": null
       }
     ],

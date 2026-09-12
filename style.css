@@ -9785,6 +9785,62 @@ body.view--recipe-detail .main {
   line-height: 1.4;
 }
 
+.recipe-variation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.recipe-variation-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--color-border, #e9ecef);
+  border-radius: var(--radius-full, 999px);
+  background: #fff;
+  color: var(--color-text, #2b2b2b);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.recipe-variation-chip:hover {
+  border-color: #ffd0a8;
+}
+
+.recipe-variation-chip--active {
+  border-color: var(--color-primary, #ff6b35);
+  background: var(--color-primary-light, #fff4ef);
+  color: var(--color-primary-dark, #e55a2b);
+}
+
+.recipe-variation-detail {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #ffe0c2;
+  border-radius: var(--radius-md);
+  background: #fff8f0;
+}
+
+.recipe-variation-detail__name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text, #2b2b2b);
+}
+
+.recipe-variation-detail__tip,
+.recipe-variation-detail__owned {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-text-muted, #777777);
+}
+
 .recipe-variation-list {
   display: grid;
   gap: 0.625rem;
@@ -9859,6 +9915,10 @@ body.view--recipe-detail .main {
   font-size: 0.8125rem;
   line-height: 1.4;
   color: var(--color-text-muted, #777777);
+}
+
+.recipe-detail__grocery-row {
+  margin-top: 0.75rem;
 }
 
 .recipe-detail__variation-step-label {
