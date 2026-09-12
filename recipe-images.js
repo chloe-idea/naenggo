@@ -17,9 +17,9 @@ const DEFAULT_RECIPE_IMAGE = `${RECIPE_IMAGES_BASE}default-recipe.webp`;
 function getRecipeImageVersion() {
   const fromConfig = window.APP_CONFIG?.runtime?.recipeImageVersion
     || window.APP_CONFIG?.runtime?.appVersion;
-  const raw = String(fromConfig || '20260816').trim();
+  const raw = String(fromConfig || '20260912').trim();
   const digits = raw.replace(/\D/g, '');
-  return digits || '20260816';
+  return digits || '20260912';
 }
 
 /** public/images/recipes 에 실제로 있는 파일 (default 제외) */
@@ -39,6 +39,7 @@ const EXISTING_RECIPE_IMAGE_FILES = new Set([
   'kimchi-fried-rice.webp',
   'kimchi-pancake.webp',
   'kimchi-rice-ball.webp',
+  'haemul-pajeon.webp',
   'kimchi-stew.webp',
   'natto-rice-bowl.webp',
   'omurice.webp',

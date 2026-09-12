@@ -2618,7 +2618,8 @@ window.BUILTIN_RECIPE_RAW = [
         },
         "stepOps": [],
         "instructionsOverride": [],
-        "absorbRecipeIds": []
+        "absorbRecipeIds": [],
+        "image": "images/recipes/haemul-pajeon.webp"
       }
     ],
     "servings": 2,
@@ -3452,7 +3453,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "rice-ball",
     "slug": "rice-ball",
     "title": "주먹밥",
-    "image": "images/recipes/tuna-rice-ball.webp",
+    "image": "images/recipes/rice-ball.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "rice-bowl",
@@ -3530,7 +3531,8 @@ window.BUILTIN_RECIPE_RAW = [
         },
         "stepOps": [],
         "instructionsOverride": [],
-        "absorbRecipeIds": []
+        "absorbRecipeIds": [],
+        "image": "images/recipes/tuna-rice-ball.webp"
       },
       {
         "id": "kimchi",
@@ -3551,7 +3553,8 @@ window.BUILTIN_RECIPE_RAW = [
         },
         "stepOps": [],
         "instructionsOverride": [],
-        "absorbRecipeIds": []
+        "absorbRecipeIds": [],
+        "image": "images/recipes/kimchi-rice-ball.webp"
       },
       {
         "id": "spam",
@@ -3769,7 +3772,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "egg-roll",
     "slug": "egg-roll",
     "title": "계란말이",
-    "image": "images/recipes/rolled-omelette.webp",
+    "image": "images/recipes/egg-roll.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "side",
@@ -5191,7 +5194,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "gamja-jjageuli",
     "slug": "gamja-jjageuli",
     "title": "감자짜글이",
-    "image": "images/recipes/potato-jjageuli.webp",
+    "image": "images/recipes/gamja-jjageuli.webp",
     "cuisine": "한식",
     "category": "korean",
     "dishType": "stew",
@@ -9261,7 +9264,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "tomato-egg",
     "slug": "tomato-egg",
     "title": "토마토계란볶음",
-    "image": null,
+    "image": "images/recipes/tomato-egg.webp",
     "cuisine": "중식",
     "category": "chinese",
     "dishType": "main",
@@ -12201,7 +12204,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "aglio-olio",
     "slug": "aglio-olio",
     "title": "알리오 올리오",
-    "image": null,
+    "image": "images/recipes/aglio-olio.webp",
     "cuisine": "양식",
     "category": "western",
     "dishType": "default",
@@ -12573,7 +12576,7 @@ window.BUILTIN_RECIPE_RAW = [
     "id": "shakshuka",
     "slug": "shakshuka",
     "title": "샥슈카",
-    "image": null,
+    "image": "images/recipes/shakshuka.webp",
     "cuisine": "양식",
     "category": "western",
     "dishType": "main",

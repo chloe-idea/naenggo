@@ -2307,6 +2307,11 @@ function normalizeBuiltinVariations(rawVariations) {
       absorbRecipeIds: Array.isArray(v?.absorbRecipeIds)
         ? v.absorbRecipeIds.map((id) => toBuiltinRuntimeId(id)).filter(Boolean)
         : [],
+      // variation 전용 이미지 (있으면 상세에서 해당 버전 선택 시 표시)
+      image: (() => {
+        const raw = String(v?.image || '').trim();
+        return raw || null;
+      })(),
     };
   }).filter((v) => {
     if (!v.variantName) return false;
@@ -11071,6 +11076,24 @@ function applyRecipeDetailVariationView(recipe) {
   const displayTitle = activeVariation?.variantName || recipe.name || '';
   const heroTitle = root.querySelector('.recipe-detail__hero-title');
   if (heroTitle) heroTitle.textContent = displayTitle;
+
+  // variation.image가 있으면 hero만 교체, 없으면 기본 recipe.image로 복원
+  // (absorbRecipeIds 대상 레시피 이미지로의 임의 교체는 하지 않음)
+  const heroImg = root.querySelector('.recipe-detail__hero img');
+  if (heroImg && typeof RecipeImageService !== 'undefined') {
+    const photoRecipe = activeVariation?.image
+      ? { ...recipe, image: activeVariation.image, imageUrl: null, thumbnailUrl: null }
+      : recipe;
+    const nextSrc = RecipeImageService.resolveSrc(photoRecipe);
+    if (nextSrc) {
+      heroImg.src = nextSrc;
+      heroImg.hidden = false;
+      const zoom = heroImg.closest('[data-zoom-src]');
+      if (zoom) zoom.dataset.zoomSrc = nextSrc;
+    } else if (!activeVariation?.image) {
+      // 기본도 사진이 없으면 placeholder 유지 (src 강제 변경 안 함)
+    }
+  }
 
   const wrap = document.createElement('div');
   wrap.innerHTML = recipeDetailContentHTML(recipe);
